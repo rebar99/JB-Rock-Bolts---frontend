@@ -41,15 +41,9 @@ RUN npm run build
 FROM nginx:1.27-alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Write nginx config template (note the escaped $ for build time, literal $ for runtime)
-RUN echo 'server {' > /etc/nginx/conf.d/default.conf.template && \
-    echo '  listen ${PORT};' >> /etc/nginx/conf.d/default.conf.template && \
-    echo '  root /usr/share/nginx/html;' >> /etc/nginx/conf.d/default.conf.template && \
-    echo '  index index.html;' >> /etc/nginx/conf.d/default.conf.template && \
-    echo '  location / {' >> /etc/nginx/conf.d/default.conf.template && \
-    echo '    try_files $uri $uri/ /index.html;' >> /etc/nginx/conf.d/default.conf.template && \
-    echo '  }' >> /etc/nginx/conf.d/default.conf.template && \
-    echo '}' >> /etc/nginx/conf.d/default.conf.template
+# SPA routing config on port 80
+RUN printf 'server {\n  listen 80;\n  root /usr/share/nginx/html;\n  index index.html;\n  location / {\n    try_files $uri $uri/ /index.html;\n  }\n}\n' \
+    > /etc/nginx/conf.d/default.conf
 
-# Remove default config, substitute $PORT at runtime, start nginx
-CMD ["/bin/sh", "-c", "rm -f /etc/nginx/conf.d/default.conf && envsubst '$$PORT' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf && cat /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"]
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
