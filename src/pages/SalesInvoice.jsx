@@ -1,11 +1,11 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -16,10 +16,10 @@ import { useConstants } from "@/lib/constants";
 import {
     fetchPurchaseOrders, fetchSales, createSale, updateSale,
     deleteSale as deleteSaleApi, addSaleActivity, openInvoiceDocument, downloadInvoiceDocument,
-    uploadInvoiceFile
+    uploadInvoiceFile, exportSales, importSales,
 } from "@/lib/api";
 import { toast } from "sonner";
-import { Plus, Truck, Clock, CreditCard, Eye, Package, User, Trash2, Search, Download, UploadCloud, FileText, X, Pencil, Receipt, CheckCircle, Printer, FileDown } from "lucide-react";
+import { Plus, Truck, Clock, CreditCard, Eye, Package, User, Trash2, Search, Download, UploadCloud, FileText, X, Pencil, Receipt, CheckCircle, Printer, FileDown, Upload } from "lucide-react";
 
 const PAYMENT_STATUS = ["Pending", "Partial", "Paid"];
 
@@ -42,6 +42,8 @@ const SalesInvoice = () => {
         qc.invalidateQueries({ queryKey: ["purchase-orders"] });
         qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
     };
+
+    
 
     const createMutation = useMutation({ mutationFn: createSale, onSuccess: invalidateSales });
     const updateMutation = useMutation({ mutationFn: ({ id, body }) => updateSale(id, body), onSuccess: invalidateSales });
@@ -111,6 +113,43 @@ const SalesInvoice = () => {
     const [markDeliveredOpen, setMarkDeliveredOpen] = useState(false);
     const [markDeliveredTarget, setMarkDeliveredTarget] = useState(null);
     const [deliveryChallanUrl, setDeliveryChallanUrl] = useState("");
+
+    // Export / Import
+    const [salesImportOpen, setSalesImportOpen] = useState(false);
+    const [salesImportFile, setSalesImportFile] = useState(null);
+    const [salesImportConflict, setSalesImportConflict] = useState("skip");
+    const [salesImporting, setSalesImporting] = useState(false);
+    const [salesImportResult, setSalesImportResult] = useState(null);
+    const salesImportRef = useRef(null);
+
+    const handleSalesExport = async () => {
+        const tid = toast.loading("Preparing Excel export…");
+        try {
+            await exportSales();
+            toast.success("Sales exported", { id: tid });
+        } catch (err) {
+            toast.error("Export failed: " + err.message, { id: tid });
+        }
+    };
+
+    const handleSalesImport = async () => {
+        if (!salesImportFile) return toast.error("Please select an Excel (.xlsx) or CSV file");
+        setSalesImporting(true);
+        const tid = toast.loading("Importing…");
+        try {
+            const result = await importSales(salesImportFile, salesImportConflict);
+            setSalesImportResult(result);
+            toast.success(
+                `Import done — Created: ${result.created}, Updated: ${result.updated}, Skipped: ${result.skipped}`,
+                { id: tid, duration: 6000 }
+            );
+            invalidateSales();
+        } catch (err) {
+            toast.error("Import failed: " + err.message, { id: tid });
+        } finally {
+            setSalesImporting(false);
+        }
+    };
 
     const pendingOnPO = (po) => {
         if (!po) return 0;
@@ -921,9 +960,17 @@ const SalesInvoice = () => {
                     <h2 className="text-2xl font-bold tracking-tight text-foreground">Sales</h2>
                     <p className="text-sm text-muted-foreground mt-1">Manage dispatch, invoicing, payments and activity tracking.</p>
                 </div>
-                <Button onClick={() => setAddOpen(true)} className="bg-gradient-primary hover:opacity-90 shadow-elegant">
-                    <Plus className="h-4 w-4 mr-2" /> Add New Sale
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" onClick={handleSalesExport} className="border-green-500 text-green-700 hover:bg-green-50">
+                        <Download className="h-4 w-4 mr-2" /> Export Excel
+                    </Button>
+                    <Button variant="outline" onClick={() => { setSalesImportFile(null); setSalesImportResult(null); setSalesImportOpen(true); }} className="border-blue-500 text-blue-700 hover:bg-blue-50">
+                        <Upload className="h-4 w-4 mr-2" /> Import Excel
+                    </Button>
+                    <Button onClick={() => setAddOpen(true)} className="bg-gradient-primary hover:opacity-90 shadow-elegant">
+                        <Plus className="h-4 w-4 mr-2" /> Add New Sale
+                    </Button>
+                </div>
             </div>
 
             {/* Add New Sale Dialog */}
@@ -2022,6 +2069,90 @@ const SalesInvoice = () => {
                     }
                 }}
             />
+            {/* Sales Import Dialog */}
+            <Dialog open={salesImportOpen} onOpenChange={(o) => { setSalesImportOpen(o); if (!o) { setSalesImportFile(null); setSalesImportResult(null); } }}>
+                <DialogContent className="sm:max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Upload className="h-5 w-5 text-blue-600" /> Import Sales
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                        <p className="text-sm text-muted-foreground">
+                            Upload an Excel (.xlsx) file exported from this system. All Sales fields will be auto-populated including Invoice Number, E-Way Bill, dispatch info, and items.
+                        </p>
+                        <div className="space-y-2">
+                            <Label>Select File (.xlsx or .csv)</Label>
+                            <div
+                                className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:border-primary transition-colors"
+                                onClick={() => salesImportRef.current?.click()}
+                            >
+                                {salesImportFile ? (
+                                    <div className="flex items-center justify-center gap-2 text-sm text-green-700">
+                                        <FileText className="h-4 w-4" />
+                                        <span className="font-medium">{salesImportFile.name}</span>
+                                        <span className="text-muted-foreground">({(salesImportFile.size / 1024).toFixed(1)} KB)</span>
+                                    </div>
+                                ) : (
+                                    <div className="text-muted-foreground text-sm">
+                                        <UploadCloud className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
+                                        Click to choose or drop a file here
+                                    </div>
+                                )}
+                            </div>
+                            <input
+                                ref={salesImportRef}
+                                type="file"
+                                className="hidden"
+                                accept=".xlsx,.csv,.json"
+                                onChange={(e) => { setSalesImportFile(e.target.files[0] || null); setSalesImportResult(null); }}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>If Invoice Number already exists</Label>
+                            <Select value={salesImportConflict} onValueChange={setSalesImportConflict}>
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="skip">Skip — keep existing record (safe)</SelectItem>
+                                    <SelectItem value="update">Update — overwrite payment / dispatch fields</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        {salesImportResult && (
+                            <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm space-y-1">
+                                <div className="font-semibold text-foreground mb-2">Import Results</div>
+                                <div className="flex gap-4 flex-wrap">
+                                    <span className="text-green-700">Created: <strong>{salesImportResult.created}</strong></span>
+                                    <span className="text-blue-700">Updated: <strong>{salesImportResult.updated}</strong></span>
+                                    <span className="text-orange-600">Skipped: <strong>{salesImportResult.skipped}</strong></span>
+                                </div>
+                                {salesImportResult.errors?.length > 0 && (
+                                    <div className="mt-2">
+                                        <div className="text-destructive font-medium text-xs mb-1">Errors ({salesImportResult.errors.length}):</div>
+                                        <ul className="space-y-0.5 max-h-28 overflow-y-auto">
+                                            {salesImportResult.errors.map((e, i) => (
+                                                <li key={i} className="text-destructive text-xs">• {e}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setSalesImportOpen(false)}>Close</Button>
+                        <Button
+                            onClick={handleSalesImport}
+                            disabled={!salesImportFile || salesImporting}
+                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                            {salesImporting ? "Importing…" : "Import"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
         </TooltipProvider>
     );

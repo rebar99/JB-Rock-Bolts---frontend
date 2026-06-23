@@ -69,6 +69,38 @@ export const uploadPOFile = async (file) => {
     return res.json();
 };
 
+// ── PO Export / Import ────────────────────────────────────────────────────────
+export const exportPurchaseOrders = async () => {
+    const token = getToken();
+    const res = await fetch(`${BASE}/api/purchase-orders/export`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error("Export failed");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `purchase-orders-${Date.now()}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+};
+
+export const importPurchaseOrders = async (file, onConflict = "skip") => {
+    const token = getToken();
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`${BASE}/api/purchase-orders/import?on_conflict=${onConflict}`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || "Import failed");
+    }
+    return res.json();
+};
+
 // ── Sales ────────────────────────────────────────────────────────────────────
 export const fetchSales = (params) => get("/api/sales", params);
 export const fetchSale = (id) => get(`/api/sales/${id}`);
@@ -85,6 +117,38 @@ export const uploadInvoiceFile = async (file) => {
         body: formData,
     });
     if (!res.ok) throw new Error("Upload failed");
+    return res.json();
+};
+
+// ── Sales Export / Import ─────────────────────────────────────────────────────
+export const exportSales = async () => {
+    const token = getToken();
+    const res = await fetch(`${BASE}/api/sales/export`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error("Export failed");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `sales-${Date.now()}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+};
+
+export const importSales = async (file, onConflict = "skip") => {
+    const token = getToken();
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`${BASE}/api/sales/import?on_conflict=${onConflict}`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || "Import failed");
+    }
     return res.json();
 };
 
@@ -112,6 +176,71 @@ export const fetchReport = (params) => get("/api/reports", params);
 export const fetchFulfillmentReport = (params) => get("/api/reports/fulfillment", params);
 export const fetchPendingPOs = () => get("/api/reports/pending-pos");
 
+export const exportReport = async (reportType, params = {}) => {
+    const token = getToken();
+    const qp = new URLSearchParams({ report_type: reportType });
+    Object.entries(params).forEach(([k, v]) => { if (v != null && v !== "") qp.set(k, v); });
+    const res = await fetch(`${BASE}/api/reports/export?${qp.toString()}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error("Export failed");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${reportType}-report-${Date.now()}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+};
+
+export const importReport = async (file, reportType, onConflict = "skip") => {
+    const token = getToken();
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`${BASE}/api/reports/import?report_type=${reportType}&on_conflict=${onConflict}`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || "Import failed");
+    }
+    return res.json();
+};
+
+export const exportCombinedReport = async (sheets, params = {}) => {
+    const token = getToken();
+    const qp = new URLSearchParams({ sheets: sheets.join(",") });
+    Object.entries(params).forEach(([k, v]) => { if (v != null && v !== "") qp.set(k, v); });
+    const res = await fetch(`${BASE}/api/reports/export-combined?${qp.toString()}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error("Export failed");
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `reports-combined-${Date.now()}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+};
+
+export const importCombinedReport = async (file, onConflict = "skip") => {
+    const token = getToken();
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`${BASE}/api/reports/import-combined?on_conflict=${onConflict}`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || "Import failed");
+    }
+    return res.json();
+};
+
 // ── Documents (opens in new tab for printing) ─────────────────────────────────
 export const openPODocument = (poId) => {
     window.open(`${BASE}/api/documents/po/${poId}`, "_blank");
@@ -132,3 +261,23 @@ export const resetPassword = (body) => post("/api/users/reset-password", body);
 
 // ── Logs ─────────────────────────────────────────────────────────────────────
 export const fetchLogs = (limit = 50) => get("/api/logs", { limit });
+
+/**
+ * Open a Server-Sent Events connection to receive new log entries in real time.
+ *
+ * @param {(log: object) => void} onLog   - called whenever the server pushes a new log
+ * @param {(err: Event)  => void} onError - called on connection error (optional)
+ * @returns {EventSource} call .close() to disconnect
+ */
+export function openLogStream(onLog, onError) {
+    const es = new EventSource(`${BASE}/api/logs/stream`);
+    es.onmessage = (e) => {
+        try {
+            onLog(JSON.parse(e.data));
+        } catch {
+            // malformed JSON — ignore
+        }
+    };
+    if (onError) es.onerror = onError;
+    return es;
+}

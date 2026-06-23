@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Bell, LogOut, Menu, Moon, Search, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,9 +6,9 @@ import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { fetchLogs } from "@/lib/api";
+import { fetchLogs, openLogStream } from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
-import { formatDistanceToNow } from "date-fns";
+import { relativeTimeIST, fmtDateTimeIST } from "@/lib/timezone";
 
 export const Topbar = ({ onMenu }) => {
     const { theme, toggle } = useTheme();
@@ -16,13 +16,50 @@ export const Topbar = ({ onMenu }) => {
     const navigate = useNavigate();
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
+    // ── SSE state ────────────────────────────────────────────────────────────
+    // Live logs pushed by the server; prepended to the polled list.
+    const [sseBuffer, setSseBuffer] = useState([]);
+    // Count of notifications received since the panel was last opened.
+    const [newCount, setNewCount] = useState(0);
+
     const displayName = user?.name || "Admin User";
 
-    const { data: logs = [] } = useQuery({
+    // ── Polled fallback (30 s) ────────────────────────────────────────────────
+    // Primary data source for the initial load and for recovery after an SSE
+    // reconnect that may have missed events while disconnected.
+    const { data: queryLogs = [] } = useQuery({
         queryKey: ["system_logs"],
         queryFn: () => fetchLogs(20),
-        refetchInterval: 10000,
+        refetchInterval: 30_000,
+        staleTime: 25_000,
     });
+
+    // ── SSE connection ────────────────────────────────────────────────────────
+    useEffect(() => {
+        const es = openLogStream((log) => {
+            setSseBuffer(prev => [log, ...prev].slice(0, 20));
+            setNewCount(n => n + 1);
+        });
+        // EventSource auto-reconnects on network errors; we just clean up on unmount.
+        return () => es.close();
+    }, []);
+
+    // ── Merged log list ───────────────────────────────────────────────────────
+    // SSE logs sit at the top; polled logs fill in history. Dedup by id.
+    const logs = useMemo(() => {
+        const merged = [...sseBuffer, ...queryLogs];
+        const seen = new Set();
+        return merged.filter(l => {
+            if (seen.has(l.id)) return false;
+            seen.add(l.id);
+            return true;
+        }).slice(0, 20);
+    }, [sseBuffer, queryLogs]);
+
+    // ── Notification panel open/close ─────────────────────────────────────────
+    const handleOpenChange = (open) => {
+        if (open) setNewCount(0);   // clear badge when user opens the panel
+    };
 
     const handleLogout = () => {
         logout();
@@ -48,16 +85,16 @@ export const Topbar = ({ onMenu }) => {
                             Are you sure you want to logout?
                         </p>
                         <div className="mt-6 flex flex-col sm:flex-row gap-3">
-                            <Button 
-                                variant="outline" 
-                                className="flex-1" 
+                            <Button
+                                variant="outline"
+                                className="flex-1"
                                 onClick={() => setShowLogoutConfirm(false)}
                             >
                                 Cancel
                             </Button>
-                            <Button 
-                                variant="destructive" 
-                                className="flex-1 shadow-sm font-semibold" 
+                            <Button
+                                variant="destructive"
+                                className="flex-1 shadow-sm font-semibold"
                                 onClick={handleLogout}
                             >
                                 Logout
@@ -91,11 +128,17 @@ export const Topbar = ({ onMenu }) => {
                     {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
                 </Button>
 
-                <Popover>
+                <Popover onOpenChange={handleOpenChange}>
                     <PopoverTrigger asChild>
                         <Button variant="ghost" size="icon" className="relative">
                             <Bell className="h-5 w-5" />
-                            {logs.length > 0 && (
+                            {newCount > 0 ? (
+                                /* Numbered badge for unseen notifications */
+                                <span className="absolute -top-0.5 -right-0.5 h-4 min-w-4 px-0.5 rounded-full bg-accent text-white text-[9px] font-bold grid place-items-center leading-none">
+                                    {newCount > 9 ? "9+" : newCount}
+                                </span>
+                            ) : logs.length > 0 && (
+                                /* Subtle pulse when panel has logs but nothing new */
                                 <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-accent animate-pulse" />
                             )}
                         </Button>
@@ -103,23 +146,53 @@ export const Topbar = ({ onMenu }) => {
                     <PopoverContent className="w-80 p-0 mr-4 mt-2" align="end">
                         <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
                             <h4 className="font-semibold text-sm">Notifications</h4>
-                            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{logs.length} Recent</span>
+                            <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                                {logs.length} Recent
+                            </span>
                         </div>
                         <div className="max-h-[400px] overflow-y-auto">
                             {logs.length === 0 ? (
-                                <div className="p-4 text-center text-sm text-muted-foreground">No recent activities.</div>
+                                <div className="p-4 text-center text-sm text-muted-foreground">
+                                    No recent activities.
+                                </div>
                             ) : (
                                 <div className="flex flex-col">
-                                    {logs.map((log) => (
-                                        <div key={log.id} className="flex flex-col gap-1 p-3 border-b border-border last:border-0 hover:bg-muted/50 transition-colors">
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-xs font-semibold text-primary">{log.action}</span>
-                                                <span className="text-[10px] text-muted-foreground">{formatDistanceToNow(new Date(log.created_at), { addSuffix: true })}</span>
+                                    {logs.map((log, idx) => {
+                                        // Highlight the top N entries that arrived via SSE
+                                        const isNew = idx < sseBuffer.length &&
+                                            sseBuffer.some(s => s.id === log.id);
+                                        return (
+                                            <div
+                                                key={log.id}
+                                                className={`flex flex-col gap-1 p-3 border-b border-border last:border-0 transition-colors ${
+                                                    isNew
+                                                        ? "bg-accent/10 hover:bg-accent/20"
+                                                        : "hover:bg-muted/50"
+                                                }`}
+                                            >
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <span className="text-xs font-semibold text-primary truncate">
+                                                        {log.action}
+                                                    </span>
+                                                    <span
+                                                        className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0"
+                                                        title={fmtDateTimeIST(log.created_at)}
+                                                    >
+                                                        {relativeTimeIST(log.created_at)}
+                                                    </span>
+                                                </div>
+                                                <p className="text-xs text-muted-foreground line-clamp-2">
+                                                    {log.details}
+                                                </p>
+                                                <div className="text-[10px] text-muted-foreground mt-0.5">
+                                                    By:{" "}
+                                                    <span className="font-medium text-foreground">
+                                                        {log.user || "System"}
+                                                    </span>
+                                                </div>
                                             </div>
-                                            <p className="text-xs text-muted-foreground line-clamp-2">{log.details}</p>
-                                            <div className="text-[10px] text-muted-foreground mt-1">By: <span className="font-medium text-foreground">{log.user || "System"}</span></div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             )}
                         </div>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,9 +13,10 @@ import { useConstants } from "@/lib/constants";
 import {
     fetchPurchaseOrders, createPurchaseOrder, updatePurchaseOrder,
     deletePurchaseOrder, fetchPurchaseOrder, openPODocument,
-    createClient, createProject, fetchProjects, uploadPOFile
+    createClient, createProject, fetchProjects, uploadPOFile,
+    exportPurchaseOrders, importPurchaseOrders,
 } from "@/lib/api";
-import { Pencil, Plus, Search, Trash2, Eye, FileText, Package, Truck, Clock, Printer, X, UploadCloud } from "lucide-react";
+import { Pencil, Plus, Search, Trash2, Eye, FileText, Package, Truck, Clock, Printer, X, UploadCloud, Download, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 const generatePONumber = () => {
@@ -75,6 +76,42 @@ const PurchaseOrders = () => {
     const [viewing, setViewing] = useState(null);
     const [uploadingPoId, setUploadingPoId] = useState(null);
     const [itemToDelete, setItemToDelete] = useState(null);
+
+    const [importOpen, setImportOpen] = useState(false);
+    const [importFile, setImportFile] = useState(null);
+    const [importConflict, setImportConflict] = useState("skip");
+    const [importing, setImporting] = useState(false);
+    const [importResult, setImportResult] = useState(null);
+    const importFileRef = useRef(null);
+
+    const handleExport = async () => {
+        const tid = toast.loading("Preparing Excel export…");
+        try {
+            await exportPurchaseOrders();
+            toast.success("Purchase Orders exported", { id: tid });
+        } catch (err) {
+            toast.error("Export failed: " + err.message, { id: tid });
+        }
+    };
+
+    const handleImport = async () => {
+        if (!importFile) return toast.error("Please select an Excel (.xlsx) or CSV file");
+        setImporting(true);
+        const tid = toast.loading("Importing…");
+        try {
+            const result = await importPurchaseOrders(importFile, importConflict);
+            setImportResult(result);
+            toast.success(
+                `Import done — Created: ${result.created}, Updated: ${result.updated}, Skipped: ${result.skipped}`,
+                { id: tid, duration: 6000 }
+            );
+            invalidate();
+        } catch (err) {
+            toast.error("Import failed: " + err.message, { id: tid });
+        } finally {
+            setImporting(false);
+        }
+    };
 
     const [addClientOpen, setAddClientOpen] = useState(false);
     const [addProjectOpen, setAddProjectOpen] = useState(false);
@@ -253,6 +290,8 @@ const PurchaseOrders = () => {
         }
     };
 
+    
+
 
     const submit = async () => {
         const hasItems = (form.lineItems || []).some(li => li.item.trim());
@@ -280,13 +319,12 @@ const PurchaseOrders = () => {
             })).filter(li => li.item)
         };
         try {
-            if (editingId) {
-                await updateMutation.mutateAsync({ id: editingId, body: { ...payload, last_updated_by: getCurrentUser() } });
-                toast.success("Purchase Order updated");
-            } else {
-                await createMutation.mutateAsync({ ...payload, created_by: getCurrentUser() });
-                toast.success("Purchase Order created");
-            }
+            const tid = toast.loading(editingId ? "Updating PO..." : "Creating PO...");
+            const result = editingId 
+                ? await updateMutation.mutateAsync({ id: editingId, body: payload })
+                : await createMutation.mutateAsync(payload);
+            toast.success("Purchase Order " + (editingId ? "updated" : "created"), { id: tid });
+            invalidate();
             setDialogOpen(false);
         } catch (e) {
             toast.error(e.message);
@@ -300,13 +338,20 @@ const PurchaseOrders = () => {
                     <h2 className="text-2xl font-bold tracking-tight text-foreground">Purchase Orders</h2>
                     <p className="text-sm text-muted-foreground mt-1">Track POs with quantities, delivery progress and activity log.</p>
                 </div>
-                <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                    <DialogTrigger asChild>
-                        <Button onClick={openNew} className="bg-gradient-primary hover:opacity-90 shadow-elegant">
-                            <Plus className="h-4 w-4 mr-2" /> New Purchase Order
-                        </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" onClick={handleExport} className="border-green-500 text-green-700 hover:bg-green-50">
+                        <Download className="h-4 w-4 mr-2" /> Export Excel
+                    </Button>
+                    <Button variant="outline" onClick={() => { setImportFile(null); setImportResult(null); setImportOpen(true); }} className="border-blue-500 text-blue-700 hover:bg-blue-50">
+                        <Upload className="h-4 w-4 mr-2" /> Import Excel
+                    </Button>
+                    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                        <DialogTrigger asChild>
+                            <Button onClick={openNew} className="bg-gradient-primary hover:opacity-90 shadow-elegant">
+                                <Plus className="h-4 w-4 mr-2" /> New Purchase Order
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                         <DialogHeader>
                             <DialogTitle>{editingId ? "Edit Purchase Order" : "Create Purchase Order"}</DialogTitle>
                         </DialogHeader>
@@ -626,6 +671,7 @@ const PurchaseOrders = () => {
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
+                </div>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -863,13 +909,98 @@ const PurchaseOrders = () => {
                 </DialogContent>
             </Dialog>
 
-            <input 
-                type="file" 
-                id="direct-file-upload" 
-                className="hidden" 
+            <input
+                type="file"
+                id="direct-file-upload"
+                className="hidden"
                 accept=".pdf,.jpg,.jpeg,.png"
-                onChange={(e) => handleDirectUpload(e, uploadingPoId)} 
+                onChange={(e) => handleDirectUpload(e, uploadingPoId)}
             />
+
+            {/* Import Dialog */}
+            <Dialog open={importOpen} onOpenChange={(o) => { setImportOpen(o); if (!o) { setImportFile(null); setImportResult(null); } }}>
+                <DialogContent className="sm:max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Upload className="h-5 w-5 text-blue-600" /> Import Purchase Orders
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                        <p className="text-sm text-muted-foreground">
+                            Upload an Excel (.xlsx) file exported from this system. All fields will be auto-populated and validated before saving.
+                        </p>
+                        <div className="space-y-2">
+                            <Label>Select File (.xlsx or .csv)</Label>
+                            <div
+                                className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:border-primary transition-colors"
+                                onClick={() => importFileRef.current?.click()}
+                            >
+                                {importFile ? (
+                                    <div className="flex items-center justify-center gap-2 text-sm text-green-700">
+                                        <FileText className="h-4 w-4" />
+                                        <span className="font-medium">{importFile.name}</span>
+                                        <span className="text-muted-foreground">({(importFile.size / 1024).toFixed(1)} KB)</span>
+                                    </div>
+                                ) : (
+                                    <div className="text-muted-foreground text-sm">
+                                        <UploadCloud className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
+                                        Click to choose or drop a file here
+                                    </div>
+                                )}
+                            </div>
+                            <input
+                                ref={importFileRef}
+                                type="file"
+                                className="hidden"
+                                accept=".xlsx,.csv,.json"
+                                onChange={(e) => { setImportFile(e.target.files[0] || null); setImportResult(null); }}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>If PO Number already exists</Label>
+                            <Select value={importConflict} onValueChange={setImportConflict}>
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="skip">Skip — keep existing record (safe)</SelectItem>
+                                    <SelectItem value="update">Update — overwrite header fields</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        {importResult && (
+                            <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm space-y-1">
+                                <div className="font-semibold text-foreground mb-2">Import Results</div>
+                                <div className="flex gap-4 flex-wrap">
+                                    <span className="text-green-700">Created: <strong>{importResult.created}</strong></span>
+                                    <span className="text-blue-700">Updated: <strong>{importResult.updated}</strong></span>
+                                    <span className="text-orange-600">Skipped: <strong>{importResult.skipped}</strong></span>
+                                </div>
+                                {importResult.errors?.length > 0 && (
+                                    <div className="mt-2">
+                                        <div className="text-destructive font-medium text-xs mb-1">Errors ({importResult.errors.length}):</div>
+                                        <ul className="space-y-0.5 max-h-28 overflow-y-auto">
+                                            {importResult.errors.map((e, i) => (
+                                                <li key={i} className="text-destructive text-xs">• {e}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setImportOpen(false)}>Close</Button>
+                        <Button
+                            onClick={handleImport}
+                            disabled={!importFile || importing}
+                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                            {importing ? "Importing…" : "Import"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 };

@@ -1,307 +1,141 @@
-# JB Rock Bolts — Deployment Documentation
+# JB Rock Bolts — All-on-Railway Deployment Documentation
 
-## Overview
-
-The application is split into three independently deployed services:
+This document describes how to deploy the entire application stack — **Frontend (React)**, **Backend (FastAPI)**, and **Database (MySQL)** — onto **Railway**, using your custom domain.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                        USER                             │
+│                  (Web Browser)                          │
 └──────────────────────┬──────────────────────────────────┘
                        │ HTTPS
                        ▼
 ┌─────────────────────────────────────────────────────────┐
-│              VERCEL  (Frontend)                         │
+│              RAILWAY (React Frontend)                   │
 │         yourdomain.com / www.yourdomain.com             │
-│              React + Vite (Static Build)                │
+│            React + Vite served via Nginx                │
 └──────────────────────┬──────────────────────────────────┘
                        │ HTTPS API calls (VITE_API_URL)
                        ▼
 ┌─────────────────────────────────────────────────────────┐
-│              RENDER  (Backend)                          │
+│              RAILWAY (FastAPI Backend)                  │
 │               api.yourdomain.com                        │
 │            FastAPI + Python 3.12 (Docker)               │
 └──────────────────────┬──────────────────────────────────┘
-                       │ TCP (MYSQL_PUBLIC_URL)
+                       │ Private Network (DATABASE_URL)
                        ▼
 ┌─────────────────────────────────────────────────────────┐
-│              RAILWAY  (Database)                        │
-│                  MySQL 8                                │
-│           roundhouse.proxy.rlwy.net                     │
+│              RAILWAY (MySQL Database)                   │
+│         mysql.railway.internal:3306/railway             │
+│                       MySQL 8                           │
 └─────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Technology Stack
+## 📋 Pre-deployment Prerequisites
 
-| Layer     | Technology          | Version  | Hosted On |
-|-----------|---------------------|----------|-----------|
-| Frontend  | React + Vite        | React 18 | Vercel    |
-| Backend   | FastAPI + Uvicorn   | Python 3.12 | Render |
-| Database  | MySQL               | 8.x      | Railway   |
-| Styling   | Tailwind CSS + shadcn/ui | —   | —         |
-| Auth      | JWT (python-jose)   | —        | —         |
+Before starting, ensure both the backend and frontend folders are pushed to separate GitHub repositories:
+1. **Backend Repository:** Contains the contents of `JB-Rock-Bolts---backend` (with its `Dockerfile` and `requirements.txt`).
+2. **Frontend Repository:** Contains the contents of `JB-Rock-Bolts---frontend` (with its `Dockerfile`, `package.json`, and `vite.config.ts`).
 
 ---
 
-## Service 1 — Railway (MySQL Database)
+## 🛠️ Step-by-Step Deployment on Railway
 
-### What it does
-Railway hosts the MySQL 8 database. It is the single source of truth for all
-application data — purchase orders, sales, inventory, clients, users, etc.
+### Step 1: Provision the MySQL Database
 
-### How tables are created
-On every backend startup, SQLAlchemy's `Base.metadata.create_all()` runs
-automatically. It creates any missing tables and leaves existing ones untouched.
-No manual migrations are needed for new deployments.
-
-### Two connection URLs Railway provides
-
-| Variable          | Hostname                          | Use case                        |
-|-------------------|-----------------------------------|---------------------------------|
-| `DATABASE_URL`    | `mysql.railway.internal`          | Internal (Railway-to-Railway only) |
-| `MYSQL_PUBLIC_URL`| `roundhouse.proxy.rlwy.net:PORT`  | External (Render, local machine) |
-
-> **Important:** Always use `MYSQL_PUBLIC_URL` when connecting from Render or
-> your local machine. `DATABASE_URL` only works between services inside the
-> same Railway project.
-
-### Environment variables (Railway Variables tab)
-Railway auto-generates all of these — you only need to read them:
-
-```
-MYSQLHOST
-MYSQLPORT
-MYSQLUSER
-MYSQLPASSWORD
-MYSQLDATABASE
-DATABASE_URL       ← internal, do not use from Render
-MYSQL_PUBLIC_URL   ← use this in Render's MYSQL_URL
-```
+1. Sign in to your [Railway.app Dashboard](https://railway.app/).
+2. Click **New Project** -> Select **Provision MySQL**.
+   - *This will instantly create a MySQL 8 database service named `MySQL` in your project.*
+3. Go to the **Variables** tab of the newly created MySQL service. Notice that Railway automatically generates connection variables like:
+   - `DATABASE_URL` (e.g., `mysql://root:password@mysql.railway.internal:3306/railway`)
+   - `MYSQLPORT`
+   - `MYSQLUSER`
+   - `MYSQLPASSWORD`
+   - `MYSQLDATABASE`
 
 ---
 
-## Service 2 — Render (FastAPI Backend)
+### Step 2: Deploy the FastAPI Backend
 
-### What it does
-Render runs the FastAPI application inside a Docker container. It handles all
-business logic, authentication, file uploads, and database operations.
+1. In your Railway project dashboard, click **+ Add Service** or **New** -> Select **GitHub Repo**.
+2. Search and select your **Backend GitHub Repository**.
+3. Railway will immediately detect the `Dockerfile` and begin building the service.
+4. While the build is running, go to the **Variables** tab of the backend service. Click **Raw Editor** (or add them manually) and set the following environment variables:
 
-### How it is deployed
-Render builds and runs the `Dockerfile` from the `main` branch of the backend
-repository. On every push to `main`, Render automatically redeploys.
+| Variable | Value | Description |
+| :--- | :--- | :--- |
+| `MYSQL_URL` | `${{MySQL.DATABASE_URL}}` | **Crucial:** References the database connection string dynamically. *(Note: Make sure `MySQL` matches the exact name of your database service in Railway).* |
+| `SECRET_KEY` | *[Your-Long-Random-String]* | Secure key used to sign JWT authentication tokens. |
+| `APP_ENV` | `production` | Enables production settings. |
+| `DEBUG` | `False` | Disables database engine logging and debug logs. |
+| `CORS_ORIGINS` | `https://yourdomain.com,https://www.yourdomain.com` | Whitelists your custom domain so the frontend can make requests. |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | `60` | Duration (in minutes) for JWT token validity. |
 
-### Dockerfile explained
-
-```dockerfile
-FROM python:3.12-slim
-
-WORKDIR /app
-
-# Install MySQL client libraries needed by pymysql
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc default-libmysqlclient-dev pkg-config \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY . .
-
-EXPOSE 8000
-
-# PORT is injected by Render automatically at runtime
-CMD sh -c "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"
-```
-
-### Environment variables to set in Render dashboard
-
-| Variable                    | Value                                      | Description                              |
-|-----------------------------|--------------------------------------------|------------------------------------------|
-| `MYSQL_URL`                 | Railway's `MYSQL_PUBLIC_URL` value         | Database connection (public URL)         |
-| `SECRET_KEY`                | Random string, 32+ characters              | JWT token signing key                    |
-| `APP_ENV`                   | `production`                               | Enables production mode                  |
-| `DEBUG`                     | `False`                                    | Disables SQL echo and debug logs         |
-| `CORS_ORIGINS`              | `https://yourdomain.com,https://www.yourdomain.com` | Allowed frontend origins       |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | `60`                                     | JWT expiry duration                      |
-
-> `PORT` is set automatically by Render — do not add it manually.
-
-### How MYSQL_URL works in the code
-`app/config.py` reads `MYSQL_URL` and converts the `mysql://` scheme to
-`mysql+pymysql://` so SQLAlchemy can use it:
-
-```python
-# If MYSQL_URL = "mysql://root:pass@host:3306/railway"
-# The code produces: "mysql+pymysql://root:pass@host:3306/railway"
-```
-
-### API endpoints
-Once deployed, these URLs are available:
-
-| URL                                    | Description              |
-|----------------------------------------|--------------------------|
-| `https://api.yourdomain.com/`          | Health check (root)      |
-| `https://api.yourdomain.com/health`    | Health check endpoint    |
-| `https://api.yourdomain.com/docs`      | Swagger UI (API docs)    |
-| `https://api.yourdomain.com/redoc`     | ReDoc (API docs)         |
-| `https://api.yourdomain.com/api/...`   | All application routes   |
-
-### Free tier behaviour
-Render's free web service **sleeps after 15 minutes of inactivity**. The first
-request after idle takes 30–60 seconds to wake up. Subsequent requests are
-instant. Upgrading to a paid plan removes this limitation.
+5. Once variables are added, Railway will automatically redeploy the backend with the new settings.
+6. Go to the **Settings** tab of the backend service.
+   - Under **Domains**, click **Generate Domain** to get a temporary public URL (e.g., `jb-backend.up.railway.app`). Keep this handy.
 
 ---
 
-## Service 3 — Vercel (React Frontend)
+### Step 3: Deploy the React Frontend
 
-### What it does
-Vercel builds the React/Vite app into static files and serves them globally
-via its CDN. It does not run any server-side code.
-
-### How it is deployed
-Vercel detects the Vite framework automatically and runs `npm run build` on
-every push to the `main` branch of the frontend repository.
-
-### vercel.json explained
-
-```json
-{
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
-}
-```
-
-This tells Vercel to serve `index.html` for every URL path. Without this,
-directly visiting a route like `yourdomain.com/sales` would return a 404
-because there is no actual `sales.html` file — React Router handles routing
-client-side.
-
-### Environment variable to set in Vercel dashboard
-
-| Variable       | Value                                    | Description                    |
-|----------------|------------------------------------------|--------------------------------|
-| `VITE_API_URL` | `https://api.yourdomain.com`             | Backend URL used at build time |
-
-> `VITE_API_URL` is baked into the JavaScript bundle at build time by Vite.
-> If you change this value in Vercel, you must trigger a redeploy for it to
-> take effect.
-
-### How VITE_API_URL is used in the code
-`src/lib/api.js` reads the variable and falls back to localhost for development:
-
-```javascript
-const BASE =
-    import.meta.env.VITE_API_URL ||
-    "http://127.0.0.1:8000";
-```
+1. In your Railway project dashboard, click **+ Add Service** or **New** -> Select **GitHub Repo**.
+2. Select your **Frontend GitHub Repository**.
+3. Go to the **Variables** tab of this frontend service.
+4. Add the build-time environment variable:
+   - `VITE_API_URL` = `https://api.yourdomain.com` *(This is your final backend URL. If you don't have the domain configured yet, you can temporarily use your backend's generated Railway URL like `https://jb-backend.up.railway.app` and update it later)*.
+5. Click deploy/redeploy. The Vite build process will pick up this variable and inject it into the compiled static files.
 
 ---
 
-## Domain Setup (GoDaddy)
+## 🌐 Step 4: Configure Your Custom Domain
 
-### DNS records to add in GoDaddy
+Railway manages custom domain routing and SSL certificates (HTTPS) automatically. You just need to link your domain and update your DNS records.
 
-| Type  | Name  | Value                                          | TTL |
-|-------|-------|------------------------------------------------|-----|
-| A     | `@`   | `76.76.21.21` (Vercel's IP)                   | 600 |
-| CNAME | `www` | `cname.vercel-dns.com`                         | 600 |
-| CNAME | `api` | `your-service-name.onrender.com`               | 600 |
+### 1. Add Custom Domains on Railway
+* **For Frontend Service:**
+  - Open the Frontend service -> **Settings** tab -> **Domains** section.
+  - Click **Custom Domain** and add:
+    1. `yourdomain.com`
+    2. `www.yourdomain.com`
+  - Railway will generate the required DNS targets (e.g., `yourdomain.com.herokucdn.com` or a specific IP for `A` record). Write these down.
+* **For Backend Service:**
+  - Open the Backend service -> **Settings** tab -> **Domains** section.
+  - Click **Custom Domain** and add:
+    1. `api.yourdomain.com` (or `backend.yourdomain.com`).
+  - Write down the target generated by Railway.
 
-### What each record does
-- `@` (root domain) → points `yourdomain.com` to Vercel
-- `www` → points `www.yourdomain.com` to Vercel
-- `api` → points `api.yourdomain.com` to Render (backend)
+### 2. Configure DNS Records (at GoDaddy, Namecheap, etc.)
+Log in to the dashboard of the provider where you purchased the domain and add the following records:
 
-### SSL certificates
-Both Vercel and Render automatically provision free HTTPS certificates via
-Let's Encrypt once DNS is verified. No manual setup is needed.
+| Type | Name (Host) | Value (Points to) | TTL |
+| :--- | :--- | :--- | :--- |
+| **A** or **CNAME** | `@` | The IP address or CNAME target provided by Railway for `yourdomain.com` | `3600` (1 hour) |
+| **CNAME** | `www` | The CNAME target provided by Railway for `www.yourdomain.com` | `3600` |
+| **CNAME** | `api` | The CNAME target provided by Railway for `api.yourdomain.com` | `3600` |
 
-### DNS propagation
-Changes take 5 minutes to 48 hours to propagate globally. With TTL 600
-(10 minutes), most regions update within 30 minutes. Check propagation at
-[dnschecker.org](https://dnschecker.org).
-
----
-
-## Local Development Setup
-
-To run the project locally, you do not need Docker. Use the `.env.example`
-files as a reference.
-
-### Backend
-
-```bash
-cd JB-Rock-Bolts---backend
-
-# Create .env file
-cp .env.example .env
-# Edit .env — set DB_HOST, DB_USER, DB_PASSWORD for your local MySQL
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run the server
-python run_backend.py --reload
-# API available at http://localhost:8000
-```
-
-### Frontend
-
-```bash
-cd JB-Rock-Bolts---frontend
-
-# Create .env.local file
-echo "VITE_API_URL=http://localhost:8000" > .env.local
-
-# Install dependencies
-npm install
-
-# Run dev server
-npm run dev
-# App available at http://localhost:8080
-```
+> ⏳ **Note on DNS Propagation:** DNS changes can take anywhere from a few minutes up to 24–48 hours to update worldwide. You can monitor the status at [dnschecker.org](https://dnschecker.org/).
 
 ---
 
-## File Uploads
+## 🔄 File Uploads & Storage (Production Warning)
 
-The backend stores uploaded PDFs in the `uploads/` directory and serves them
-at `/uploads/<filename>`.
-
-**Limitation:** Render's free tier has an ephemeral filesystem. Uploaded files
-are lost when the service redeploys or restarts. For persistent uploads in
-production, replace the local storage with a cloud bucket:
-
-- **Cloudflare R2** — free 10 GB/month (recommended)
-- **AWS S3** — free 5 GB for 12 months
-- **Backblaze B2** — free 10 GB
+By default, the backend stores uploaded purchase orders and invoices in a local `uploads/` folder.
+* **Important:** Railway services use an **ephemeral filesystem**. Every time the service redeploys, restarts, or goes to sleep, files in the `uploads/` directory will be deleted.
+* **Solution:** To keep your files safe in production, configure **Cloudflare R2** (10 GB free/month) or **Amazon S3**. Add these keys to your Railway Backend environment variables:
+  - `R2_ACCOUNT_ID`
+  - `R2_ACCESS_KEY_ID`
+  - `R2_SECRET_ACCESS_KEY`
+  - `R2_BUCKET_NAME`
+  - `R2_PUBLIC_URL`
 
 ---
 
-## Deployment Checklist
+## 🔎 Verification Checklist
 
-Use this checklist whenever deploying a new version:
-
-- [ ] Push changes to `main` branch
-- [ ] Render redeploys automatically (check Render dashboard for build status)
-- [ ] Vercel redeploys automatically (check Vercel dashboard for build status)
-- [ ] Visit `https://api.yourdomain.com/health` → confirm `{"status":"ok"}`
-- [ ] Visit `https://yourdomain.com` → confirm frontend loads
-- [ ] Test login to confirm database connection is working
-
----
-
-## Troubleshooting
-
-| Error | Cause | Fix |
-|-------|-------|-----|
-| `Can't connect to MySQL server on 'mysql.railway.internal'` | Using Railway's internal URL from Render | Set `MYSQL_URL` to Railway's `MYSQL_PUBLIC_URL` value |
-| `CORS error` in browser | Frontend origin not in `CORS_ORIGINS` | Add the Vercel URL to `CORS_ORIGINS` in Render env vars |
-| Frontend shows blank page on direct URL | Missing SPA routing config | Ensure `vercel.json` with rewrites is in the repo root |
-| `VITE_API_URL` not working after update | Value is baked in at build time | Trigger a manual redeploy in Vercel after changing the env var |
-| Render cold start slow (30–60s) | Free tier service sleeping | Upgrade to paid plan or use an uptime monitor to ping `/health` every 10 min |
-| Railway database connection refused | Railway free credit exhausted | Check Railway billing — add a payment method for the $5/month credit |
+Once everything is deployed and DNS propagation is complete:
+- [ ] Visit `https://api.yourdomain.com/health` -> should return `{"status":"ok"}`.
+- [ ] Visit `https://yourdomain.com` -> your login screen should load successfully.
+- [ ] Attempt logging in with your credentials -> confirms successful database connectivity.
+- [ ] Upload a document (Invoice/PO) -> check if it uploads and views successfully.
