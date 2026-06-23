@@ -3,8 +3,8 @@
  *
  * Why this file exists
  * ─────────────────────
- * The backend stores all datetimes in UTC (MySQL NOW() on a UTC server) and
- * serialises them with an explicit +00:00 offset.  Without explicit handling,
+ * The backend stores all datetimes in UTC (MySQL NOW() on a UTC Railway server)
+ * and serialises them with an explicit +00:00 offset.  Without explicit handling,
  * browser APIs can display them in the OS locale timezone, which may not be IST.
  * Every timestamp displayed to the user must go through one of the helpers below
  * so the display is always consistent IST regardless of the client OS timezone.
@@ -14,15 +14,14 @@ const IST = "Asia/Kolkata";
 
 /**
  * Parse a datetime string from the API into a JS Date (absolute UTC epoch).
- * The backend runs on Windows IST, so MySQL NOW() stores IST local time as
- * a naive value.  The API now appends "+05:30"; this fallback handles any
- * legacy or date-only strings that arrive without a timezone suffix.
+ * The backend (Railway) MySQL NOW() stores UTC time; API appends "+00:00".
+ * Fallback treats naive strings as UTC for safety.
  */
 function parseUTC(str) {
     if (!str) return null;
     const hasOffset = str.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(str);
-    // Fallback: treat naive strings as IST (the server's local timezone)
-    const d = new Date(hasOffset ? str : str + "+05:30");
+    // Fallback: treat naive strings as UTC (Railway server timezone)
+    const d = new Date(hasOffset ? str : str + "+00:00");
     return isNaN(d.getTime()) ? null : d;
 }
 
