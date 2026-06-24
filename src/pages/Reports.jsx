@@ -9,10 +9,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useConstants } from "@/lib/constants";
-import { fetchReport, fetchFulfillmentReport, fetchPendingPOs, exportCombinedReport, importCombinedReport } from "@/lib/api";
-import { inr } from "@/lib/format";
+import { fetchReport, fetchFulfillmentReport, fetchPendingPOs, fetchPurchaseOrder, openPODocument, exportCombinedReport, importCombinedReport } from "@/lib/api";
+import { inr, fmtDate, fmtDateTime } from "@/lib/format";
+import { StatusBadge } from "@/components/StatusBadge";
 import { toast } from "sonner";
-import { Download, Upload, IndianRupee, Package, TrendingUp, ClipboardList, BarChart3, Clock, FileText, UploadCloud } from "lucide-react";
+import { Download, Upload, IndianRupee, Package, TrendingUp, ClipboardList, BarChart3, Clock, FileText, UploadCloud, Printer } from "lucide-react";
 
 const SHEET_OPTIONS = [
     { id: "fulfillment", label: "Fulfillment Report", desc: "PO fulfillment status per item" },
@@ -114,6 +115,14 @@ const Reports = () => {
     const { data: fulfillmentData, isLoading: fulfillmentLoading } = useQuery({ queryKey: ["fulfillmentReport", fulfillmentParams], queryFn: () => fetchFulfillmentReport(fulfillmentParams), enabled: tab === "fulfillment" });
     const { data: pendingData,     isLoading: pendingLoading }     = useQuery({ queryKey: ["pendingPOsReport"],                queryFn: fetchPendingPOs,                         enabled: tab === "pending" });
 
+    const [selectedPOId, setSelectedPOId] = useState(null);
+    const { data: selectedPO, isLoading: selectedPOLoading } = useQuery({
+        queryKey: ["purchase-order", selectedPOId],
+        queryFn: () => fetchPurchaseOrder(selectedPOId),
+        enabled: !!selectedPOId,
+    });
+    const closeViewingPO = () => setSelectedPOId(null);
+
     return (
         <div className="space-y-6">
             {/* ── Page header ─────────────────────────────────────────────────── */}
@@ -171,29 +180,35 @@ const Reports = () => {
                                 <thead className="bg-muted/50 text-muted-foreground text-[11px] uppercase tracking-wider">
                                     <tr>
                                         <th className="text-left font-semibold px-2 py-3">Date</th>
+                                        <th className="text-left font-semibold px-2 py-3">PO Number</th>
                                         <th className="text-left font-semibold px-2 py-3">Client Name</th>
                                         <th className="text-left font-semibold px-2 py-3">Project Name</th>
                                         <th className="text-left font-semibold px-2 py-3">Item</th>
                                         <th className="text-right font-semibold px-2 py-3">Req.</th>
-                                        <th className="text-right font-semibold px-2 py-3">Del.</th>
+                                        <th className="text-right font-semibold px-2 py-3">Delivered Quantity</th>
                                         <th className="text-right font-semibold px-2 py-3">Pend.</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {fulfillmentLoading && <tr><td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">Loading...</td></tr>}
+                                    {fulfillmentLoading && <tr><td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">Loading...</td></tr>}
                                     {fulfillmentData?.rows.map((r) => (
                                         <tr key={r.id} className="border-t border-border hover:bg-muted/30 transition-colors text-[12.5px]">
                                             <td className="px-2 py-3 text-muted-foreground whitespace-nowrap">{r.date}</td>
+                                            <td className="px-2 py-3 font-semibold text-primary truncate max-w-[120px]" title={r.po_number}>
+                                                <button type="button" className="text-left w-full text-primary hover:underline focus:outline-none" onClick={() => setSelectedPOId(r.id)}>
+                                                    {r.po_number}
+                                                </button>
+                                            </td>
                                             <td className="px-2 py-3 font-semibold text-foreground truncate max-w-[120px]" title={r.client_name}>{r.client_name}</td>
                                             <td className="px-2 py-3 text-muted-foreground truncate max-w-[100px]" title={r.project}>{r.project}</td>
                                             <td className="px-2 py-3 text-foreground font-medium truncate max-w-[140px]" title={r.item}>{r.item}</td>
                                             <td className="px-2 py-3 text-right font-medium whitespace-nowrap">{r.total_required} <span className="text-[10px] text-muted-foreground">{r.uom}</span></td>
-                                            <td className="px-2 py-3 text-right font-bold text-success whitespace-nowrap">{r.delivered} <span className="text-[10px] text-muted-foreground">{r.uom}</span></td>
+                                            <td className="px-2 py-3 text-right font-bold text-success whitespace-nowrap" style={{color:"var(--success)"}}>{r.delivered} <span className="text-[10px] text-muted-foreground">{r.uom}</span></td>
                                             <td className="px-2 py-3 text-right font-bold text-orange-500 whitespace-nowrap">{r.pending} <span className="text-[10px] text-muted-foreground">{r.uom}</span></td>
                                         </tr>
                                     ))}
                                     {!fulfillmentLoading && fulfillmentData?.rows.length === 0 && (
-                                        <tr><td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">No records found.</td></tr>
+                                        <tr><td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">No records found.</td></tr>
                                     )}
                                 </tbody>
                             </table>
@@ -215,13 +230,22 @@ const Reports = () => {
                             </div>
                         </div>
                     </Card>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                         <Card className="p-5 shadow-card border-l-4 border-primary">
                             <div className="flex items-center gap-3">
                                 <div className="h-11 w-11 rounded-xl bg-primary/10 grid place-items-center"><IndianRupee className="h-5 w-5 text-primary" /></div>
                                 <div>
                                     <div className="text-xs uppercase tracking-wider text-muted-foreground">Filtered Revenue</div>
                                     <div className="text-2xl font-bold text-foreground">{inr(salesData?.total_revenue ?? 0)}</div>
+                                </div>
+                            </div>
+                        </Card>
+                        <Card className="p-5 shadow-card border-l-4 border-blue-500">
+                            <div className="flex items-center gap-3">
+                                <div className="h-11 w-11 rounded-xl bg-blue-500/10 grid place-items-center"><TrendingUp className="h-5 w-5 text-blue-500" /></div>
+                                <div>
+                                    <div className="text-xs uppercase tracking-wider text-muted-foreground">Total GST</div>
+                                    <div className="text-2xl font-bold text-foreground">{inr(salesData?.rows?.reduce((s, r) => s + (r.gst_amount ?? 0), 0) ?? 0)}</div>
                                 </div>
                             </div>
                         </Card>
@@ -252,23 +276,27 @@ const Reports = () => {
                                         <th className="text-left font-semibold px-2 py-3">Date</th>
                                         <th className="text-left font-semibold px-2 py-3">Invoice No</th>
                                         <th className="text-left font-semibold px-2 py-3">PO No</th>
+                                        <th className="text-right font-semibold px-2 py-3">Subtotal</th>
+                                        <th className="text-right font-semibold px-2 py-3">GST Amount</th>
                                         <th className="text-right font-semibold px-2 py-3">Grand Total</th>
                                         <th className="text-left font-semibold px-2 py-3">Payment</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {salesLoading && <tr><td colSpan={5} className="px-5 py-12 text-center text-muted-foreground">Loading...</td></tr>}
+                                    {salesLoading && <tr><td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">Loading...</td></tr>}
                                     {salesData?.rows.map((r) => (
                                         <tr key={r.id} className="border-t border-border hover:bg-muted/30 transition-colors text-[12.5px]">
                                             <td className="px-2 py-3 text-muted-foreground whitespace-nowrap">{r.date}</td>
                                             <td className="px-2 py-3 text-primary font-medium truncate max-w-[120px]" title={r.invoice_number}>{r.invoice_number || "—"}</td>
                                             <td className="px-2 py-3 text-muted-foreground truncate max-w-[120px]" title={r.po_number}>{r.po_number || "—"}</td>
+                                            <td className="px-2 py-3 text-right font-medium">{inr(r.subtotal)}</td>
+                                            <td className="px-2 py-3 text-right font-medium text-blue-500">{inr(r.gst_amount)}</td>
                                             <td className="px-2 py-3 text-right font-bold text-foreground">{inr(r.price)}</td>
                                             <td className="px-2 py-3 text-muted-foreground text-[11px]">{r.payment_status}</td>
                                         </tr>
                                     ))}
                                     {!salesLoading && (!salesData || salesData.rows.length === 0) && (
-                                        <tr><td colSpan={5} className="px-5 py-12 text-center text-muted-foreground">No records match the filters.</td></tr>
+                                        <tr><td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">No records match the filters.</td></tr>
                                     )}
                                 </tbody>
                             </table>
@@ -278,31 +306,13 @@ const Reports = () => {
 
                 {/* ── Pending POs Tab ──────────────────────────────────────────── */}
                 <TabsContent value="pending" className="space-y-6">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <Card className="p-5 shadow-card border-l-4 border-slate-500">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <Card className="p-5 shadow-card border-l-4 border-success">
                             <div className="flex items-center gap-3">
-                                <div className="h-11 w-11 rounded-xl bg-slate-500/10 grid place-items-center"><IndianRupee className="h-5 w-5 text-slate-500" /></div>
+                                <div className="h-11 w-11 rounded-xl bg-success/10 grid place-items-center"><IndianRupee className="h-5 w-5 text-success" /></div>
                                 <div>
-                                    <div className="text-xs uppercase tracking-wider text-muted-foreground">Original Subtotal</div>
-                                    <div className="text-xl font-bold text-foreground">{inr(pendingData?.total_subtotal ?? 0)}</div>
-                                </div>
-                            </div>
-                        </Card>
-                        <Card className="p-5 shadow-card border-l-4 border-blue-500">
-                            <div className="flex items-center gap-3">
-                                <div className="h-11 w-11 rounded-xl bg-blue-500/10 grid place-items-center"><TrendingUp className="h-5 w-5 text-blue-500" /></div>
-                                <div>
-                                    <div className="text-xs uppercase tracking-wider text-muted-foreground">Total Original GST</div>
-                                    <div className="text-xl font-bold text-foreground">{inr(pendingData?.total_gst ?? 0)}</div>
-                                </div>
-                            </div>
-                        </Card>
-                        <Card className="p-5 shadow-card border-l-4 border-primary">
-                            <div className="flex items-center gap-3">
-                                <div className="h-11 w-11 rounded-xl bg-primary/10 grid place-items-center"><Package className="h-5 w-5 text-primary" /></div>
-                                <div>
-                                    <div className="text-xs uppercase tracking-wider text-muted-foreground">Total Original Value</div>
-                                    <div className="text-xl font-bold text-foreground">{inr(pendingData?.total_value ?? 0)}</div>
+                                    <div className="text-xs uppercase tracking-wider text-muted-foreground">Delivered Value</div>
+                                    <div className="text-xl font-bold text-foreground">{inr(pendingData?.total_pending_value != null ? pendingData.total_value - pendingData.total_pending_value : 0)}</div>
                                 </div>
                             </div>
                         </Card>
@@ -325,28 +335,36 @@ const Reports = () => {
                                         <th className="text-left font-semibold px-2 py-3">PO Number</th>
                                         <th className="text-left font-semibold px-2 py-3">Client</th>
                                         <th className="text-left font-semibold px-2 py-3">Item</th>
-                                        <th className="text-right font-semibold px-2 py-3">Value (Excl. GST)</th>
-                                        <th className="text-right font-semibold px-2 py-3">GST Amount</th>
-                                        <th className="text-right font-semibold px-2 py-3">Total Value</th>
+                                        <th className="text-right font-semibold px-2 py-3">Total Qty</th>
+                                        <th className="text-right font-semibold px-2 py-3">Delivered Qty</th>
+                                        <th className="text-right font-semibold px-2 py-3">Pending Qty</th>
+                                        <th className="text-right font-semibold px-2 py-3">Delivered Payment</th>
+                                        <th className="text-right font-semibold px-2 py-3">Pending Payment</th>
                                         <th className="text-left font-semibold px-2 py-3">Status</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {pendingLoading && <tr><td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">Loading...</td></tr>}
+                                    {pendingLoading && <tr><td colSpan={10} className="px-5 py-12 text-center text-muted-foreground">Loading...</td></tr>}
                                     {pendingData?.rows.map((r) => (
                                         <tr key={r.id} className="border-t border-border hover:bg-muted/30 transition-colors text-[12.5px]">
                                             <td className="px-2 py-3 text-muted-foreground whitespace-nowrap">{r.date}</td>
-                                            <td className="px-2 py-3 font-semibold text-primary truncate max-w-[120px]" title={r.po_number}>{r.po_number}</td>
+                                            <td className="px-2 py-3 font-semibold text-primary truncate max-w-[120px]" title={r.po_number}>
+                                                <button type="button" className="text-left w-full text-primary hover:underline focus:outline-none" onClick={() => setSelectedPOId(r.id)}>
+                                                    {r.po_number}
+                                                </button>
+                                            </td>
                                             <td className="px-2 py-3 text-muted-foreground truncate max-w-[120px]" title={r.client_name}>{r.client_name}</td>
                                             <td className="px-2 py-3 text-muted-foreground truncate max-w-[140px]" title={r.item}>{r.item}</td>
-                                            <td className="px-2 py-3 text-right font-medium">{inr(r.subtotal)}</td>
-                                            <td className="px-2 py-3 text-right font-medium text-blue-500">{inr(r.gst_amount)}</td>
-                                            <td className="px-2 py-3 text-right font-bold">{inr(r.total_value)}</td>
-                                            <td className="px-2 py-3 text-[10px] uppercase font-bold">{r.status}</td>
+                                            <td className="px-2 py-3 text-right font-medium whitespace-nowrap">{r.total_qty} <span className="text-[10px] text-muted-foreground">{r.uom || ''}</span></td>
+                                            <td className="px-2 py-3 text-right font-bold whitespace-nowrap" style={{color:"var(--success)"}}>{r.delivered_qty || 0} <span className="text-[10px] text-muted-foreground">{r.uom || ''}</span></td>
+                                            <td className="px-2 py-3 text-right font-bold whitespace-nowrap">{r.pending_qty} <span className="text-[10px] text-muted-foreground">{r.uom || ''}</span></td>
+                                            <td className="px-2 py-3 text-right font-bold" style={{color:"var(--success)"}}>{inr(r.total_value - r.pending_total)}</td>
+                                            <td className="px-2 py-3 text-right font-bold" style={{color:"var(--success)"}}>{inr(r.pending_total)}</td>
+                                            <td className="px-2 py-3 text-left"><StatusBadge status={r.status} label={r.status} /></td>
                                         </tr>
                                     ))}
                                     {!pendingLoading && pendingData?.rows.length === 0 && (
-                                        <tr><td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">No pending POs found.</td></tr>
+                                        <tr><td colSpan={10} className="px-5 py-12 text-center text-muted-foreground">No pending POs found.</td></tr>
                                     )}
                                 </tbody>
                             </table>
@@ -354,6 +372,112 @@ const Reports = () => {
                     </Card>
                 </TabsContent>
             </Tabs>
+
+            {/* ── PO Drill-down Dialog ─────────────────────────────────────────── */}
+            <Dialog open={!!selectedPOId} onOpenChange={(open) => !open && closeViewingPO()}>
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader><DialogTitle>Purchase Order Details</DialogTitle></DialogHeader>
+                    {selectedPOLoading && <div className="py-10 text-center text-muted-foreground text-sm">Loading…</div>}
+                    {selectedPO && !selectedPOLoading && (() => {
+                        const po = selectedPO;
+                        return (
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-3 text-sm">
+                                    <Field label="PO Number" value={po.po_number} />
+                                    <div className="space-y-1">
+                                        <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Delivery Status</div>
+                                        <StatusBadge
+                                            status={
+                                                po.short_closed ? "Short Closed" :
+                                                (po.delivery_status === "Delivered" && po.all_dispatches_marked) ? "Delivered" :
+                                                (po.delivery_status === "Delivered" || po.delivery_status === "Partial") ? "Partial" :
+                                                "Not Delivered"
+                                            }
+                                            label={
+                                                po.short_closed ? "Short Closed" :
+                                                (po.delivery_status === "Delivered" && po.all_dispatches_marked) ? "Delivered" :
+                                                po.delivery_status === "Delivered" ? "Dispatched (Pending Challans)" :
+                                                po.delivery_status
+                                            }
+                                        />
+                                    </div>
+                                    <Field label="Client" value={po.client_name} />
+                                    <Field label="Project" value={po.project} />
+                                    <Field label="Payment Terms" value={po.payment_terms} />
+                                    <Field label="Validity Date" value={po.validity_date ? fmtDate(po.validity_date) : "—"} />
+                                    <Field label="GST %" value={po.gst || "0%"} />
+                                    <Field label="Freight" value={inr(po.freight)} />
+                                    {po.remark && <Field label="Remark" value={po.remark} full />}
+
+                                    {po.file_url && (
+                                        <div className="col-span-2 mt-2">
+                                            <Button variant="outline" size="sm" className="w-full" onClick={() => window.open(`http://localhost:8000${po.file_url}`, "_blank")}>
+                                                <FileText className="h-4 w-4 mr-2" /> View Attached PO Document
+                                            </Button>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="rounded-lg border border-border overflow-x-auto">
+                                    <div className="bg-muted/50 px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Items</div>
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-muted/30">
+                                            <tr>
+                                                <th className="text-left px-3 py-2 font-medium text-muted-foreground">#</th>
+                                                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Item</th>
+                                                <th className="text-right px-3 py-2 font-medium text-muted-foreground">Qty</th>
+                                                <th className="text-right px-3 py-2 font-medium text-muted-foreground" style={{color:"var(--success)"}}>Delivered Quantity</th>
+                                                <th className="text-right px-3 py-2 font-medium text-muted-foreground" style={{color:"var(--warning)"}}>Pend.</th>
+                                                <th className="text-left px-3 py-2 font-medium text-muted-foreground">UOM</th>
+                                                <th className="text-right px-3 py-2 font-medium text-muted-foreground">Unit Price</th>
+                                                <th className="text-right px-3 py-2 font-medium text-muted-foreground">Amount</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {(po.line_items?.length > 0 ? po.line_items : [{ item: po.item, quantity: po.total_quantity, uom: po.uom, unit_price: po.unit_price }]).map((li, i) => (
+                                                <tr key={i} className="border-t border-border">
+                                                    <td className="px-3 py-2 text-muted-foreground">{i + 1}</td>
+                                                    <td className="px-3 py-2 font-medium">{li.item}</td>
+                                                    <td className="px-3 py-2 text-right">{li.quantity}</td>
+                                                    <td className="px-3 py-2 text-right font-bold" style={{color:"var(--success)"}}>{li.delivered_quantity || 0}</td>
+                                                    <td className="px-3 py-2 text-right font-bold" style={{color:"var(--warning)"}}>{Math.max(0, (li.quantity || 0) - (li.delivered_quantity || 0))}</td>
+                                                    <td className="px-3 py-2">{li.uom || "Nos"}</td>
+                                                    <td className="px-3 py-2 text-right">{inr(li.unit_price)}</td>
+                                                    <td className="px-3 py-2 text-right font-semibold">{inr(li.quantity * li.unit_price)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+                                    <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                                        <Clock className="h-4 w-4 text-accent" /> Activity Log
+                                    </div>
+                                    <POActivityEntry label="Created By" by={po.created_by} at={po.created_at} color="primary" />
+                                    <POActivityEntry label="Last Updated By" by={po.last_updated_by} at={po.last_updated_at} color="warning" />
+                                    <POActivityEntry label="Last Opened By" by={po.last_opened_by} at={po.last_opened_at} color="accent" />
+                                    {po.short_closed && (
+                                        <POActivityEntry
+                                            label="Short Closed By"
+                                            by={po.short_closed_by}
+                                            at={po.short_closed_at}
+                                            color="slate-500"
+                                            remark={po.short_closed_remark}
+                                        />
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })()}
+                    <DialogFooter>
+                        <Button variant="outline" onClick={closeViewingPO}>Close</Button>
+                        {selectedPO && (
+                            <Button variant="outline" onClick={() => openPODocument(selectedPO.id)}>
+                                <Printer className="h-4 w-4 mr-2" /> Print PO
+                            </Button>
+                        )}
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {/* ── Combined Export Dialog ───────────────────────────────────────── */}
             <Dialog open={exportOpen} onOpenChange={(o) => { if (!exporting) setExportOpen(o); }}>
@@ -519,5 +643,23 @@ const Reports = () => {
         </div>
     );
 };
+
+const Field = ({ label, value, full }) => (
+    <div className={full ? "col-span-2" : ""}>
+        <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</div>
+        <div className="font-medium text-foreground break-words">{value ?? "—"}</div>
+    </div>
+);
+
+const POActivityEntry = ({ label, by, at, color, remark }) => (
+    <div className={`flex items-start gap-3 text-xs border-l-2 border-${color}/40 pl-3`}>
+        <div className="flex-1">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+            <div className="font-semibold text-foreground">{by || "—"}</div>
+            <div className="text-muted-foreground">{at ? fmtDateTime(at) : "—"}</div>
+            {remark && <div className="mt-1 text-muted-foreground italic border-l-2 border-muted pl-2">"{remark}"</div>}
+        </div>
+    </div>
+);
 
 export default Reports;

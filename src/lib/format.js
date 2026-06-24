@@ -5,7 +5,7 @@ export const inr = (n) => {
     return new Intl.NumberFormat("en-IN", {
         style: "currency",
         currency: "INR",
-        minimumFractionDigits: val % 1 === 0 ? 0 : 2,
+        minimumFractionDigits: 2,
         maximumFractionDigits: 2,
     }).format(val);
 };

@@ -58,6 +58,7 @@ export const fetchPurchaseOrder = (id, openedBy) =>
 export const createPurchaseOrder = (body) => post("/api/purchase-orders", body);
 export const updatePurchaseOrder = (id, body) => put(`/api/purchase-orders/${id}`, body);
 export const deletePurchaseOrder = (id) => del(`/api/purchase-orders/${id}`);
+export const shortClosePurchaseOrder = (id, body) => post(`/api/purchase-orders/${id}/short-close`, body);
 export const uploadPOFile = async (file) => {
     const formData = new FormData();
     formData.append("file", file);

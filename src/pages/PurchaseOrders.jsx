@@ -1,9 +1,11 @@
 import { useMemo, useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -14,28 +16,22 @@ import {
     fetchPurchaseOrders, createPurchaseOrder, updatePurchaseOrder,
     deletePurchaseOrder, fetchPurchaseOrder, openPODocument,
     createClient, createProject, fetchProjects, uploadPOFile,
-    exportPurchaseOrders, importPurchaseOrders,
+    exportPurchaseOrders, importPurchaseOrders, shortClosePurchaseOrder,
 } from "@/lib/api";
 import { Pencil, Plus, Search, Trash2, Eye, FileText, Package, Truck, Clock, Printer, X, UploadCloud, Download, Upload } from "lucide-react";
 import { toast } from "sonner";
-
-const generatePONumber = () => {
-    const now = new Date();
-    const datePart = now.toISOString().slice(0, 10).replace(/-/g, "");
-    const timePart = now.toTimeString().slice(0, 8).replace(/:/g, "");
-    return `PO-${datePart}-${timePart}`;
-};
 
 const emptyLineItem = () => ({ item: "", quantity: "", uom: "Nos", unit_price: "", gst: "0", freight: "" });
 
 const empty = () => ({
     clientName: "", clientDropdown: "",
-    poNumber: generatePONumber(),
+    poNumber: "",
     validityDate: new Date().toISOString().slice(0, 10),
     gst: "", freight: 0,
     project: "",
     paymentTerms: "",
     fileUrl: "",
+    remark: "",
     lineItems: [emptyLineItem()],
 });
 
@@ -43,6 +39,8 @@ const isoToDateInput = (iso) => (iso ? new Date(iso).toISOString().slice(0, 10) 
 
 const PurchaseOrders = () => {
     const qc = useQueryClient();
+    const location = useLocation();
+    const navigate = useNavigate();
     const { products, clients, projects, payment_terms, uom_options } = useConstants();
 
     const { data: orders = [], isLoading } = useQuery({
@@ -65,6 +63,18 @@ const PurchaseOrders = () => {
         }
     });
     const markOpenedMutation = useMutation({ mutationFn: (id) => fetchPurchaseOrder(id, getCurrentUser()), onSuccess: invalidate });
+    const shortCloseMutation = useMutation({
+        mutationFn: ({ id, body }) => shortClosePurchaseOrder(id, body),
+        onSuccess: () => {
+            invalidate();
+            toast.success("Purchase Order Short Closed successfully");
+            setShortCloseItem(null);
+            setShortCloseRemark("");
+        },
+        onError: (err) => {
+            toast.error(err.message || "Failed to short close Purchase Order");
+        }
+    });
 
     const clientMutation = useMutation({ mutationFn: createClient, onSuccess: () => qc.invalidateQueries({ queryKey: ["constants"] }) });
     const projectMutation = useMutation({ mutationFn: createProject, onSuccess: () => qc.invalidateQueries({ queryKey: ["constants"] }) });
@@ -76,6 +86,9 @@ const PurchaseOrders = () => {
     const [viewing, setViewing] = useState(null);
     const [uploadingPoId, setUploadingPoId] = useState(null);
     const [itemToDelete, setItemToDelete] = useState(null);
+
+    const [shortCloseItem, setShortCloseItem] = useState(null);
+    const [shortCloseRemark, setShortCloseRemark] = useState("");
 
     const [importOpen, setImportOpen] = useState(false);
     const [importFile, setImportFile] = useState(null);
@@ -165,6 +178,7 @@ const PurchaseOrders = () => {
             paymentTerms: o.payment_terms || "",
             validityDate: isoToDateInput(o.validity_date),
             fileUrl: o.file_url || "",
+            remark: o.remark || "",
             lineItems: li,
         });
         setDialogOpen(true);
@@ -308,6 +322,7 @@ const PurchaseOrders = () => {
             payment_terms: form.paymentTerms || null,
             validity_date: form.validityDate ? new Date(form.validityDate).toISOString() : null,
             file_url: form.fileUrl || null,
+            remark: form.remark || null,
             line_items: (form.lineItems || []).map(li => ({
                 id: li.id || null,
                 item: li.item.trim(),
@@ -638,6 +653,16 @@ const PurchaseOrders = () => {
                                 </Select>
                             </div>
 
+                            <div className="space-y-2 sm:col-span-2">
+                                <Label>Remark</Label>
+                                <Textarea
+                                    placeholder="Optional remarks for this Purchase Order..."
+                                    value={form.remark || ""}
+                                    onChange={(e) => set("remark", e.target.value)}
+                                    rows={2}
+                                />
+                            </div>
+
                             <div className="space-y-2">
                                 <Label>Upload PO Document</Label>
                                 <div className="flex items-center gap-2">
@@ -747,17 +772,19 @@ const PurchaseOrders = () => {
                                         <td className="px-1.5 py-3 text-right text-warning font-bold whitespace-nowrap">{o.pending_quantity} <span className="text-[10px] font-normal text-muted-foreground">{o.uom || "Nos"}</span></td>
                                         <td className="px-1.5 py-3 text-muted-foreground whitespace-nowrap text-xs">{o.validity_date ? fmtDate(o.validity_date) : "—"}</td>
                                         <td className="px-1.5 py-3 scale-90 origin-left -mr-4">
-                                            <StatusBadge 
+                                            <StatusBadge
                                                 status={
+                                                    o.short_closed ? "Short Closed" :
                                                     (o.delivery_status === "Delivered" && o.all_dispatches_marked) ? "Delivered" :
                                                     (o.delivery_status === "Delivered" || o.delivery_status === "Partial") ? "Partial" :
                                                     "Not Delivered"
-                                                } 
+                                                }
                                                 label={
+                                                    o.short_closed ? "Short Closed" :
                                                     (o.delivery_status === "Delivered" && o.all_dispatches_marked) ? "Delivered" :
                                                     o.delivery_status === "Delivered" ? "Dispatched (Pending Challans)" :
                                                     o.delivery_status
-                                                } 
+                                                }
                                             />
                                         </td>
                                         <td className="px-1.5 py-3">
@@ -777,7 +804,7 @@ const PurchaseOrders = () => {
                                                             setUploadingPoId(o.id);
                                                             document.getElementById("direct-file-upload").click();
                                                         }
-                                                    }} 
+                                                    }}
                                                     title={o.file_url ? "View Uploaded PO" : "Upload PO Document"}
                                                 >
                                                     {o.file_url ? (
@@ -787,7 +814,14 @@ const PurchaseOrders = () => {
                                                     )}
                                                 </Button>
                                                 <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => openPODocument(o.id)} title="Print PO"><Printer className="h-3 w-3" /></Button>
-                                                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => openEdit(o)} title="Edit"><Pencil className="h-3 w-3 text-blue-500" /></Button>
+                                                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => openEdit(o)} disabled={o.short_closed} title="Edit">
+                                                    <Pencil className={`h-3 w-3 ${o.short_closed ? "text-muted-foreground" : "text-blue-500"}`} />
+                                                </Button>
+                                                {o.delivery_status !== "Delivered" && !o.short_closed && (
+                                                    <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[10px] font-semibold text-slate-600 hover:bg-slate-100" onClick={() => setShortCloseItem(o)} title="Short Close PO">
+                                                        Close
+                                                    </Button>
+                                                )}
                                                 <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setItemToDelete(o.id)} title="Delete"><Trash2 className="h-3 w-3 text-destructive" /></Button>
                                             </div>
                                         </td>
@@ -811,17 +845,19 @@ const PurchaseOrders = () => {
                                 <Field label="PO Number" value={viewing.po_number} />
                                 <div className="space-y-1">
                                     <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Delivery Status</div>
-                                    <StatusBadge 
+                                    <StatusBadge
                                         status={
+                                            viewing.short_closed ? "Short Closed" :
                                             (viewing.delivery_status === "Delivered" && viewing.all_dispatches_marked) ? "Delivered" :
                                             (viewing.delivery_status === "Delivered" || viewing.delivery_status === "Partial") ? "Partial" :
                                             "Not Delivered"
-                                        } 
+                                        }
                                         label={
+                                            viewing.short_closed ? "Short Closed" :
                                             (viewing.delivery_status === "Delivered" && viewing.all_dispatches_marked) ? "Delivered" :
                                             viewing.delivery_status === "Delivered" ? "Dispatched (Pending Challans)" :
                                             viewing.delivery_status
-                                        } 
+                                        }
                                     />
                                 </div>
                                 <Field label="Client" value={viewing.client_name} />
@@ -830,6 +866,7 @@ const PurchaseOrders = () => {
                                 <Field label="Validity Date" value={viewing.validity_date ? fmtDate(viewing.validity_date) : "—"} />
                                 <Field label="GST %" value={viewing.gst || "0%"} />
                                 <Field label="Freight" value={inr(viewing.freight)} />
+                                {viewing.remark && <Field label="Remark" value={viewing.remark} full />}
 
                                 {viewing.file_url && (
                                     <div className="col-span-2 mt-2">
@@ -847,7 +884,7 @@ const PurchaseOrders = () => {
                                             <th className="text-left px-3 py-2 font-medium text-muted-foreground">#</th>
                                             <th className="text-left px-3 py-2 font-medium text-muted-foreground">Item</th>
                                             <th className="text-right px-3 py-2 font-medium text-muted-foreground">Qty</th>
-                                            <th className="text-right px-3 py-2 font-medium text-muted-foreground text-success">Del.</th>
+                                            <th className="text-right px-3 py-2 font-medium text-muted-foreground text-success">Delivered Quantity</th>
                                             <th className="text-right px-3 py-2 font-medium text-muted-foreground text-warning">Pend.</th>
                                             <th className="text-left px-3 py-2 font-medium text-muted-foreground">UOM</th>
                                             <th className="text-right px-3 py-2 font-medium text-muted-foreground">Unit Price</th>
@@ -877,6 +914,15 @@ const PurchaseOrders = () => {
                                 <ActivityEntry label="Created By" by={viewing.created_by} at={viewing.created_at} color="primary" />
                                 <ActivityEntry label="Last Updated By" by={viewing.last_updated_by} at={viewing.last_updated_at} color="warning" />
                                 <ActivityEntry label="Last Opened By" by={viewing.last_opened_by} at={viewing.last_opened_at} color="accent" />
+                                {viewing.short_closed && (
+                                    <ActivityEntry
+                                        label="Short Closed By"
+                                        by={viewing.short_closed_by}
+                                        at={viewing.short_closed_at}
+                                        color="slate-500"
+                                        remark={viewing.short_closed_remark}
+                                    />
+                                )}
                             </div>
                         </div>
                     )}
@@ -887,11 +933,46 @@ const PurchaseOrders = () => {
                                 <Button variant="outline" onClick={() => openPODocument(viewing.id)}>
                                     <Printer className="h-4 w-4 mr-2" /> Print PO
                                 </Button>
-                                <Button className="bg-gradient-primary" onClick={() => { const o = viewing; setViewing(null); openEdit(o); }}>
+                                <Button className="bg-gradient-primary" disabled={viewing.short_closed} onClick={() => { const o = viewing; setViewing(null); openEdit(o); }}>
                                     <Pencil className="h-4 w-4 mr-2" /> Edit
                                 </Button>
                             </>
                         )}
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={!!shortCloseItem} onOpenChange={(open) => !open && setShortCloseItem(null)}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader><DialogTitle>Short Close Purchase Order</DialogTitle></DialogHeader>
+                    <div className="py-4 space-y-3">
+                        <p className="text-sm text-muted-foreground">
+                            Are you sure you want to short close <strong>{shortCloseItem?.po_number}</strong>?
+                            No further invoices or dispatches can be created against it.
+                        </p>
+                        <div className="space-y-1.5">
+                            <Label className="text-xs text-muted-foreground">Reason (optional)</Label>
+                            <Textarea
+                                placeholder="Enter reason for short closing..."
+                                value={shortCloseRemark}
+                                onChange={(e) => setShortCloseRemark(e.target.value)}
+                                rows={2}
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setShortCloseItem(null)}>Cancel</Button>
+                        <Button
+                            variant="default"
+                            className="bg-slate-700 hover:bg-slate-800"
+                            disabled={shortCloseMutation.isPending}
+                            onClick={() => {
+                                shortCloseMutation.mutate({
+                                    id: shortCloseItem.id,
+                                    body: { remark: shortCloseRemark || "", user: getCurrentUser() }
+                                });
+                            }}
+                        >Confirm Short Close</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
@@ -1012,12 +1093,13 @@ const Field = ({ label, value, full }) => (
     </div>
 );
 
-const ActivityEntry = ({ label, by, at, color }) => (
+const ActivityEntry = ({ label, by, at, color, remark }) => (
     <div className={`flex items-start gap-3 text-xs border-l-2 border-${color}/40 pl-3`}>
         <div className="flex-1">
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
             <div className="font-semibold text-foreground">{by || "—"}</div>
             <div className="text-muted-foreground">{at ? fmtDateTime(at) : "—"}</div>
+            {remark && <div className="mt-1 text-muted-foreground italic border-l-2 border-muted pl-2">"{remark}"</div>}
         </div>
     </div>
 );

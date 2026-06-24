@@ -9,6 +9,7 @@ const map = {
     Low: "bg-warning/15 text-warning border-warning/30",
     Partial: "bg-primary/10 text-primary border-primary/20",
     Out: "bg-destructive/15 text-destructive border-destructive/30",
+    "Short Closed": "bg-slate-500/15 text-slate-500 border-slate-500/30",
 };
 
 export const StatusBadge = ({ status, label }) => (
