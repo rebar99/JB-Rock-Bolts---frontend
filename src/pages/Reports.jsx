@@ -144,13 +144,13 @@ const Reports = () => {
             {/* ── Report tabs ─────────────────────────────────────────────────── */}
             <Tabs value={tab} onValueChange={setTab} className="w-full">
                 <TabsList className="grid w-full grid-cols-3 mb-6 p-1 bg-muted/50 rounded-xl">
-                    <TabsTrigger value="fulfillment" className="rounded-lg py-2 transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                    <TabsTrigger value="fulfillment" className="rounded-lg py-2 transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-md dark:data-[state=active]:bg-white dark:data-[state=active]:text-slate-900">
                         <ClipboardList className="h-4 w-4 mr-2" /> Fulfillment
                     </TabsTrigger>
-                    <TabsTrigger value="sales" className="rounded-lg py-2 transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                    <TabsTrigger value="sales" className="rounded-lg py-2 transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-md dark:data-[state=active]:bg-white dark:data-[state=active]:text-slate-900">
                         <BarChart3 className="h-4 w-4 mr-2" /> Sales
                     </TabsTrigger>
-                    <TabsTrigger value="pending" className="rounded-lg py-2 transition-all data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                    <TabsTrigger value="pending" className="rounded-lg py-2 transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-md dark:data-[state=active]:bg-white dark:data-[state=active]:text-slate-900">
                         <Clock className="h-4 w-4 mr-2" /> Pending POs
                     </TabsTrigger>
                 </TabsList>
