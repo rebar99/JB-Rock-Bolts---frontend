@@ -112,7 +112,7 @@ export const fetchSales = (params) => get("/api/sales", params);
 export const fetchSale = (id) => get(`/api/sales/${id}`);
 export const createSale = (body) => post("/api/sales", body);
 export const updateSale = (id, body) => put(`/api/sales/${id}`, body);
-export const deleteSale = (id) => del(`/api/sales/${id}`);
+export const deleteSale = (id, deletedBy) => del(`/api/sales/${id}`, deletedBy ? { deleted_by: deletedBy } : undefined);
 export const addSaleActivity = (id, body) => post(`/api/sales/${id}/activities`, body);
 export const markSaleDelivered = (id, body) => put(`/api/sales/${id}/mark-delivered`, body);
 export const uploadInvoiceFile = async (file) => {

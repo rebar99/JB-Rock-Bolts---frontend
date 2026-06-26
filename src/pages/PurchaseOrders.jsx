@@ -323,6 +323,7 @@ const PurchaseOrders = () => {
             validity_date: form.validityDate ? new Date(form.validityDate).toISOString() : null,
             file_url: form.fileUrl || null,
             remark: form.remark || null,
+            created_by: getCurrentUser(),
             last_updated_by: getCurrentUser(),
             line_items: (form.lineItems || []).map(li => ({
                 id: li.id || null,

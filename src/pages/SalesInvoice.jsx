@@ -48,7 +48,7 @@ const SalesInvoice = () => {
     const createMutation = useMutation({ mutationFn: createSale, onSuccess: invalidateSales });
     const updateMutation = useMutation({ mutationFn: ({ id, body }) => updateSale(id, body), onSuccess: invalidateSales });
     const deleteMutation = useMutation({
-        mutationFn: deleteSaleApi,
+        mutationFn: (id) => deleteSaleApi(id, getCurrentUser()),
         onSuccess: () => {
             invalidateSales();
             toast.success("Sale record deleted successfully");
