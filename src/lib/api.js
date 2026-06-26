@@ -265,24 +265,40 @@ export const fetchUsers = () => get("/api/users");
 export const updateUser = (id, body) => put(`/api/users/${id}`, body);
 export const resetPassword = (body) => post("/api/users/reset-password", body);
 
+export const logoutUser = () => request("/api/users/logout", { method: "POST" });
+
+// The request() helper already reads the token from localStorage and adds
+// the Authorization header automatically — no need to pass it manually here.
+export const heartbeat = () => request("/api/users/heartbeat", { method: "POST" });
+
+export const fetchActiveSessions = () => get("/api/users/active-sessions");
+
 // ── Logs ─────────────────────────────────────────────────────────────────────
-export const fetchLogs = (limit = 50) => get("/api/logs", { limit });
+export const fetchLogs = (limit = 100) => get("/api/logs", { limit });
+
+// Returns users who currently have the app open (SSE-based, instant)
+export const fetchOnlineUsers = () => get("/api/logs/online-users");
 
 /**
  * Open a Server-Sent Events connection to receive new log entries in real time.
+ * Passing user info registers the browser as "online" on the server side via the
+ * SSE connection itself — no separate heartbeat or database table needed.
  *
- * @param {(log: object) => void} onLog   - called whenever the server pushes a new log
- * @param {(err: Event)  => void} onError - called on connection error (optional)
+ * @param {(log: object) => void} onLog      - called whenever the server pushes a new log
+ * @param {(err: Event)  => void} [onError]  - called on connection error
+ * @param {{ id, name, email }} [user]       - current authenticated user (for presence tracking)
  * @returns {EventSource} call .close() to disconnect
  */
-export function openLogStream(onLog, onError) {
-    const es = new EventSource(`${BASE}/api/logs/stream`);
+export function openLogStream(onLog, onError, user = null) {
+    const params = new URLSearchParams();
+    if (user?.id)    params.set("user_id",    user.id);
+    if (user?.name)  params.set("user_name",  user.name);
+    if (user?.email) params.set("user_email", user.email);
+
+    const qs = params.toString();
+    const es = new EventSource(`${BASE}/api/logs/stream${qs ? `?${qs}` : ""}`);
     es.onmessage = (e) => {
-        try {
-            onLog(JSON.parse(e.data));
-        } catch {
-            // malformed JSON — ignore
-        }
+        try { onLog(JSON.parse(e.data)); } catch { /* malformed JSON — ignore */ }
     };
     if (onError) es.onerror = onError;
     return es;
