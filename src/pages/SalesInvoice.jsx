@@ -19,7 +19,7 @@ import {
     uploadInvoiceFile, exportSales, importSales,
 } from "@/lib/api";
 import { toast } from "sonner";
-import { Plus, Truck, Clock, CreditCard, Eye, Package, User, Trash2, Search, Download, UploadCloud, FileText, X, Pencil, Receipt, CheckCircle, Printer, FileDown, Upload } from "lucide-react";
+import { Plus, Truck, Clock, CreditCard, Eye, Package, User, Trash2, Search, Download, UploadCloud, FileText, X, Pencil, Receipt, CheckCircle, Printer, FileDown, Upload, ChevronDown, ChevronUp } from "lucide-react";
 
 const PAYMENT_STATUS = ["Pending", "Partial", "Paid"];
 
@@ -58,6 +58,14 @@ const SalesInvoice = () => {
         }
     });
     const activityMutation = useMutation({ mutationFn: ({ id, body }) => addSaleActivity(id, body), onSuccess: () => qc.invalidateQueries({ queryKey: ["sales"] }) });
+
+    // Expand/collapse product list per sale card
+    const [expandedSales, setExpandedSales] = useState(new Set());
+    const toggleExpanded = (id) => setExpandedSales(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+    });
 
     // Add Sale dialog
     const [addOpen, setAddOpen] = useState(false);
@@ -1891,7 +1899,41 @@ const SalesInvoice = () => {
                                 </div>
 
                                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 text-sm">
-                                    <Field label="Items" value={sale.item} full />
+                                    {/* Items — expandable when more than one product */}
+                                    {(() => {
+                                        const items = sale.items || [];
+                                        const isExpanded = expandedSales.has(sale.id);
+                                        if (items.length <= 1) {
+                                            return <Field label="Items" value={sale.item} full />;
+                                        }
+                                        return (
+                                            <div className="col-span-2">
+                                                <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Items</div>
+                                                {isExpanded ? (
+                                                    <div>
+                                                        <div className="space-y-0.5">
+                                                            {items.map((it, idx) => (
+                                                                <div key={idx} className="text-sm">
+                                                                    <span className="font-medium text-foreground">{it.item}</span>
+                                                                    <span className="text-muted-foreground ml-2">— {it.quantity} {it.uom}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                        <button onClick={() => toggleExpanded(sale.id)} className="flex items-center gap-1 text-xs text-primary mt-1.5 hover:underline">
+                                                            <ChevronUp className="h-3 w-3" /> Show less
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-medium text-foreground">{items[0].item}</span>
+                                                        <button onClick={() => toggleExpanded(sale.id)} className="flex items-center gap-1 text-xs text-primary hover:underline shrink-0">
+                                                            <ChevronDown className="h-3 w-3" /> and {items.length - 1} more
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
                                     <Field label="Dispatched Qty" value={`${sale.dispatched_qty} ${sale.uom || "Nos"}`} />
                                     <Field label="Project" value={sale.project} />
                                     <Field label="Total Docs" value={`${(sale.invoice_url?.split(";")?.filter(Boolean)?.length || 0) + (sale.e_way_bill_url?.split(";")?.filter(Boolean)?.length || 0) + (sale.delivery_challan_url?.split(";")?.filter(Boolean)?.length || 0)} File(s)`} />
