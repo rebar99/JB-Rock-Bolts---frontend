@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { inr } from "@/lib/format";
 import { fetchClients, createClient, deleteClient } from "@/lib/api";
+import { getCurrentUser } from "@/lib/currentUser";
 import { toast } from "sonner";
 import { MapPin, Building2, Trash2 } from "lucide-react";
 
@@ -19,8 +20,8 @@ const Clients = () => {
     });
 
     const invalidate = () => qc.invalidateQueries({ queryKey: ["clients"] });
-    const createMutation = useMutation({ mutationFn: createClient, onSuccess: invalidate });
-    const deleteMutation = useMutation({ mutationFn: deleteClient, onSuccess: invalidate });
+    const createMutation = useMutation({ mutationFn: (body) => createClient({ ...body, created_by: getCurrentUser() }), onSuccess: invalidate });
+    const deleteMutation = useMutation({ mutationFn: (id) => deleteClient(id, getCurrentUser()), onSuccess: invalidate });
 
     const [open, setOpen] = useState(false);
     const [formData, setFormData] = useState({ name: "", location: "" });
