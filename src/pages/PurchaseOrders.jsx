@@ -52,8 +52,8 @@ const PurchaseOrders = () => {
 
     const createMutation = useMutation({ mutationFn: createPurchaseOrder, onSuccess: invalidate });
     const updateMutation = useMutation({ mutationFn: ({ id, body }) => updatePurchaseOrder(id, body), onSuccess: invalidate });
-    const deleteMutation = useMutation({ 
-        mutationFn: deletePurchaseOrder, 
+    const deleteMutation = useMutation({
+        mutationFn: (id) => deletePurchaseOrder(id, getCurrentUser()),
         onSuccess: () => {
             invalidate();
             toast.success("Purchase Order deleted");
@@ -76,8 +76,8 @@ const PurchaseOrders = () => {
         }
     });
 
-    const clientMutation = useMutation({ mutationFn: createClient, onSuccess: () => qc.invalidateQueries({ queryKey: ["constants"] }) });
-    const projectMutation = useMutation({ mutationFn: createProject, onSuccess: () => qc.invalidateQueries({ queryKey: ["constants"] }) });
+    const clientMutation = useMutation({ mutationFn: (body) => createClient({ ...body, created_by: getCurrentUser() }), onSuccess: () => qc.invalidateQueries({ queryKey: ["constants"] }) });
+    const projectMutation = useMutation({ mutationFn: (body) => createProject({ ...body, created_by: getCurrentUser() }), onSuccess: () => qc.invalidateQueries({ queryKey: ["constants"] }) });
 
     const [search, setSearch] = useState("");
     const [dialogOpen, setDialogOpen] = useState(false);

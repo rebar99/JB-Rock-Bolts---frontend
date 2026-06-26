@@ -41,7 +41,12 @@ const get = (path, params) => {
 };
 const post = (path, body) => request(path, { method: "POST", body: JSON.stringify(body) });
 const put = (path, body) => request(path, { method: "PUT", body: JSON.stringify(body) });
-const del = (path) => request(path, { method: "DELETE" });
+const del = (path, params) => {
+    const url = params
+        ? `${path}?${new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== ""))).toString()}`
+        : path;
+    return request(url, { method: "DELETE" });
+};
 
 // ── Constants ────────────────────────────────────────────────────────────────
 export const fetchConstants = () => get("/api/constants");
@@ -57,7 +62,7 @@ export const fetchPurchaseOrder = (id, openedBy) =>
     get(`/api/purchase-orders/${id}`, openedBy ? { opened_by: openedBy } : undefined);
 export const createPurchaseOrder = (body) => post("/api/purchase-orders", body);
 export const updatePurchaseOrder = (id, body) => put(`/api/purchase-orders/${id}`, body);
-export const deletePurchaseOrder = (id) => del(`/api/purchase-orders/${id}`);
+export const deletePurchaseOrder = (id, deletedBy) => del(`/api/purchase-orders/${id}`, deletedBy ? { deleted_by: deletedBy } : undefined);
 export const shortClosePurchaseOrder = (id, body) => post(`/api/purchase-orders/${id}/short-close`, body);
 export const uploadPOFile = async (file) => {
     const formData = new FormData();
@@ -162,7 +167,7 @@ export const deleteProduct = (id) => del(`/api/inventory/${id}`);
 // ── Clients & Projects ───────────────────────────────────────────────────────
 export const fetchClients = (params) => get("/api/clients", params);
 export const createClient = (body) => post("/api/clients", body);
-export const deleteClient = (id) => del(`/api/clients/${id}`);
+export const deleteClient = (id, deletedBy) => del(`/api/clients/${id}`, deletedBy ? { deleted_by: deletedBy } : undefined);
 export const fetchProjects = (params) => get("/api/projects", params);
 export const createProject = (body) => post("/api/projects", body);
 
