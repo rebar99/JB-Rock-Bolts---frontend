@@ -29,7 +29,7 @@ export const Topbar = ({ onMenu }) => {
     // reconnect that may have missed events while disconnected.
     const { data: queryLogs = [] } = useQuery({
         queryKey: ["system_logs"],
-        queryFn: () => fetchLogs(20),
+        queryFn: () => fetchLogs(50),
         refetchInterval: 30_000,
         staleTime: 25_000,
     });
@@ -37,7 +37,7 @@ export const Topbar = ({ onMenu }) => {
     // ── SSE connection ────────────────────────────────────────────────────────
     useEffect(() => {
         const es = openLogStream((log) => {
-            setSseBuffer(prev => [log, ...prev].slice(0, 20));
+            setSseBuffer(prev => [log, ...prev].slice(0, 50));
             setNewCount(n => n + 1);
         });
         // EventSource auto-reconnects on network errors; we just clean up on unmount.
@@ -53,7 +53,7 @@ export const Topbar = ({ onMenu }) => {
             if (seen.has(l.id)) return false;
             seen.add(l.id);
             return true;
-        }).slice(0, 20);
+        }).slice(0, 50);
     }, [sseBuffer, queryLogs]);
 
     // ── Notification panel open/close ─────────────────────────────────────────

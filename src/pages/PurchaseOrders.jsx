@@ -839,77 +839,149 @@ const PurchaseOrders = () => {
             </Card>
 
             <Dialog open={!!viewing} onOpenChange={(o) => !o && setViewing(null)}>
-                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                    <DialogHeader><DialogTitle>Purchase Order Details</DialogTitle></DialogHeader>
+                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Purchase Order Details</DialogTitle>
+                    </DialogHeader>
                     {viewing && (
-                        <div className="space-y-4">
-                            <div className="grid grid-cols-2 gap-3 text-sm">
-                                <Field label="PO Number" value={viewing.po_number} />
-                                <div className="space-y-1">
-                                    <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Delivery Status</div>
-                                    <StatusBadge
-                                        status={
-                                            viewing.short_closed ? "Short Closed" :
-                                            (viewing.delivery_status === "Delivered" && viewing.all_dispatches_marked) ? "Delivered" :
-                                            (viewing.delivery_status === "Delivered" || viewing.delivery_status === "Partial") ? "Partial" :
-                                            "Not Delivered"
-                                        }
-                                        label={
-                                            viewing.short_closed ? "Short Closed" :
-                                            (viewing.delivery_status === "Delivered" && viewing.all_dispatches_marked) ? "Delivered" :
-                                            viewing.delivery_status === "Delivered" ? "Dispatched (Pending Challans)" :
-                                            viewing.delivery_status
-                                        }
-                                    />
-                                </div>
-                                <Field label="Client" value={viewing.client_name} />
-                                <Field label="Project" value={viewing.project} />
-                                <Field label="Payment Terms" value={viewing.payment_terms} />
-                                <Field label="Validity Date" value={viewing.validity_date ? fmtDate(viewing.validity_date) : "—"} />
-                                <Field label="GST %" value={viewing.gst || "0%"} />
-                                <Field label="Freight" value={inr(viewing.freight)} />
-                                {viewing.remark && <Field label="Remark" value={viewing.remark} full />}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
 
-                                {viewing.file_url && (
-                                    <div className="col-span-2 mt-2">
-                                        <Button variant="outline" size="sm" className="w-full" onClick={() => window.open(`http://localhost:8000${viewing.file_url}`, "_blank")}>
-                                            <FileText className="h-4 w-4 mr-2" /> View Attached PO Document
-                                        </Button>
+                            {/* Client */}
+                            <div className="space-y-2 sm:col-span-2">
+                                <Label>Name of Client</Label>
+                                <Input value={viewing.client_name} disabled className="opacity-100 font-medium" />
+                            </div>
+
+                            {/* Project */}
+                            <div className="space-y-2 sm:col-span-2">
+                                <Label>Name of Project</Label>
+                                <Input value={viewing.project || ""} disabled placeholder="—" className="opacity-100" />
+                            </div>
+
+                            {/* PO Number */}
+                            <div className="space-y-2">
+                                <Label>Purchase Order No.</Label>
+                                <Input value={viewing.po_number} disabled className="opacity-100 font-medium" />
+                            </div>
+
+                            {/* Validity Date */}
+                            <div className="space-y-2">
+                                <Label>PO Validity Date</Label>
+                                <Input type="date" value={viewing.validity_date ? isoToDateInput(viewing.validity_date) : ""} disabled className="opacity-100" />
+                            </div>
+
+                            {/* Items */}
+                            <div className="space-y-3 sm:col-span-2">
+                                <Label className="text-sm font-semibold">Items</Label>
+                                <div className="space-y-2">
+                                    {(viewing.line_items?.length > 0
+                                        ? viewing.line_items
+                                        : [{ item: viewing.item, quantity: viewing.total_quantity, uom: viewing.uom || "Nos", unit_price: viewing.unit_price, gst: viewing.gst || "0", freight: viewing.freight || 0 }]
+                                    ).map((li, idx) => (
+                                        <div key={idx} className="rounded-lg border border-border bg-muted/20 p-4">
+                                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                                                <div className="sm:col-span-2 space-y-1.5">
+                                                    <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Item Name</Label>
+                                                    <Input value={li.item} disabled className="opacity-100" />
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Quantity</Label>
+                                                    <div className="flex gap-1">
+                                                        <Input value={li.quantity ?? ""} disabled className="flex-1 opacity-100" />
+                                                        <Input value={li.uom || "Nos"} disabled className="w-20 opacity-100 text-center" />
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Unit Price</Label>
+                                                    <Input value={li.unit_price ? Number(li.unit_price).toFixed(2) : "0.00"} disabled className="opacity-100" />
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mt-4 pt-4 border-t border-slate-200">
+                                                <div className="space-y-1.5">
+                                                    <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">GST</Label>
+                                                    <Input value={li.gst || "0"} disabled className="opacity-100" />
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Freight</Label>
+                                                    <Input value={li.freight ?? "0"} disabled className="opacity-100" />
+                                                </div>
+                                                <div className="sm:col-span-2 flex items-end justify-end space-x-6">
+                                                    <div className="text-right">
+                                                        <div className="text-[10px] uppercase text-muted-foreground font-semibold">Subtotal</div>
+                                                        <div className="font-medium text-sm">{inr((li.quantity || 0) * (li.unit_price || 0))}</div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="text-[10px] uppercase text-muted-foreground font-semibold">Row Total</div>
+                                                        <div className="font-bold text-base text-green-700">
+                                                            {inr(
+                                                                ((li.quantity || 0) * (li.unit_price || 0)) +
+                                                                Number(li.freight || 0) +
+                                                                ((li.gst || "").toString().startsWith("₹")
+                                                                    ? Number((li.gst || "").toString().replace("₹", "") || 0)
+                                                                    : ((li.quantity || 0) * (li.unit_price || 0) * Number(li.gst || 0) / 100))
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Financial Summary Bar */}
+                            <div className="sm:col-span-2 mt-2 p-3 rounded-lg bg-slate-100 border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+                                <div className="flex items-center gap-6">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm font-medium text-slate-600">Subtotal:</span>
+                                        <span className="text-sm font-bold text-slate-900">{inr(viewing.subtotal || 0)}</span>
                                     </div>
-                                )}
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm font-medium text-slate-600">GST:</span>
+                                        <span className="text-sm font-bold text-slate-900">
+                                            {viewing.gst && viewing.gst !== "0" ? viewing.gst : "Per Item"} ({inr(viewing.gst_amount || 0)})
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm font-medium text-slate-600">Freight:</span>
+                                        <span className="text-sm font-bold text-slate-900">{inr(viewing.freight || 0)}</span>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2 bg-primary/10 px-3 py-1.5 rounded-md border border-primary/20">
+                                    <span className="text-xs font-bold text-primary uppercase tracking-wider">Grand Total:</span>
+                                    <span className="text-base font-black text-primary">{inr(viewing.grand_total || 0)}</span>
+                                </div>
                             </div>
-                            <div className="rounded-lg border border-border overflow-x-auto">
-                                <div className="bg-muted/50 px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Items</div>
-                                <table className="w-full text-sm">
-                                    <thead className="bg-muted/30">
-                                        <tr>
-                                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">#</th>
-                                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">Item</th>
-                                            <th className="text-right px-3 py-2 font-medium text-muted-foreground">Qty</th>
-                                            <th className="text-right px-3 py-2 font-medium text-muted-foreground text-success">Delivered Quantity</th>
-                                            <th className="text-right px-3 py-2 font-medium text-muted-foreground text-warning">Pend.</th>
-                                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">UOM</th>
-                                            <th className="text-right px-3 py-2 font-medium text-muted-foreground">Unit Price</th>
-                                            <th className="text-right px-3 py-2 font-medium text-muted-foreground">Amount</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {(viewing.line_items?.length > 0 ? viewing.line_items : [{ item: viewing.item, quantity: viewing.total_quantity, uom: viewing.uom, unit_price: viewing.unit_price }]).map((li, i) => (
-                                            <tr key={i} className="border-t border-border">
-                                                <td className="px-3 py-2 text-muted-foreground">{i + 1}</td>
-                                                <td className="px-3 py-2 font-medium">{li.item}</td>
-                                                <td className="px-3 py-2 text-right">{li.quantity}</td>
-                                                <td className="px-3 py-2 text-right text-success font-bold">{li.delivered_quantity || 0}</td>
-                                                <td className="px-3 py-2 text-right text-warning font-bold">{Math.max(0, (li.quantity || 0) - (li.delivered_quantity || 0))}</td>
-                                                <td className="px-3 py-2">{li.uom || "Nos"}</td>
-                                                <td className="px-3 py-2 text-right">{inr(li.unit_price)}</td>
-                                                <td className="px-3 py-2 text-right font-semibold">{inr(li.quantity * li.unit_price)}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+
+                            {/* Payment Terms */}
+                            <div className="space-y-2 sm:col-span-1">
+                                <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Payment Terms</Label>
+                                <Input value={viewing.payment_terms || ""} disabled placeholder="—" className="h-8 opacity-100" />
                             </div>
-                            <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+
+                            {/* Remark — highlighted */}
+                            <div className="space-y-2 sm:col-span-2">
+                                <Label className="font-semibold text-amber-700 dark:text-amber-400">Remark</Label>
+                                <Textarea
+                                    value={viewing.remark || ""}
+                                    disabled
+                                    rows={2}
+                                    placeholder="No remarks"
+                                    className="opacity-100 border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-700 text-foreground"
+                                />
+                            </div>
+
+                            {/* Document */}
+                            {viewing.file_url && (
+                                <div className="sm:col-span-2">
+                                    <Button variant="outline" size="sm" className="w-full" onClick={() => window.open(`http://localhost:8000${viewing.file_url}`, "_blank")}>
+                                        <FileText className="h-4 w-4 mr-2" /> View Attached PO Document
+                                    </Button>
+                                </div>
+                            )}
+
+                            {/* Activity Log */}
+                            <div className="sm:col-span-2 rounded-lg border border-border bg-muted/30 p-4 space-y-3">
                                 <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
                                     <Clock className="h-4 w-4 text-accent" /> Activity Log
                                 </div>
@@ -926,6 +998,7 @@ const PurchaseOrders = () => {
                                     />
                                 )}
                             </div>
+
                         </div>
                     )}
                     <DialogFooter>
