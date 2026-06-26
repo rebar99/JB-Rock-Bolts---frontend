@@ -1,4 +1,5 @@
 import { createContext, useContext, useState } from "react";
+import { logoutUser } from "@/lib/api";
 
 const AuthContext = createContext(null);
 
@@ -25,7 +26,12 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem("app_current_user", data.user.name);
     };
 
-    const logout = () => {
+    const logout = async () => {
+        try {
+            await logoutUser();
+        } catch {
+            // Best-effort: clear local state even if API call fails
+        }
         setToken(null);
         setUser(null);
         localStorage.removeItem(TOKEN_KEY);
