@@ -315,7 +315,7 @@ const Reports = () => {
                                 <div className="h-11 w-11 rounded-xl bg-success/10 grid place-items-center"><IndianRupee className="h-5 w-5 text-success" /></div>
                                 <div>
                                     <div className="text-xs uppercase tracking-wider text-muted-foreground">Delivered Value</div>
-                                    <div className="text-xl font-bold text-foreground">{inr(pendingData?.total_pending_value != null ? pendingData.total_value - pendingData.total_pending_value : 0)}</div>
+                                    <div className="text-xl font-bold text-foreground">{inr(pendingData?.total_delivered_payment ?? 0)}</div>
                                 </div>
                             </div>
                         </Card>
@@ -361,8 +361,8 @@ const Reports = () => {
                                             <td className="px-2 py-3 text-right font-medium whitespace-nowrap">{r.total_qty} <span className="text-[10px] text-muted-foreground">{r.uom || ''}</span></td>
                                             <td className="px-2 py-3 text-right font-bold whitespace-nowrap" style={{color:"var(--success)"}}>{r.delivered_qty || 0} <span className="text-[10px] text-muted-foreground">{r.uom || ''}</span></td>
                                             <td className="px-2 py-3 text-right font-bold whitespace-nowrap">{r.pending_qty} <span className="text-[10px] text-muted-foreground">{r.uom || ''}</span></td>
-                                            <td className="px-2 py-3 text-right font-bold" style={{color:"var(--success)"}}>{inr(r.total_value - r.pending_total)}</td>
-                                            <td className="px-2 py-3 text-right font-bold" style={{color:"var(--success)"}}>{inr(r.pending_total)}</td>
+                                            <td className="px-2 py-3 text-right font-bold" style={{color:"var(--success)"}}>{inr(r.delivered_payment)}</td>
+                                            <td className="px-2 py-3 text-right font-bold text-orange-500">{inr(r.pending_total)}</td>
                                             <td className="px-2 py-3 text-left"><StatusBadge status={r.status} label={r.status} /></td>
                                         </tr>
                                     ))}
