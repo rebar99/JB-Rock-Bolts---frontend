@@ -761,7 +761,7 @@ const PurchaseOrders = () => {
                                 const lastAct = o.last_opened_at || o.last_updated_at || o.created_at;
                                 const lastBy = o.last_opened_by || o.last_updated_by || o.created_by || "—";
                                 return (
-                                    <tr key={o.id} className="border-t border-border hover:bg-muted/30 text-sm">
+                                    <tr key={o.id} className={`border-t border-border hover:bg-muted/30 text-sm${o.remark ? " bg-amber-50 dark:bg-amber-950/20" : ""}`}>
                                         <td className="px-1.5 py-3 text-foreground font-semibold truncate max-w-[100px]" title={o.client_name}>{o.client_name}</td>
                                         <td className="px-1.5 py-3 text-muted-foreground truncate max-w-[80px]" title={o.project}>{o.project}</td>
                                         <td className="px-1.5 py-3 text-muted-foreground max-w-[120px] truncate" title={(o.line_items?.length > 0) ? o.line_items.map(l => l.item).join(", ") : o.item}>
