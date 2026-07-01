@@ -195,7 +195,7 @@ const Reports = () => {
                                 <tbody>
                                     {fulfillmentLoading && <tr><td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">Loading...</td></tr>}
                                     {fulfillmentData?.rows.map((r) => (
-                                        <tr key={r.id} className="border-t border-border hover:bg-muted/30 transition-colors text-[12.5px]">
+                                        <tr key={r.id} className={`border-t border-border hover:bg-muted/30 transition-colors text-[12.5px]${r.remark ? " bg-amber-50 dark:bg-amber-950/20" : ""}`}>
                                             <td className="px-2 py-3 text-muted-foreground whitespace-nowrap">{r.date}</td>
                                             <td className="px-2 py-3 font-semibold text-primary truncate max-w-[120px]" title={r.po_number}>
                                                 <button type="button" className="text-left w-full text-primary hover:underline focus:outline-none" onClick={() => setSelectedPOId(r.id)}>
@@ -288,7 +288,7 @@ const Reports = () => {
                                 <tbody>
                                     {salesLoading && <tr><td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">Loading...</td></tr>}
                                     {salesData?.rows.map((r) => (
-                                        <tr key={r.id} className="border-t border-border hover:bg-muted/30 transition-colors text-[12.5px]">
+                                        <tr key={r.id} className={`border-t border-border hover:bg-muted/30 transition-colors text-[12.5px]${r.payment_note ? " bg-amber-50 dark:bg-amber-950/20" : ""}`}>
                                             <td className="px-2 py-3 text-muted-foreground whitespace-nowrap">{r.date}</td>
                                             <td className="px-2 py-3 text-primary font-medium truncate max-w-[120px]" title={r.invoice_number}>{r.invoice_number || "—"}</td>
                                             <td className="px-2 py-3 text-muted-foreground truncate max-w-[120px]" title={r.po_number}>{r.po_number || "—"}</td>
@@ -349,7 +349,7 @@ const Reports = () => {
                                 <tbody>
                                     {pendingLoading && <tr><td colSpan={10} className="px-5 py-12 text-center text-muted-foreground">Loading...</td></tr>}
                                     {pendingData?.rows.map((r) => (
-                                        <tr key={r.id} className="border-t border-border hover:bg-muted/30 transition-colors text-[12.5px]">
+                                        <tr key={r.id} className={`border-t border-border hover:bg-muted/30 transition-colors text-[12.5px]${r.remark ? " bg-amber-50 dark:bg-amber-950/20" : ""}`}>
                                             <td className="px-2 py-3 text-muted-foreground whitespace-nowrap">{r.date}</td>
                                             <td className="px-2 py-3 font-semibold text-primary truncate max-w-[120px]" title={r.po_number}>
                                                 <button type="button" className="text-left w-full text-primary hover:underline focus:outline-none" onClick={() => setSelectedPOId(r.id)}>

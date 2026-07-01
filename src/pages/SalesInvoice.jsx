@@ -161,7 +161,7 @@ const SalesInvoice = () => {
 
     const pendingOnPO = (po) => {
         if (!po) return 0;
-        return Math.max(0, (Number(po.total_quantity) || 0) - (Number(po.delivered_quantity) || 0));
+        return parseFloat(Math.max(0, (Number(po.total_quantity) || 0) - (Number(po.delivered_quantity) || 0)).toFixed(10));
     };
 
     const getRealTimePending = (lineItemId) => {
@@ -171,7 +171,7 @@ const SalesInvoice = () => {
             basePending = pendingOnPO(poData);
         } else {
             const li = poData.line_items?.find(x => x.id.toString() === lineItemId.toString());
-            basePending = li ? Math.max(0, li.quantity - li.delivered_quantity) : 0;
+            basePending = li ? Math.max(0, parseFloat((li.quantity - li.delivered_quantity).toFixed(10))) : 0;
         }
         const alreadyStaged = dispatchItems
             .filter(item => {
@@ -179,7 +179,7 @@ const SalesInvoice = () => {
                 return item.line_item_id?.toString() === lineItemId.toString();
             })
             .reduce((acc, item) => acc + item.quantity, 0);
-        return Math.max(0, basePending - alreadyStaged);
+        return parseFloat(Math.max(0, basePending - alreadyStaged).toFixed(10));
     };
 
     const calcAmounts = (po, qty) => {
@@ -1809,7 +1809,7 @@ const SalesInvoice = () => {
                         const calcGst = (sale.items || []).reduce((acc, it) => acc + (Number(it.gst_amount) || 0), 0);
                         const calcGrand = calcSubtotal + calcGst + (Number(sale.freight) || 0);
                         return (
-                            <Card key={sale.id} className="p-5 shadow-card space-y-4">
+                            <Card key={sale.id} className={`p-5 shadow-card space-y-4${sale.payment_note ? " bg-amber-50 dark:bg-amber-950/20" : ""}`}>
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                     <div>
                                         <span className="font-semibold text-foreground">{sale.po_number}</span>
