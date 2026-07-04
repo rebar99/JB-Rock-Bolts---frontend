@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,7 +28,11 @@ const SHEET_OPTIONS = [
 const Reports = () => {
     const qc = useQueryClient();
     const { products } = useConstants();
-    const [tab, setTab] = useState("fulfillment");
+    const [searchParams] = useSearchParams();
+    const initialTab = searchParams.get("tab");
+    const [tab, setTab] = useState(
+        ["fulfillment", "sales", "pending"].includes(initialTab) ? initialTab : "fulfillment"
+    );
     const [from, setFrom] = useState("");
     const [to, setTo] = useState("");
     const [product, setProduct] = useState("all");
