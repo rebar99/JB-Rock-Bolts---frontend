@@ -48,6 +48,7 @@ const Dashboard = () => {
     }));
 
     const goToReports = () => navigate("/reports");
+    const goToSalesReport = () => navigate("/reports?tab=sales");
 
     return (
         <div className="space-y-6">
@@ -57,7 +58,7 @@ const Dashboard = () => {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                <StatCard onClick={goToReports} icon={IndianRupee} label="Total Revenue" value={inr(stats?.total_revenue ?? 0)} accent="bg-primary/10 text-primary" />
+                <StatCard onClick={goToSalesReport} icon={IndianRupee} label="Total Revenue" value={inr(stats?.total_revenue ?? 0)} accent="bg-primary/10 text-primary" />
                 <StatCard onClick={goToReports} icon={Package} label="Total Orders" value={String(stats?.total_orders ?? 0)} accent="bg-accent/15 text-accent" />
                 <StatCard onClick={goToReports} icon={Users} label="Total Clients" value={String(stats?.total_clients ?? 0)} accent="bg-steel/15 text-steel" />
                 <StatCard onClick={goToReports} icon={Truck} label="Delivered" value={String(stats?.delivered_orders ?? 0)} accent="bg-success/15 text-success" />

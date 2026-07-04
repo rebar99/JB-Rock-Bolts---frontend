@@ -119,6 +119,9 @@ const PurchaseOrders = () => {
                 { id: tid, duration: 6000 }
             );
             invalidate();
+            qc.invalidateQueries({ queryKey: ["report"] });
+            qc.invalidateQueries({ queryKey: ["fulfillmentReport"] });
+            qc.invalidateQueries({ queryKey: ["pendingPOsReport"] });
         } catch (err) {
             toast.error("Import failed: " + err.message, { id: tid });
         } finally {
