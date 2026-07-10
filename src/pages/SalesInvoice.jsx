@@ -997,11 +997,19 @@ const SalesInvoice = () => {
                                 <SelectTrigger><SelectValue placeholder="Select PO Number" /></SelectTrigger>
                                 <SelectContent>
                                     {orders.length > 0
-                                        ? orders.map((o) => (
-                                            <SelectItem key={o.id} value={o.po_number}>
-                                                {o.po_number} — {o.client_name}
-                                            </SelectItem>
-                                        ))
+                                        ? (
+                                            // Fixed-height, independently scrollable list — only this
+                                            // inner div scrolls (overscroll-contain stops the scroll
+                                            // from "leaking" into the page/dialog behind it once the
+                                            // user hits the top/bottom of the list).
+                                            <div className="max-h-[280px] overflow-y-auto overscroll-contain scroll-smooth">
+                                                {orders.map((o) => (
+                                                    <SelectItem key={o.id} value={o.po_number}>
+                                                        {o.po_number} — {o.client_name}
+                                                    </SelectItem>
+                                                ))}
+                                            </div>
+                                        )
                                         : <div className="p-2 text-sm text-muted-foreground">
                                             {qc.isFetching({ queryKey: ["purchase-orders"] }) ? "Loading Purchase Orders..." : "No POs available"}
                                           </div>
