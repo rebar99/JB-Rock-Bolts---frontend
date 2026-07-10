@@ -23,6 +23,17 @@ const isoToDateInput = (iso) => (iso ? new Date(iso).toISOString().slice(0, 10) 
 // addition (e.g. 0.1 + 0.2 producing 0.30000000000000004).
 const roundQty = round2;
 
+// Pill-style UOM filter tab — active uses the app's primary brand color
+// (theme token, so it stays correct in dark mode too); inactive is a plain
+// card surface with a subtle border. Scale + shadow give a tactile
+// hover/press feel without introducing any new colors outside the theme.
+const pillTabClass =
+    "rounded-full px-5 py-2.5 text-[15px] font-semibold border transition-all duration-200 ease-in-out " +
+    "hover:scale-[1.03] active:scale-[0.97] " +
+    "data-[state=inactive]:bg-card data-[state=inactive]:text-foreground data-[state=inactive]:border-border " +
+    "data-[state=inactive]:hover:border-primary/50 data-[state=inactive]:hover:bg-muted/50 " +
+    "data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md";
+
 const SHEET_OPTIONS = [
     { id: "fulfillment", label: "Fulfillment Report", desc: "PO fulfillment status per item" },
     { id: "sales",       label: "Sales Report",       desc: "Invoice records with payment status" },
@@ -41,6 +52,7 @@ const Reports = () => {
     const [to, setTo] = useState("");
     const [product, setProduct] = useState("all");
     const [client, setClient] = useState("all");
+    const [pendingUomTab, setPendingUomTab] = useState("all");
 
     // ── Combined export dialog ────────────────────────────────────────────────
     const [exportOpen, setExportOpen] = useState(false);
@@ -149,8 +161,14 @@ const Reports = () => {
         uom: fulfillmentRows[0]?.uom || "Nos",
     };
 
-    // Footer totals for Pending POs — summed straight from pendingData.rows.
-    const pendingRows = pendingData?.rows ?? [];
+    // Pending POs — filtered by the selected UOM tab (All/Nos/Meter). The
+    // table body and the footer totals both read from this same filtered
+    // array, so switching tabs updates both together and the totals always
+    // match exactly what's displayed.
+    const pendingRowsAll = pendingData?.rows ?? [];
+    const pendingRows = pendingUomTab === "all"
+        ? pendingRowsAll
+        : pendingRowsAll.filter((r) => (r.uom || "").trim().toLowerCase() === pendingUomTab);
     const pendingTotals = {
         totalQty: roundQty(pendingRows.reduce((s, r) => s + (r.total_qty ?? 0), 0)),
         deliveredQty: roundQty(pendingRows.reduce((s, r) => s + (r.delivered_qty ?? 0), 0)),
@@ -400,6 +418,13 @@ const Reports = () => {
                             </div>
                         </Card>
                     </div>
+                    <Tabs value={pendingUomTab} onValueChange={setPendingUomTab}>
+                        <TabsList className="bg-transparent p-0 h-auto inline-flex flex-wrap gap-2 sm:gap-3">
+                            <TabsTrigger value="all" className={pillTabClass}>All</TabsTrigger>
+                            <TabsTrigger value="nos" className={pillTabClass}>Nos</TabsTrigger>
+                            <TabsTrigger value="meter" className={pillTabClass}>Meter</TabsTrigger>
+                        </TabsList>
+                    </Tabs>
                     <Card className="shadow-card overflow-hidden">
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm">
@@ -419,7 +444,7 @@ const Reports = () => {
                                 </thead>
                                 <tbody>
                                     {pendingLoading && <tr><td colSpan={10} className="px-5 py-12 text-center text-muted-foreground">Loading...</td></tr>}
-                                    {pendingData?.rows.map((r) => (
+                                    {pendingRows.map((r) => (
                                         <tr key={r.id} className={`border-t border-border hover:bg-muted/30 transition-colors text-[12.5px]${r.remark ? " bg-amber-50 dark:bg-amber-950/20" : ""}`}>
                                             <td className="px-2 py-3 text-muted-foreground whitespace-nowrap">{r.date}</td>
                                             <td className="px-2 py-3 font-semibold text-primary truncate max-w-[120px]" title={r.po_number}>
@@ -437,8 +462,10 @@ const Reports = () => {
                                             <td className="px-2 py-3 text-left"><StatusBadge status={r.status} label={r.status} /></td>
                                         </tr>
                                     ))}
-                                    {!pendingLoading && pendingData?.rows.length === 0 && (
-                                        <tr><td colSpan={10} className="px-5 py-12 text-center text-muted-foreground">No pending POs found.</td></tr>
+                                    {!pendingLoading && pendingRows.length === 0 && (
+                                        <tr><td colSpan={10} className="px-5 py-12 text-center text-muted-foreground">
+                                            {pendingRowsAll.length > 0 ? "No pending POs match this UOM." : "No pending POs found."}
+                                        </td></tr>
                                     )}
                                 </tbody>
                                 {/* Totals below come straight from pendingRows (the same array
