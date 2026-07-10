@@ -17,7 +17,6 @@ import {
     deletePurchaseOrder, fetchPurchaseOrder, openPODocument,
     createClient, createProject, fetchProjects, uploadPOFile,
     exportPurchaseOrders, importPurchaseOrders, shortClosePurchaseOrder,
-    fetchPOSummary,
 } from "@/lib/api";
 import { Pencil, Plus, Search, Trash2, Eye, FileText, Package, Truck, Clock, Printer, X, UploadCloud, Download, Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -44,20 +43,15 @@ const PurchaseOrders = () => {
     const navigate = useNavigate();
     const { products, clients, projects, payment_terms, uom_options } = useConstants();
 
+    // Fetch the complete Purchase Order list (no pagination cap) — this is the
+    // single source of truth for both the table rows below and the dashboard
+    // summary cards, so the two can never disagree.
     const { data: orders = [], isLoading } = useQuery({
         queryKey: ["purchase-orders"],
-        queryFn: () => fetchPurchaseOrders(),
+        queryFn: () => fetchPurchaseOrders({ limit: 100000 }),
     });
 
-    const { data: poSummary } = useQuery({
-        queryKey: ["po-summary"],
-        queryFn: fetchPOSummary,
-    });
-
-    const invalidate = () => {
-        qc.invalidateQueries({ queryKey: ["purchase-orders"] });
-        qc.invalidateQueries({ queryKey: ["po-summary"] });
-    };
+    const invalidate = () => qc.invalidateQueries({ queryKey: ["purchase-orders"] });
 
     const createMutation = useMutation({ mutationFn: createPurchaseOrder, onSuccess: invalidate });
     const updateMutation = useMutation({ mutationFn: ({ id, body }) => updatePurchaseOrder(id, body), onSuccess: invalidate });
@@ -157,11 +151,14 @@ const PurchaseOrders = () => {
         );
     }, [orders, search]);
 
-    const totals = {
-        tot: poSummary?.total_quantity ?? 0,
-        del: poSummary?.delivered_quantity ?? 0,
-        pending: poSummary?.pending_quantity ?? 0,
-    };
+    // Single source of truth: sum the exact rows the table below renders
+    // (post-search-filter), reading each row's PO/Delivered/Pending Quantity
+    // straight off the same PurchaseOrder objects — no separate SQL query.
+    const totals = useMemo(() => ({
+        tot: filtered.reduce((s, o) => s + (o.total_quantity || 0), 0),
+        del: filtered.reduce((s, o) => s + (o.delivered_quantity || 0), 0),
+        pending: filtered.reduce((s, o) => s + (o.pending_quantity || 0), 0),
+    }), [filtered]);
 
     const effectiveClient = form.clientName?.trim() || form.clientDropdown;
     const effectiveProject = form.project;

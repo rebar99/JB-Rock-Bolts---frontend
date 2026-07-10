@@ -55,7 +55,6 @@ export const fetchConstants = () => get("/api/constants");
 export const fetchDashboardStats = () => get("/api/dashboard/stats");
 export const fetchDashboardCharts = () => get("/api/dashboard/charts");
 export const fetchRecentSales = (limit = 6) => get("/api/dashboard/recent-sales", { limit });
-export const fetchPOSummary = () => get("/api/dashboard/po-summary");
 
 // ── Purchase Orders ───────────────────────────────────────────────────────────
 export const fetchPurchaseOrders = (params) => get("/api/purchase-orders", params);
