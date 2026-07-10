@@ -99,6 +99,7 @@ const Reports = () => {
             qc.invalidateQueries({ queryKey: ["pendingPOsReport"] });
             qc.invalidateQueries({ queryKey: ["purchase-orders"] });
             qc.invalidateQueries({ queryKey: ["sales"] });
+            qc.invalidateQueries({ queryKey: ["po-summary"] });
         } catch (err) {
             toast.error("Import failed: " + err.message, { id: tid });
         } finally {
