@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { inr } from "@/lib/format";
-import { fetchClients, createClient, deleteClient } from "@/lib/api";
+import { fetchClients, fetchClientStats, createClient, deleteClient } from "@/lib/api";
 import { getCurrentUser } from "@/lib/currentUser";
 import { toast } from "sonner";
 import { MapPin, Building2, Trash2 } from "lucide-react";
@@ -19,7 +19,19 @@ const Clients = () => {
         queryFn: fetchClients,
     });
 
-    const invalidate = () => qc.invalidateQueries({ queryKey: ["clients"] });
+    // Total Clients is a normalized, deduplicated count computed fresh on the
+    // backend (same normalization used by the Dashboard) — not clients.length,
+    // which would double-count the same client entered with different casing,
+    // spacing, or an "M/s." prefix as separate rows.
+    const { data: clientStats } = useQuery({
+        queryKey: ["client-stats"],
+        queryFn: fetchClientStats,
+    });
+
+    const invalidate = () => {
+        qc.invalidateQueries({ queryKey: ["clients"] });
+        qc.invalidateQueries({ queryKey: ["client-stats"] });
+    };
     const createMutation = useMutation({ mutationFn: (body) => createClient({ ...body, created_by: getCurrentUser() }), onSuccess: invalidate });
     const deleteMutation = useMutation({ mutationFn: (id) => deleteClient(id, getCurrentUser()), onSuccess: invalidate });
 
@@ -67,7 +79,7 @@ const Clients = () => {
                 <div className="flex items-center gap-4">
                     <div className="text-right">
                         <div className="text-xs uppercase tracking-wider text-muted-foreground">Total Clients</div>
-                        <div className="text-2xl font-bold text-foreground">{clients.length}</div>
+                        <div className="text-2xl font-bold text-foreground">{clientStats?.total_clients ?? clients.length}</div>
                     </div>
                     <Button onClick={() => setOpen(true)}>+ Add Client</Button>
                 </div>
