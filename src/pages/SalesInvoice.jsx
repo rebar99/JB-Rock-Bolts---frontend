@@ -41,7 +41,6 @@ const SalesInvoice = () => {
         qc.invalidateQueries({ queryKey: ["sales"] });
         qc.invalidateQueries({ queryKey: ["purchase-orders"] });
         qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
-        qc.invalidateQueries({ queryKey: ["po-summary"] });
     };
 
     
