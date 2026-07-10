@@ -12,12 +12,16 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useConstants } from "@/lib/constants";
 import { fetchReport, fetchFulfillmentReport, fetchPendingPOs, fetchPurchaseOrder, openPODocument, exportCombinedReport, importCombinedReport } from "@/lib/api";
-import { inr, fmtDate, fmtDateTime } from "@/lib/format";
+import { inr, fmtDate, fmtDateTime, round2 } from "@/lib/format";
 import { StatusBadge } from "@/components/StatusBadge";
 import { toast } from "sonner";
 import { Download, Upload, IndianRupee, Package, TrendingUp, ClipboardList, BarChart3, Clock, FileText, UploadCloud, Printer } from "lucide-react";
 
 const isoToDateInput = (iso) => (iso ? new Date(iso).toISOString().slice(0, 10) : "");
+
+// Guards footer quantity totals against floating-point drift from repeated
+// addition (e.g. 0.1 + 0.2 producing 0.30000000000000004).
+const roundQty = round2;
 
 const SHEET_OPTIONS = [
     { id: "fulfillment", label: "Fulfillment Report", desc: "PO fulfillment status per item" },
@@ -120,8 +124,41 @@ const Reports = () => {
     };
 
     const { data: salesData,       isLoading: salesLoading }       = useQuery({ queryKey: ["report", salesParams],            queryFn: () => fetchReport(salesParams),          enabled: tab === "sales" });
+
+    // Footer totals: summed straight from salesData.rows — the exact same
+    // array the table below renders — so they always match what's on screen.
+    // No separate query, no cache; this recomputes on every render, which
+    // means it automatically reflects any add/edit/delete or filter/search
+    // change that causes salesData to refetch.
+    const salesRows = salesData?.rows ?? [];
+    const salesTotals = {
+        subtotal: salesRows.reduce((s, r) => s + (r.subtotal ?? 0), 0),
+        gst: salesRows.reduce((s, r) => s + (r.gst_amount ?? 0), 0),
+        grandTotal: salesRows.reduce((s, r) => s + (r.price ?? 0), 0),
+    };
     const { data: fulfillmentData, isLoading: fulfillmentLoading } = useQuery({ queryKey: ["fulfillmentReport", fulfillmentParams], queryFn: () => fetchFulfillmentReport(fulfillmentParams), enabled: tab === "fulfillment" });
     const { data: pendingData,     isLoading: pendingLoading }     = useQuery({ queryKey: ["pendingPOsReport"],                queryFn: fetchPendingPOs,                         enabled: tab === "pending" });
+
+    // Footer totals for Fulfillment — summed straight from fulfillmentData.rows,
+    // the exact same array the table renders. No separate query/cache.
+    const fulfillmentRows = fulfillmentData?.rows ?? [];
+    const fulfillmentTotals = {
+        required: roundQty(fulfillmentRows.reduce((s, r) => s + (r.total_required ?? 0), 0)),
+        delivered: roundQty(fulfillmentRows.reduce((s, r) => s + (r.delivered ?? 0), 0)),
+        pending: roundQty(fulfillmentRows.reduce((s, r) => s + (r.pending ?? 0), 0)),
+        uom: fulfillmentRows[0]?.uom || "Nos",
+    };
+
+    // Footer totals for Pending POs — summed straight from pendingData.rows.
+    const pendingRows = pendingData?.rows ?? [];
+    const pendingTotals = {
+        totalQty: roundQty(pendingRows.reduce((s, r) => s + (r.total_qty ?? 0), 0)),
+        deliveredQty: roundQty(pendingRows.reduce((s, r) => s + (r.delivered_qty ?? 0), 0)),
+        pendingQty: roundQty(pendingRows.reduce((s, r) => s + (r.pending_qty ?? 0), 0)),
+        deliveredPayment: pendingRows.reduce((s, r) => s + (r.delivered_payment ?? 0), 0),
+        pendingPayment: pendingRows.reduce((s, r) => s + (r.pending_total ?? 0), 0),
+        uom: pendingRows[0]?.uom || "Nos",
+    };
 
     const [selectedPOId, setSelectedPOId] = useState(null);
     const { data: selectedPO, isLoading: selectedPOLoading } = useQuery({
@@ -219,6 +256,24 @@ const Reports = () => {
                                         <tr><td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">No records found.</td></tr>
                                     )}
                                 </tbody>
+                                {/* Totals below come straight from fulfillmentRows (the same array
+                                    rendered above) — no separate query, no cached value. */}
+                                {!fulfillmentLoading && fulfillmentRows.length > 0 && (
+                                    <tfoot className="sticky bottom-0">
+                                        <tr className="border-t-2 text-sm" style={{ backgroundColor: "#EFF6FF", borderTopColor: "#2563EB" }}>
+                                            <td className="px-2 py-3 text-left font-bold" style={{ color: "#1D4ED8" }} colSpan={5}>TOTAL</td>
+                                            <td className="px-2 py-3 text-right font-bold text-blue-600 whitespace-nowrap">
+                                                {fulfillmentTotals.required} <span className="text-[10px] font-normal text-muted-foreground">{fulfillmentTotals.uom}</span>
+                                            </td>
+                                            <td className="px-2 py-3 text-right font-bold text-green-600 whitespace-nowrap">
+                                                {fulfillmentTotals.delivered} <span className="text-[10px] font-normal text-muted-foreground">{fulfillmentTotals.uom}</span>
+                                            </td>
+                                            <td className="px-2 py-3 text-right font-bold text-orange-600 whitespace-nowrap">
+                                                {fulfillmentTotals.pending} <span className="text-[10px] font-normal text-muted-foreground">{fulfillmentTotals.uom}</span>
+                                            </td>
+                                        </tr>
+                                    </tfoot>
+                                )}
                             </table>
                         </div>
                     </Card>
@@ -307,6 +362,17 @@ const Reports = () => {
                                         <tr><td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">No records match the filters.</td></tr>
                                     )}
                                 </tbody>
+                                {!salesLoading && salesRows.length > 0 && (
+                                    <tfoot className="sticky bottom-0">
+                                        <tr className="border-t-2 border-primary bg-primary/10 text-sm">
+                                            <td className="px-2 py-3 text-left font-bold text-primary tracking-wide" colSpan={3}>TOTAL</td>
+                                            <td className="px-2 py-3 text-right font-bold text-primary">{inr(salesTotals.subtotal)}</td>
+                                            <td className="px-2 py-3 text-right font-bold text-blue-500">{inr(salesTotals.gst)}</td>
+                                            <td className="px-2 py-3 text-right font-bold text-success">{inr(salesTotals.grandTotal)}</td>
+                                            <td className="px-2 py-3"></td>
+                                        </tr>
+                                    </tfoot>
+                                )}
                             </table>
                         </div>
                     </Card>
@@ -375,6 +441,27 @@ const Reports = () => {
                                         <tr><td colSpan={10} className="px-5 py-12 text-center text-muted-foreground">No pending POs found.</td></tr>
                                     )}
                                 </tbody>
+                                {/* Totals below come straight from pendingRows (the same array
+                                    rendered above) — no separate query, no cached value. */}
+                                {!pendingLoading && pendingRows.length > 0 && (
+                                    <tfoot className="sticky bottom-0">
+                                        <tr className="border-t-2 text-sm" style={{ backgroundColor: "#EFF6FF", borderTopColor: "#2563EB" }}>
+                                            <td className="px-2 py-3 text-left font-bold" style={{ color: "#1D4ED8" }} colSpan={4}>TOTAL</td>
+                                            <td className="px-2 py-3 text-right font-bold text-blue-600 whitespace-nowrap">
+                                                {pendingTotals.totalQty} <span className="text-[10px] font-normal text-muted-foreground">{pendingTotals.uom}</span>
+                                            </td>
+                                            <td className="px-2 py-3 text-right font-bold text-green-600 whitespace-nowrap">
+                                                {pendingTotals.deliveredQty} <span className="text-[10px] font-normal text-muted-foreground">{pendingTotals.uom}</span>
+                                            </td>
+                                            <td className="px-2 py-3 text-right font-bold text-orange-600 whitespace-nowrap">
+                                                {pendingTotals.pendingQty} <span className="text-[10px] font-normal text-muted-foreground">{pendingTotals.uom}</span>
+                                            </td>
+                                            <td className="px-2 py-3 text-right font-bold text-green-600">{inr(pendingTotals.deliveredPayment)}</td>
+                                            <td className="px-2 py-3 text-right font-bold text-red-600">{inr(pendingTotals.pendingPayment)}</td>
+                                            <td className="px-2 py-3"></td>
+                                        </tr>
+                                    </tfoot>
+                                )}
                             </table>
                         </div>
                     </Card>

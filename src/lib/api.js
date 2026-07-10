@@ -166,6 +166,7 @@ export const deleteProduct = (id) => del(`/api/inventory/${id}`);
 
 // ── Clients & Projects ───────────────────────────────────────────────────────
 export const fetchClients = (params) => get("/api/clients", params);
+export const fetchClientStats = () => get("/api/clients/stats");
 export const createClient = (body) => post("/api/clients", body);
 export const deleteClient = (id, deletedBy) => del(`/api/clients/${id}`, deletedBy ? { deleted_by: deletedBy } : undefined);
 export const fetchProjects = (params) => get("/api/projects", params);

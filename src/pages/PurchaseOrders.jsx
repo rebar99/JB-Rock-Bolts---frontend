@@ -51,7 +51,14 @@ const PurchaseOrders = () => {
         queryFn: () => fetchPurchaseOrders({ limit: 100000 }),
     });
 
-    const invalidate = () => qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+    const invalidate = () => {
+        qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+        // Fulfillment/Pending reports (and their footer totals) are built
+        // from Purchase Order records — they must refetch whenever a PO is
+        // added/edited/deleted/short-closed so their totals never go stale.
+        qc.invalidateQueries({ queryKey: ["fulfillmentReport"] });
+        qc.invalidateQueries({ queryKey: ["pendingPOsReport"] });
+    };
 
     const createMutation = useMutation({ mutationFn: createPurchaseOrder, onSuccess: invalidate });
     const updateMutation = useMutation({ mutationFn: ({ id, body }) => updatePurchaseOrder(id, body), onSuccess: invalidate });
@@ -79,7 +86,14 @@ const PurchaseOrders = () => {
         }
     });
 
-    const clientMutation = useMutation({ mutationFn: (body) => createClient({ ...body, created_by: getCurrentUser() }), onSuccess: () => qc.invalidateQueries({ queryKey: ["constants"] }) });
+    const clientMutation = useMutation({
+        mutationFn: (body) => createClient({ ...body, created_by: getCurrentUser() }),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["constants"] });
+            qc.invalidateQueries({ queryKey: ["clients"] });
+            qc.invalidateQueries({ queryKey: ["client-stats"] });
+        },
+    });
     const projectMutation = useMutation({ mutationFn: (body) => createProject({ ...body, created_by: getCurrentUser() }), onSuccess: () => qc.invalidateQueries({ queryKey: ["constants"] }) });
 
     const [search, setSearch] = useState("");
