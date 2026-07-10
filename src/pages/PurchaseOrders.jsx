@@ -17,6 +17,7 @@ import {
     deletePurchaseOrder, fetchPurchaseOrder, openPODocument,
     createClient, createProject, fetchProjects, uploadPOFile,
     exportPurchaseOrders, importPurchaseOrders, shortClosePurchaseOrder,
+    fetchPOSummary,
 } from "@/lib/api";
 import { Pencil, Plus, Search, Trash2, Eye, FileText, Package, Truck, Clock, Printer, X, UploadCloud, Download, Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -48,7 +49,15 @@ const PurchaseOrders = () => {
         queryFn: () => fetchPurchaseOrders(),
     });
 
-    const invalidate = () => qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+    const { data: poSummary } = useQuery({
+        queryKey: ["po-summary"],
+        queryFn: fetchPOSummary,
+    });
+
+    const invalidate = () => {
+        qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+        qc.invalidateQueries({ queryKey: ["po-summary"] });
+    };
 
     const createMutation = useMutation({ mutationFn: createPurchaseOrder, onSuccess: invalidate });
     const updateMutation = useMutation({ mutationFn: ({ id, body }) => updatePurchaseOrder(id, body), onSuccess: invalidate });
@@ -148,11 +157,11 @@ const PurchaseOrders = () => {
         );
     }, [orders, search]);
 
-    const totals = useMemo(() => ({
-        tot: orders.reduce((s, o) => s + o.total_quantity, 0),
-        del: orders.reduce((s, o) => s + o.delivered_quantity, 0),
-        pending: orders.reduce((s, o) => s + o.pending_quantity, 0),
-    }), [orders]);
+    const totals = {
+        tot: poSummary?.total_quantity ?? 0,
+        del: poSummary?.delivered_quantity ?? 0,
+        pending: poSummary?.pending_quantity ?? 0,
+    };
 
     const effectiveClient = form.clientName?.trim() || form.clientDropdown;
     const effectiveProject = form.project;
