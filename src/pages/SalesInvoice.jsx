@@ -10,7 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { StatusBadge } from "@/components/StatusBadge";
-import { inr, fmtDate, fmtDateTime } from "@/lib/format";
+import { inr, fmtDate, fmtDateTime, round2 } from "@/lib/format";
 import { getCurrentUser } from "@/lib/currentUser";
 import { useConstants } from "@/lib/constants";
 import {
@@ -41,6 +41,12 @@ const SalesInvoice = () => {
         qc.invalidateQueries({ queryKey: ["sales"] });
         qc.invalidateQueries({ queryKey: ["purchase-orders"] });
         qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
+        // Sales Report (and its footer totals) reads from ["report", ...] —
+        // it must refetch whenever a sale is added/edited/deleted so the
+        // displayed totals never go stale.
+        qc.invalidateQueries({ queryKey: ["report"] });
+        qc.invalidateQueries({ queryKey: ["fulfillmentReport"] });
+        qc.invalidateQueries({ queryKey: ["pendingPOsReport"] });
     };
 
     
@@ -733,21 +739,24 @@ const SalesInvoice = () => {
         setEditInvoiceUrl(sale.invoice_url || "");
         setEditEWayBillUrl(sale.e_way_bill_url || "");
         setEditHsnCode(sale.hsn_code || "");
-        setEditManualFreight(sale.freight?.toString() || "0");
+        setEditManualFreight(round2(sale.freight || 0).toFixed(2));
         setEditManualTotalGstRate("");
-        
-        // Load and recalculate all items to ensure UI consistency
+
+        // Load and recalculate all items to ensure UI consistency. Rounded to
+        // 2 decimal places (paisa), never Math.round() — that rounds to a
+        // whole rupee and is exactly what was destroying the GST/Total
+        // decimals shown on this screen versus the View screen.
         const items = (sale.items || []).map(it => {
             const q = Number(it.quantity) || 0;
             const p = Number(it.unit_price) || 0;
             const g = Number(it.gst_rate) || 0;
-            const sub = q * p;
-            const gst = Math.round(sub * g / 100);
-            return { 
-                ...it, 
+            const sub = round2(q * p);
+            const gst = round2(sub * g / 100);
+            return {
+                ...it,
                 subtotal: sub,
                 gst_amount: gst,
-                total_amount: sub + gst
+                total_amount: round2(sub + gst)
             };
         });
         setEditItems(items);
@@ -763,27 +772,27 @@ const SalesInvoice = () => {
         const p = Number(item.unit_price) || 0;
         const g = Number(item.gst_rate) || 0;
         
-        item.subtotal = q * p;
-        item.gst_amount = Math.round(item.subtotal * g / 100);
-        item.total_amount = item.subtotal + item.gst_amount;
+        item.subtotal = round2(q * p);
+        item.gst_amount = round2(item.subtotal * g / 100);
+        item.total_amount = round2(item.subtotal + item.gst_amount);
         
         newItems[idx] = item;
         setEditItems(newItems);
     };
 
     useEffect(() => {
-        const sub = editItems.reduce((acc, i) => acc + (Number(i.subtotal) || 0), 0);
-        const itemGst = editItems.reduce((acc, i) => acc + (Number(i.gst_amount) || 0), 0);
-        const fr = Number(editManualFreight) || 0;
-        
+        const sub = round2(editItems.reduce((acc, i) => acc + (Number(i.subtotal) || 0), 0));
+        const itemGst = round2(editItems.reduce((acc, i) => acc + (Number(i.gst_amount) || 0), 0));
+        const fr = round2(Number(editManualFreight) || 0);
+
         let finalGst = itemGst;
         if (editManualTotalGstRate !== "") {
-            finalGst = Math.round(sub * (Number(editManualTotalGstRate) / 100));
+            finalGst = round2(sub * (Number(editManualTotalGstRate) / 100));
         }
 
         setEditSubtotal(sub);
         setEditGstAmount(finalGst);
-        setEditGrandTotal(sub + finalGst + fr);
+        setEditGrandTotal(round2(sub + finalGst + fr));
     }, [editItems, editManualFreight, editManualTotalGstRate]);
 
     const handleUpdateSale = async () => {
@@ -988,11 +997,19 @@ const SalesInvoice = () => {
                                 <SelectTrigger><SelectValue placeholder="Select PO Number" /></SelectTrigger>
                                 <SelectContent>
                                     {orders.length > 0
-                                        ? orders.map((o) => (
-                                            <SelectItem key={o.id} value={o.po_number}>
-                                                {o.po_number} — {o.client_name}
-                                            </SelectItem>
-                                        ))
+                                        ? (
+                                            // Fixed-height, independently scrollable list — only this
+                                            // inner div scrolls (overscroll-contain stops the scroll
+                                            // from "leaking" into the page/dialog behind it once the
+                                            // user hits the top/bottom of the list).
+                                            <div className="max-h-[280px] overflow-y-auto overscroll-contain scroll-smooth">
+                                                {orders.map((o) => (
+                                                    <SelectItem key={o.id} value={o.po_number}>
+                                                        {o.po_number} — {o.client_name}
+                                                    </SelectItem>
+                                                ))}
+                                            </div>
+                                        )
                                         : <div className="p-2 text-sm text-muted-foreground">
                                             {qc.isFetching({ queryKey: ["purchase-orders"] }) ? "Loading Purchase Orders..." : "No POs available"}
                                           </div>
@@ -1678,37 +1695,30 @@ const SalesInvoice = () => {
                                                     <td className="p-2 text-center">{it.quantity} {it.uom}</td>
                                                     <td className="p-2 text-right">{inr(it.unit_price)}</td>
                                                     <td className="p-2 text-right">{inr(it.gst_amount)} ({it.gst_rate}%)</td>
-                                                    <td className="p-2 text-right font-bold">{inr((Number(it.subtotal) || 0) + (Number(it.gst_amount) || 0))}</td>
+                                                    <td className="p-2 text-right font-bold">{inr(it.total_amount)}</td>
                                                 </tr>
                                             ))}
                                         </tbody>
+                                        {/* Subtotal/GST/Grand Total below come straight from the
+                                            API (single source of truth) — not recomputed here — so
+                                            this Invoice Preview always matches every other view. */}
                                         <tfoot className="bg-muted/50 font-semibold">
-                                            {(() => {
-                                                const items = viewSale.items || [];
-                                                const calcSubtotal = items.reduce((acc, it) => acc + (Number(it.subtotal) || 0), 0);
-                                                const calcGst = items.reduce((acc, it) => acc + (Number(it.gst_amount) || 0), 0);
-                                                const freight = Number(viewSale.freight) || 0;
-                                                return (
-                                                    <>
-                                                        <tr>
-                                                            <td colSpan="4" className="p-2 text-right">Subtotal:</td>
-                                                            <td className="p-2 text-right">{inr(calcSubtotal)}</td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td colSpan="4" className="p-2 text-right">Total GST:</td>
-                                                            <td className="p-2 text-right">{inr(calcGst)}</td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td colSpan="4" className="p-2 text-right">Freight:</td>
-                                                            <td className="p-2 text-right">{inr(freight)}</td>
-                                                        </tr>
-                                                        <tr className="text-primary bg-primary/5 text-sm">
-                                                            <td colSpan="4" className="p-2 text-right">Grand Total:</td>
-                                                            <td className="p-2 text-right">{inr(calcSubtotal + calcGst + freight)}</td>
-                                                        </tr>
-                                                    </>
-                                                );
-                                            })()}
+                                            <tr>
+                                                <td colSpan="4" className="p-2 text-right">Subtotal:</td>
+                                                <td className="p-2 text-right">{inr(viewSale.subtotal)}</td>
+                                            </tr>
+                                            <tr>
+                                                <td colSpan="4" className="p-2 text-right">Total GST:</td>
+                                                <td className="p-2 text-right">{inr(viewSale.gst_amount)}</td>
+                                            </tr>
+                                            <tr>
+                                                <td colSpan="4" className="p-2 text-right">Freight:</td>
+                                                <td className="p-2 text-right">{inr(viewSale.freight)}</td>
+                                            </tr>
+                                            <tr className="text-primary bg-primary/5 text-sm">
+                                                <td colSpan="4" className="p-2 text-right">Grand Total:</td>
+                                                <td className="p-2 text-right">{inr(viewSale.grand_total)}</td>
+                                            </tr>
                                         </tfoot>
                                     </table>
                                 </div>
@@ -1805,9 +1815,9 @@ const SalesInvoice = () => {
                         const po = (orders || []).find((o) => o.id === sale.po_id);
                         const currentPending = po ? pendingOnPO(po) : 0;
                         const totalDispatched = (sale.items || []).reduce((acc, it) => acc + (it.quantity || 0), 0) || 0;
-                        const calcSubtotal = (sale.items || []).reduce((acc, it) => acc + (Number(it.subtotal) || 0), 0);
-                        const calcGst = (sale.items || []).reduce((acc, it) => acc + (Number(it.gst_amount) || 0), 0);
-                        const calcGrand = calcSubtotal + calcGst + (Number(sale.freight) || 0);
+                        // Subtotal/GST/Grand Total come straight from the API (single
+                        // source of truth, computed once on the backend) — never
+                        // recalculated here, so they always match every other view.
                         return (
                             <Card key={sale.id} className={`p-5 shadow-card space-y-4${sale.payment_note ? " bg-amber-50 dark:bg-amber-950/20" : ""}`}>
                                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1937,9 +1947,9 @@ const SalesInvoice = () => {
                                     <Field label="Dispatched Qty" value={`${sale.dispatched_qty} ${sale.uom || "Nos"}`} />
                                     <Field label="Project" value={sale.project} />
                                     <Field label="Total Docs" value={`${(sale.invoice_url?.split(";")?.filter(Boolean)?.length || 0) + (sale.e_way_bill_url?.split(";")?.filter(Boolean)?.length || 0) + (sale.delivery_challan_url?.split(";")?.filter(Boolean)?.length || 0)} File(s)`} />
-                                    <Field label="Invoice Total" value={inr(calcGrand)} />
-                                    <Field label="Subtotal" value={inr(calcSubtotal)} />
-                                    <Field label="Total GST" value={inr(calcGst)} />
+                                    <Field label="Invoice Total" value={inr(sale.grand_total)} />
+                                    <Field label="Subtotal" value={inr(sale.subtotal)} />
+                                    <Field label="Total GST" value={inr(sale.gst_amount)} />
                                     <Field label="Freight" value={inr(sale.freight)} />
                                     <Field label="Dispatched Through" value={sale.dispatched_through} />
                                     <Field label="HSN/SAC" value={sale.hsn_code} />

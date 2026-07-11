@@ -43,12 +43,22 @@ const PurchaseOrders = () => {
     const navigate = useNavigate();
     const { products, clients, projects, payment_terms, uom_options } = useConstants();
 
+    // Fetch the complete Purchase Order list (no pagination cap) — this is the
+    // single source of truth for both the table rows below and the dashboard
+    // summary cards, so the two can never disagree.
     const { data: orders = [], isLoading } = useQuery({
         queryKey: ["purchase-orders"],
-        queryFn: () => fetchPurchaseOrders(),
+        queryFn: () => fetchPurchaseOrders({ limit: 100000 }),
     });
 
-    const invalidate = () => qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+    const invalidate = () => {
+        qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+        // Fulfillment/Pending reports (and their footer totals) are built
+        // from Purchase Order records — they must refetch whenever a PO is
+        // added/edited/deleted/short-closed so their totals never go stale.
+        qc.invalidateQueries({ queryKey: ["fulfillmentReport"] });
+        qc.invalidateQueries({ queryKey: ["pendingPOsReport"] });
+    };
 
     const createMutation = useMutation({ mutationFn: createPurchaseOrder, onSuccess: invalidate });
     const updateMutation = useMutation({ mutationFn: ({ id, body }) => updatePurchaseOrder(id, body), onSuccess: invalidate });
@@ -76,7 +86,14 @@ const PurchaseOrders = () => {
         }
     });
 
-    const clientMutation = useMutation({ mutationFn: (body) => createClient({ ...body, created_by: getCurrentUser() }), onSuccess: () => qc.invalidateQueries({ queryKey: ["constants"] }) });
+    const clientMutation = useMutation({
+        mutationFn: (body) => createClient({ ...body, created_by: getCurrentUser() }),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["constants"] });
+            qc.invalidateQueries({ queryKey: ["clients"] });
+            qc.invalidateQueries({ queryKey: ["client-stats"] });
+        },
+    });
     const projectMutation = useMutation({ mutationFn: (body) => createProject({ ...body, created_by: getCurrentUser() }), onSuccess: () => qc.invalidateQueries({ queryKey: ["constants"] }) });
 
     const [search, setSearch] = useState("");
@@ -148,11 +165,14 @@ const PurchaseOrders = () => {
         );
     }, [orders, search]);
 
+    // Single source of truth: sum the exact rows the table below renders
+    // (post-search-filter), reading each row's PO/Delivered/Pending Quantity
+    // straight off the same PurchaseOrder objects — no separate SQL query.
     const totals = useMemo(() => ({
-        tot: orders.reduce((s, o) => s + o.total_quantity, 0),
-        del: orders.reduce((s, o) => s + o.delivered_quantity, 0),
-        pending: orders.reduce((s, o) => s + o.pending_quantity, 0),
-    }), [orders]);
+        tot: filtered.reduce((s, o) => s + (o.total_quantity || 0), 0),
+        del: filtered.reduce((s, o) => s + (o.delivered_quantity || 0), 0),
+        pending: filtered.reduce((s, o) => s + (o.pending_quantity || 0), 0),
+    }), [filtered]);
 
     const effectiveClient = form.clientName?.trim() || form.clientDropdown;
     const effectiveProject = form.project;
