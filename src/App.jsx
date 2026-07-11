@@ -12,6 +12,7 @@ import SalesInvoice from "./pages/SalesInvoice";
 import Inventory from "./pages/Inventory";
 import Clients from "./pages/Clients";
 import Reports from "./pages/Reports";
+import UserApprovals from "./pages/UserApprovals";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -39,6 +40,13 @@ const GuestRoute = ({ children }) => {
     return children;
 };
 
+const AdminRoute = ({ children }) => {
+    const { isAuthenticated, user } = useAuth();
+    if (!isAuthenticated) return <Navigate to="/login" replace />;
+    if (!user?.is_admin) return <Navigate to="/" replace />;
+    return children;
+};
+
 const App = () => (
     <QueryClientProvider client={queryClient}>
         <ThemeProvider>
@@ -60,6 +68,7 @@ const App = () => (
                             <Route path="/inventory" element={<ProtectedRoute><AppLayout><Inventory /></AppLayout></ProtectedRoute>} />
                             <Route path="/clients" element={<ProtectedRoute><AppLayout><Clients /></AppLayout></ProtectedRoute>} />
                             <Route path="/reports" element={<ProtectedRoute><AppLayout><Reports /></AppLayout></ProtectedRoute>} />
+                            <Route path="/user-approvals" element={<AdminRoute><AppLayout><UserApprovals /></AppLayout></AdminRoute>} />
                             <Route path="*" element={<NotFound />} />
                         </Routes>
                     </AuthProvider>

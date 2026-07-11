@@ -33,7 +33,7 @@ export default function Register() {
         setLoading(true);
         try {
             await registerUser({ name, email, password });
-            toast({ title: "Account created!", description: "Please log in with your credentials." });
+            toast({ title: "Account created!", description: "An admin needs to approve your request before you can log in." });
             navigate("/login", { replace: true });
         } catch (err) {
             toast({ title: "Registration failed", description: err.message, variant: "destructive" });

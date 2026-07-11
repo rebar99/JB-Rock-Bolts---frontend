@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, FileBarChart2, FileText, ShoppingCart } from "lucide-react";
+import { LayoutDashboard, FileBarChart2, FileText, ShoppingCart, UserCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/context/AuthContext";
 
 const items = [
     { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
@@ -9,7 +10,10 @@ const items = [
     { to: "/reports", label: "Reports", icon: FileBarChart2 },
 ];
 
-export const Sidebar = ({ open, onClose }) => (
+export const Sidebar = ({ open, onClose }) => {
+    const { user } = useAuth();
+
+    return (
     <>
         <div
             className={cn(
@@ -58,6 +62,30 @@ export const Sidebar = ({ open, onClose }) => (
                         <span>{label}</span>
                     </NavLink>
                 ))}
+
+                {user?.is_admin && (
+                    <>
+                        <div className="px-3 pt-4 pb-2 text-[10px] uppercase tracking-widest text-sidebar-foreground/50">
+                            Admin
+                        </div>
+                        <NavLink
+                            to="/user-approvals"
+                            onClick={onClose}
+                            className={({ isActive }) =>
+                                cn(
+                                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+                                    "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                                    isActive
+                                        ? "bg-sidebar-accent text-sidebar-accent-foreground border-l-2 border-sidebar-primary shadow-sm"
+                                        : "text-sidebar-foreground/80"
+                                )
+                            }
+                        >
+                            <UserCheck className="h-4 w-4 shrink-0" size={18} />
+                            <span>User Approvals</span>
+                        </NavLink>
+                    </>
+                )}
             </nav>
 
             <div className="p-4 border-t border-sidebar-border">
@@ -70,4 +98,5 @@ export const Sidebar = ({ open, onClose }) => (
             </div>
         </aside>
     </>
-);
+    );
+};

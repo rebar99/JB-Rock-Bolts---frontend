@@ -266,6 +266,11 @@ export const fetchUsers = () => get("/api/users");
 export const updateUser = (id, body) => put(`/api/users/${id}`, body);
 export const resetPassword = (body) => post("/api/users/reset-password", body);
 
+// ── User Approvals (admin only) ────────────────────────────────────────────
+export const fetchPendingUsers = () => get("/api/users/pending");
+export const approveUser = (id) => post(`/api/users/${id}/approve`, {});
+export const rejectUser = (id) => post(`/api/users/${id}/reject`, {});
+
 export const logoutUser = () => request("/api/users/logout", { method: "POST" });
 
 // The request() helper already reads the token from localStorage and adds
