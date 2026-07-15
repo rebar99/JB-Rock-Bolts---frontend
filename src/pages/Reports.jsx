@@ -89,7 +89,7 @@ const applyColumnFilters = (rows, filters, accessors) => {
 };
 
 const SHEET_OPTIONS = [
-    { id: "fulfillment", label: "PO Fulfillment Report", desc: "PO fulfillment status per item" },
+    { id: "completed",   label: "Completed PO Report", desc: "Purchase orders that are fully delivered" },
     { id: "sales",       label: "Sales Report",       desc: "Invoice records with payment status" },
     { id: "pending-pos", label: "Pending POs Report", desc: "Open purchase orders with pending values" },
 ];
@@ -107,10 +107,11 @@ const Reports = () => {
     const [product, setProduct] = useState("all");
     const [client, setClient] = useState("all");
     const [pendingUomTab, setPendingUomTab] = useState("all");
+    const [completedUomTab, setCompletedUomTab] = useState("all");
 
     // ── Combined export dialog ────────────────────────────────────────────────
     const [exportOpen, setExportOpen] = useState(false);
-    const [exportSheets, setExportSheets] = useState(["fulfillment", "sales", "pending-pos"]);
+    const [exportSheets, setExportSheets] = useState(["completed", "sales", "pending-pos"]);
     const [exportFrom, setExportFrom] = useState("");
     const [exportTo, setExportTo] = useState("");
     const [exporting, setExporting] = useState(false);
@@ -204,8 +205,12 @@ const Reports = () => {
     // Completed POs — the fulfillment report already gives Delivered/Pending
     // per PO; a PO counts as "Completed" here once nothing is left pending
     // (pending <= 0), regardless of the tiny floating-point noise repeated
-    // qty additions elsewhere can leave behind.
-    const completedRowsAll = (completedData?.rows ?? []).filter((r) => (r.pending ?? 0) <= 0.0001);
+    // qty additions elsewhere can leave behind. Then filtered by the
+    // selected UOM tab (All/Nos/Meter), same pattern as Pending POs.
+    const completedRowsCompleted = (completedData?.rows ?? []).filter((r) => (r.pending ?? 0) <= 0.0001);
+    const completedRowsAll = completedUomTab === "all"
+        ? completedRowsCompleted
+        : completedRowsCompleted.filter((r) => (r.uom || "").trim().toLowerCase() === completedUomTab);
     const { filters: completedFilters, setFilter: setCompletedFilter } = useColumnFilters();
     const completedFilteredRows = applyColumnFilters(completedRowsAll, completedFilters, CompletedColumnAccessors);
     const completedTotals = {
@@ -287,6 +292,13 @@ const Reports = () => {
 
                 {/* ── Completed PO Tab ─────────────────────────────────────────── */}
                 <TabsContent value="completed" className="space-y-6">
+                    <Tabs value={completedUomTab} onValueChange={setCompletedUomTab}>
+                        <TabsList className="bg-transparent p-0 h-auto inline-flex flex-wrap gap-2 sm:gap-3">
+                            <TabsTrigger value="all" className={pillTabClass}>All</TabsTrigger>
+                            <TabsTrigger value="nos" className={pillTabClass}>Nos</TabsTrigger>
+                            <TabsTrigger value="meter" className={pillTabClass}>Meter</TabsTrigger>
+                        </TabsList>
+                    </Tabs>
                     <Card className="shadow-card">
                         <StickyScrollArea>
                             <table className="w-full text-sm table-fixed">
@@ -764,7 +776,7 @@ const Reports = () => {
                             Upload a combined report Excel file. Sheets are detected by name and imported automatically:
                         </p>
                         <ul className="text-xs text-muted-foreground space-y-1 pl-2 border-l-2 border-border">
-                            <li><span className="font-medium text-foreground">"PO Fulfillment Report"</span> → Purchase Orders module</li>
+                            <li><span className="font-medium text-foreground">"Completed PO"</span> → Purchase Orders module</li>
                             <li><span className="font-medium text-foreground">"Pending POs"</span> → Purchase Orders module</li>
                             <li><span className="font-medium text-foreground">"Sales Report"</span> → Sales module</li>
                         </ul>
