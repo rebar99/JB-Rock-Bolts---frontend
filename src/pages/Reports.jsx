@@ -6,18 +6,22 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useConstants } from "@/lib/constants";
-import { fetchReport, fetchFulfillmentReport, fetchPendingPOs, fetchPurchaseOrder, openPODocument, exportCombinedReport, importCombinedReport } from "@/lib/api";
-import { inr, fmtDate, fmtDateTime, round2 } from "@/lib/format";
+import { fetchReport, fetchFulfillmentReport, fetchPendingPOs, fetchPOFulfillmentSummary, openPODocument, exportCombinedReport, importCombinedReport } from "@/lib/api";
+import { inr, fmtDate, round2 } from "@/lib/format";
 import { StatusBadge } from "@/components/StatusBadge";
+import { getCurrentUser } from "@/lib/currentUser";
 import { toast } from "sonner";
-import { Download, Upload, IndianRupee, Package, TrendingUp, ClipboardList, BarChart3, Clock, FileText, UploadCloud, Printer } from "lucide-react";
-
-const isoToDateInput = (iso) => (iso ? new Date(iso).toISOString().slice(0, 10) : "");
+import { Download, Upload, IndianRupee, Package, TrendingUp, ClipboardList, BarChart3, Clock, FileText, UploadCloud, Printer, CheckCircle2 } from "lucide-react";
+import { useSortableRows } from "@/hooks/useSortableRows";
+import { useResizableColumns } from "@/hooks/useResizableColumns";
+import { useColumnFilters } from "@/hooks/useColumnFilters";
+import { SortableHeader } from "@/components/SortableHeader";
+import { FilterableHeader } from "@/components/FilterableHeader";
+import { StickyScrollArea } from "@/components/StickyScrollArea";
 
 // Guards footer quantity totals against floating-point drift from repeated
 // addition (e.g. 0.1 + 0.2 producing 0.30000000000000004).
@@ -34,8 +38,58 @@ const pillTabClass =
     "data-[state=inactive]:hover:border-primary/50 data-[state=inactive]:hover:bg-muted/50 " +
     "data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md";
 
+const SALES_WIDTHS = { sno: 56, date: 100, invoice_number: 130, po_number: 130, subtotal: 110, gst_amount: 110, price: 120, payment_status: 100 };
+const PENDING_WIDTHS = { sno: 56, date: 100, po_number: 130, client_name: 140, project: 120, item: 160, total_qty: 100, delivered_qty: 100, pending_qty: 100, delivered_payment: 130, pending_total: 130, status: 110 };
+const COMPLETED_WIDTHS = { sno: 56, date: 100, client_name: 140, project: 120, po_number: 130, item: 160, total_required: 110, delivered: 110 };
+
+// Column accessors shared by sorting and the Excel-style filter checklists —
+// each returns the same value the column sorts by, so "Sort A to Z" and the
+// filter's distinct-value list always agree with each other.
+const CompletedColumnAccessors = {
+    date: (r) => r.date,
+    client_name: (r) => r.client_name,
+    project: (r) => r.project,
+    po_number: (r) => r.po_number,
+    item: (r) => r.item,
+    total_required: (r) => r.total_required,
+    delivered: (r) => r.delivered,
+};
+const SalesColumnAccessors = {
+    date: (r) => r.date,
+    invoice_number: (r) => r.invoice_number,
+    po_number: (r) => r.po_number,
+    subtotal: (r) => r.subtotal,
+    gst_amount: (r) => r.gst_amount,
+    price: (r) => r.price,
+    payment_status: (r) => r.payment_status,
+};
+const PendingColumnAccessors = {
+    date: (r) => r.date,
+    po_number: (r) => r.po_number,
+    client_name: (r) => r.client_name,
+    project: (r) => r.project,
+    item: (r) => r.item,
+    total_qty: (r) => r.total_qty,
+    delivered_qty: (r) => r.delivered_qty,
+    pending_qty: (r) => r.pending_qty,
+    delivered_payment: (r) => r.delivered_payment,
+    pending_total: (r) => r.pending_total,
+    status: (r) => r.status,
+};
+
+const applyColumnFilters = (rows, filters, accessors) => {
+    const keys = Object.keys(filters);
+    if (keys.length === 0) return rows;
+    return rows.filter((r) =>
+        keys.every((k) => {
+            const v = accessors[k](r);
+            return filters[k].has(v == null || v === "" ? "—" : String(v));
+        })
+    );
+};
+
 const SHEET_OPTIONS = [
-    { id: "fulfillment", label: "Fulfillment Report", desc: "PO fulfillment status per item" },
+    { id: "fulfillment", label: "PO Fulfillment Report", desc: "PO fulfillment status per item" },
     { id: "sales",       label: "Sales Report",       desc: "Invoice records with payment status" },
     { id: "pending-pos", label: "Pending POs Report", desc: "Open purchase orders with pending values" },
 ];
@@ -46,7 +100,7 @@ const Reports = () => {
     const [searchParams] = useSearchParams();
     const initialTab = searchParams.get("tab");
     const [tab, setTab] = useState(
-        ["fulfillment", "sales", "pending"].includes(initialTab) ? initialTab : "fulfillment"
+        ["completed", "sales", "pending"].includes(initialTab) ? initialTab : "sales"
     );
     const [from, setFrom] = useState("");
     const [to, setTo] = useState("");
@@ -104,7 +158,7 @@ const Reports = () => {
         setImporting(true);
         const tid = toast.loading("Importing…");
         try {
-            const result = await importCombinedReport(importFile, importConflict);
+            const result = await importCombinedReport(importFile, importConflict, getCurrentUser());
             setImportResult(result);
             toast.success(
                 `Import done — Created: ${result.created}, Updated: ${result.updated}, Skipped: ${result.skipped}`,
@@ -129,71 +183,84 @@ const Reports = () => {
         product:   product !== "all" ? product : undefined,
         client:    client  !== "all" ? client  : undefined,
     };
-    const fulfillmentParams = {
-        from_date: from ? new Date(from).toISOString() : undefined,
-        to_date:   to   ? new Date(to).toISOString()   : undefined,
-        client:    client !== "all" ? client : undefined,
-    };
-
     const { data: salesData,       isLoading: salesLoading }       = useQuery({ queryKey: ["report", salesParams],            queryFn: () => fetchReport(salesParams),          enabled: tab === "sales" });
 
-    // Footer totals: summed straight from salesData.rows — the exact same
-    // array the table below renders — so they always match what's on screen.
-    // No separate query, no cache; this recomputes on every render, which
-    // means it automatically reflects any add/edit/delete or filter/search
-    // change that causes salesData to refetch.
+    // Footer totals: summed straight from the exact rows the table below
+    // renders (search/date-filter, then Excel-style column-filter) — so they
+    // always match what's on screen. No separate query, no cache; this
+    // recomputes on every render, which means it automatically reflects any
+    // add/edit/delete/filter/search change.
     const salesRows = salesData?.rows ?? [];
+    const { filters: salesFilters, setFilter: setSalesFilter } = useColumnFilters();
+    const salesFilteredRows = applyColumnFilters(salesRows, salesFilters, SalesColumnAccessors);
     const salesTotals = {
-        subtotal: salesRows.reduce((s, r) => s + (r.subtotal ?? 0), 0),
-        gst: salesRows.reduce((s, r) => s + (r.gst_amount ?? 0), 0),
-        grandTotal: salesRows.reduce((s, r) => s + (r.price ?? 0), 0),
+        subtotal: salesFilteredRows.reduce((s, r) => s + (r.subtotal ?? 0), 0),
+        gst: salesFilteredRows.reduce((s, r) => s + (r.gst_amount ?? 0), 0),
+        grandTotal: salesFilteredRows.reduce((s, r) => s + (r.price ?? 0), 0),
     };
-    const { data: fulfillmentData, isLoading: fulfillmentLoading } = useQuery({ queryKey: ["fulfillmentReport", fulfillmentParams], queryFn: () => fetchFulfillmentReport(fulfillmentParams), enabled: tab === "fulfillment" });
     const { data: pendingData,     isLoading: pendingLoading }     = useQuery({ queryKey: ["pendingPOsReport"],                queryFn: fetchPendingPOs,                         enabled: tab === "pending" });
+    const { data: completedData,   isLoading: completedLoading }   = useQuery({ queryKey: ["fulfillmentReport"],               queryFn: () => fetchFulfillmentReport({}),        enabled: tab === "completed" });
 
-    // Footer totals for Fulfillment — summed straight from fulfillmentData.rows,
-    // the exact same array the table renders. No separate query/cache.
-    const fulfillmentRows = fulfillmentData?.rows ?? [];
-    const fulfillmentTotals = {
-        required: roundQty(fulfillmentRows.reduce((s, r) => s + (r.total_required ?? 0), 0)),
-        delivered: roundQty(fulfillmentRows.reduce((s, r) => s + (r.delivered ?? 0), 0)),
-        pending: roundQty(fulfillmentRows.reduce((s, r) => s + (r.pending ?? 0), 0)),
-        uom: fulfillmentRows[0]?.uom || "Nos",
+    // Completed POs — the fulfillment report already gives Delivered/Pending
+    // per PO; a PO counts as "Completed" here once nothing is left pending
+    // (pending <= 0), regardless of the tiny floating-point noise repeated
+    // qty additions elsewhere can leave behind.
+    const completedRowsAll = (completedData?.rows ?? []).filter((r) => (r.pending ?? 0) <= 0.0001);
+    const { filters: completedFilters, setFilter: setCompletedFilter } = useColumnFilters();
+    const completedFilteredRows = applyColumnFilters(completedRowsAll, completedFilters, CompletedColumnAccessors);
+    const completedTotals = {
+        required: roundQty(completedFilteredRows.reduce((s, r) => s + (r.total_required ?? 0), 0)),
+        delivered: roundQty(completedFilteredRows.reduce((s, r) => s + (r.delivered ?? 0), 0)),
+        uom: completedFilteredRows[0]?.uom || "Nos",
     };
 
-    // Pending POs — filtered by the selected UOM tab (All/Nos/Meter). The
-    // table body and the footer totals both read from this same filtered
-    // array, so switching tabs updates both together and the totals always
-    // match exactly what's displayed.
+    // Pending POs — filtered by the selected UOM tab (All/Nos/Meter), then by
+    // any active Excel-style column filters. The table body and the footer
+    // totals both read from this same filtered array, so switching tabs or
+    // filters updates both together and the totals always match exactly
+    // what's displayed.
     const pendingRowsAll = pendingData?.rows ?? [];
     const pendingRows = pendingUomTab === "all"
         ? pendingRowsAll
         : pendingRowsAll.filter((r) => (r.uom || "").trim().toLowerCase() === pendingUomTab);
+    const { filters: pendingFilters, setFilter: setPendingFilter } = useColumnFilters();
+    const pendingFilteredRows = applyColumnFilters(pendingRows, pendingFilters, PendingColumnAccessors);
     const pendingTotals = {
-        totalQty: roundQty(pendingRows.reduce((s, r) => s + (r.total_qty ?? 0), 0)),
-        deliveredQty: roundQty(pendingRows.reduce((s, r) => s + (r.delivered_qty ?? 0), 0)),
-        pendingQty: roundQty(pendingRows.reduce((s, r) => s + (r.pending_qty ?? 0), 0)),
-        deliveredPayment: pendingRows.reduce((s, r) => s + (r.delivered_payment ?? 0), 0),
-        pendingPayment: pendingRows.reduce((s, r) => s + (r.pending_total ?? 0), 0),
-        uom: pendingRows[0]?.uom || "Nos",
+        totalQty: roundQty(pendingFilteredRows.reduce((s, r) => s + (r.total_qty ?? 0), 0)),
+        deliveredQty: roundQty(pendingFilteredRows.reduce((s, r) => s + (r.delivered_qty ?? 0), 0)),
+        pendingQty: roundQty(pendingFilteredRows.reduce((s, r) => s + (r.pending_qty ?? 0), 0)),
+        deliveredPayment: pendingFilteredRows.reduce((s, r) => s + (r.delivered_payment ?? 0), 0),
+        pendingPayment: pendingFilteredRows.reduce((s, r) => s + (r.pending_total ?? 0), 0),
+        uom: pendingFilteredRows[0]?.uom || "Nos",
     };
+
+    const { widths: salesWidths, startResize: startSalesResize } = useResizableColumns("colw:reports-sales", SALES_WIDTHS);
+    const { sortedRows: sortedSalesRows, sortConfig: salesSortConfig, setSort: setSalesSort } = useSortableRows(salesFilteredRows);
+
+    const { widths: pendingWidths, startResize: startPendingResize } = useResizableColumns("colw:reports-pending", PENDING_WIDTHS);
+    const { sortedRows: sortedPendingRows, sortConfig: pendingSortConfig, setSort: setPendingSort } = useSortableRows(pendingFilteredRows);
+
+    const { widths: completedWidths, startResize: startCompletedResize } = useResizableColumns("colw:reports-completed", COMPLETED_WIDTHS);
+    const { sortedRows: sortedCompletedRows, sortConfig: completedSortConfig, setSort: setCompletedSort } = useSortableRows(completedFilteredRows);
 
     const [selectedPOId, setSelectedPOId] = useState(null);
     const { data: selectedPO, isLoading: selectedPOLoading } = useQuery({
-        queryKey: ["purchase-order", selectedPOId],
-        queryFn: () => fetchPurchaseOrder(selectedPOId),
+        queryKey: ["po-fulfillment-summary", selectedPOId],
+        queryFn: () => fetchPOFulfillmentSummary(selectedPOId),
         enabled: !!selectedPOId,
     });
     const closeViewingPO = () => setSelectedPOId(null);
+    const poDeliveryStatusBadge = (status) =>
+        status === "Completed" ? "Delivered" : status === "Short Closed" ? "Short Closed" : status;
 
     return (
         <div className="space-y-6">
             {/* ── Page header ─────────────────────────────────────────────────── */}
-            <div className="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                    <h2 className="text-2xl font-bold tracking-tight text-foreground">Reports & Analytics</h2>
-                    <p className="text-sm text-muted-foreground mt-1">Analyze your sales performance and order fulfillment.</p>
-                </div>
+            <div className="text-center space-y-1">
+                <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight text-foreground">Reports & Analytics</h2>
+                <p className="text-sm text-muted-foreground">Analyze your sales performance and order fulfillment.</p>
+            </div>
+            <div className="flex flex-wrap items-end justify-end gap-3">
                 <div className="flex flex-wrap gap-2">
                     <Button onClick={() => setExportOpen(true)} variant="outline" className="border-green-500 text-green-700 hover:bg-green-50">
                         <Download className="h-4 w-4 mr-2" /> Export Excel
@@ -207,8 +274,8 @@ const Reports = () => {
             {/* ── Report tabs ─────────────────────────────────────────────────── */}
             <Tabs value={tab} onValueChange={setTab} className="w-full">
                 <TabsList className="grid w-full grid-cols-3 mb-6 p-1 bg-muted/50 rounded-xl">
-                    <TabsTrigger value="fulfillment" className="rounded-lg py-2 transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-md dark:data-[state=active]:bg-white dark:data-[state=active]:text-slate-900">
-                        <ClipboardList className="h-4 w-4 mr-2" /> Fulfillment
+                    <TabsTrigger value="completed" className="rounded-lg py-2 transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-md dark:data-[state=active]:bg-white dark:data-[state=active]:text-slate-900">
+                        <CheckCircle2 className="h-4 w-4 mr-2" /> Completed PO
                     </TabsTrigger>
                     <TabsTrigger value="sales" className="rounded-lg py-2 transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-md dark:data-[state=active]:bg-white dark:data-[state=active]:text-slate-900">
                         <BarChart3 className="h-4 w-4 mr-2" /> Sales
@@ -218,82 +285,72 @@ const Reports = () => {
                     </TabsTrigger>
                 </TabsList>
 
-                {/* ── Fulfillment Tab ──────────────────────────────────────────── */}
-                <TabsContent value="fulfillment" className="space-y-6">
-                    <Card className="p-5 shadow-card">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="space-y-2">
-                                <Label>From Date</Label>
-                                <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>To Date</Label>
-                                <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Search Client</Label>
-                                <Input placeholder="Filter by client..." value={client === "all" ? "" : client}
-                                    onChange={(e) => setClient(e.target.value || "all")} />
-                            </div>
-                        </div>
-                    </Card>
-                    <Card className="shadow-card overflow-hidden">
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
-                                <thead className="bg-muted/50 text-muted-foreground text-[11px] uppercase tracking-wider">
+                {/* ── Completed PO Tab ─────────────────────────────────────────── */}
+                <TabsContent value="completed" className="space-y-6">
+                    <Card className="shadow-card">
+                        <StickyScrollArea>
+                            <table className="w-full text-sm table-fixed">
+                                <thead className="bg-muted/50 text-foreground text-sm font-bold uppercase tracking-wider">
                                     <tr>
-                                        <th className="text-left font-semibold px-2 py-3">Date</th>
-                                        <th className="text-left font-semibold px-2 py-3">PO Number</th>
-                                        <th className="text-left font-semibold px-2 py-3">Client Name</th>
-                                        <th className="text-left font-semibold px-2 py-3">Project Name</th>
-                                        <th className="text-left font-semibold px-2 py-3">Item</th>
-                                        <th className="text-right font-semibold px-2 py-3">Req.</th>
-                                        <th className="text-right font-semibold px-2 py-3">Delivered Quantity</th>
-                                        <th className="text-right font-semibold px-2 py-3">Pend.</th>
+                                        <SortableHeader label="S.No." width={completedWidths.sno} onResizeStart={startCompletedResize("sno")} />
+                                        <FilterableHeader label="Date" columnKey="date" type="date" accessor={CompletedColumnAccessors.date} sortConfig={completedSortConfig} setSort={setCompletedSort} width={completedWidths.date} onResizeStart={startCompletedResize("date")} rows={completedRowsAll} filterValue={completedFilters.date} onApplyFilter={setCompletedFilter} />
+                                        <FilterableHeader label="Client Name" columnKey="client_name" accessor={CompletedColumnAccessors.client_name} sortConfig={completedSortConfig} setSort={setCompletedSort} width={completedWidths.client_name} onResizeStart={startCompletedResize("client_name")} rows={completedRowsAll} filterValue={completedFilters.client_name} onApplyFilter={setCompletedFilter} />
+                                        <FilterableHeader label="Project" columnKey="project" accessor={CompletedColumnAccessors.project} sortConfig={completedSortConfig} setSort={setCompletedSort} width={completedWidths.project} onResizeStart={startCompletedResize("project")} rows={completedRowsAll} filterValue={completedFilters.project} onApplyFilter={setCompletedFilter} />
+                                        <FilterableHeader label="PO Number" columnKey="po_number" accessor={CompletedColumnAccessors.po_number} sortConfig={completedSortConfig} setSort={setCompletedSort} width={completedWidths.po_number} onResizeStart={startCompletedResize("po_number")} rows={completedRowsAll} filterValue={completedFilters.po_number} onApplyFilter={setCompletedFilter} />
+                                        <FilterableHeader label="Item" columnKey="item" accessor={CompletedColumnAccessors.item} sortConfig={completedSortConfig} setSort={setCompletedSort} width={completedWidths.item} onResizeStart={startCompletedResize("item")} rows={completedRowsAll} filterValue={completedFilters.item} onApplyFilter={setCompletedFilter} />
+                                        <FilterableHeader label="PO Quantity" columnKey="total_required" type="number" align="right" accessor={CompletedColumnAccessors.total_required} sortConfig={completedSortConfig} setSort={setCompletedSort} width={completedWidths.total_required} onResizeStart={startCompletedResize("total_required")} rows={completedRowsAll} filterValue={completedFilters.total_required} onApplyFilter={setCompletedFilter} />
+                                        <FilterableHeader label="Delivered Quantity" columnKey="delivered" type="number" align="right" accessor={CompletedColumnAccessors.delivered} sortConfig={completedSortConfig} setSort={setCompletedSort} width={completedWidths.delivered} onResizeStart={startCompletedResize("delivered")} rows={completedRowsAll} filterValue={completedFilters.delivered} onApplyFilter={setCompletedFilter} />
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {fulfillmentLoading && <tr><td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">Loading...</td></tr>}
-                                    {fulfillmentData?.rows.map((r) => (
+                                    {completedLoading && <tr><td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">Loading...</td></tr>}
+                                    {sortedCompletedRows.map((r, idx) => (
                                         <tr key={r.id} className={`border-t border-border hover:bg-muted/30 transition-colors text-[12.5px]${r.remark ? " bg-amber-50 dark:bg-amber-950/20" : ""}`}>
-                                            <td className="px-2 py-3 text-muted-foreground whitespace-nowrap">{r.date}</td>
-                                            <td className="px-2 py-3 font-semibold text-primary truncate max-w-[120px]" title={r.po_number}>
-                                                <button type="button" className="text-left w-full text-primary hover:underline focus:outline-none" onClick={() => setSelectedPOId(r.id)}>
+                                            <td className="px-2 py-3 text-center text-muted-foreground">{idx + 1}</td>
+                                            <td className="px-2 py-3 text-center text-muted-foreground whitespace-nowrap">{r.date}</td>
+                                            <td className="px-2 py-3 text-center font-semibold text-foreground truncate" title={r.client_name}>
+                                                <button type="button" className="text-center w-full text-primary hover:underline focus:outline-none" onClick={() => setSelectedPOId(r.id)}>
+                                                    {r.client_name}
+                                                </button>
+                                            </td>
+                                            <td className="px-2 py-3 text-center text-muted-foreground truncate" title={r.project}>
+                                                <button type="button" className="text-center w-full text-primary hover:underline focus:outline-none" onClick={() => setSelectedPOId(r.id)}>
+                                                    {r.project}
+                                                </button>
+                                            </td>
+                                            <td className="px-2 py-3 text-center font-semibold text-primary truncate" title={r.po_number}>
+                                                <button type="button" className="text-center w-full text-primary hover:underline focus:outline-none" onClick={() => setSelectedPOId(r.id)}>
                                                     {r.po_number}
                                                 </button>
                                             </td>
-                                            <td className="px-2 py-3 font-semibold text-foreground truncate max-w-[120px]" title={r.client_name}>{r.client_name}</td>
-                                            <td className="px-2 py-3 text-muted-foreground truncate max-w-[100px]" title={r.project}>{r.project}</td>
-                                            <td className="px-2 py-3 text-foreground font-medium truncate max-w-[140px]" title={r.item}>{r.item}</td>
-                                            <td className="px-2 py-3 text-right font-medium whitespace-nowrap">{r.total_required} <span className="text-[10px] text-muted-foreground">{r.uom}</span></td>
-                                            <td className="px-2 py-3 text-right font-bold text-success whitespace-nowrap" style={{color:"var(--success)"}}>{r.delivered} <span className="text-[10px] text-muted-foreground">{r.uom}</span></td>
-                                            <td className="px-2 py-3 text-right font-bold text-orange-500 whitespace-nowrap">{r.pending} <span className="text-[10px] text-muted-foreground">{r.uom}</span></td>
+                                            <td className="px-2 py-3 text-center text-foreground font-medium truncate" title={r.item}>
+                                                <button type="button" className="text-center w-full text-primary hover:underline focus:outline-none" onClick={() => setSelectedPOId(r.id)}>
+                                                    {r.item}
+                                                </button>
+                                            </td>
+                                            <td className="px-2 py-3 text-center font-medium whitespace-nowrap">{r.total_required} <span className="text-[10px] text-muted-foreground">{r.uom}</span></td>
+                                            <td className="px-2 py-3 text-center font-bold text-success whitespace-nowrap" style={{color:"var(--success)"}}>{r.delivered} <span className="text-[10px] text-muted-foreground">{r.uom}</span></td>
                                         </tr>
                                     ))}
-                                    {!fulfillmentLoading && fulfillmentData?.rows.length === 0 && (
-                                        <tr><td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">No records found.</td></tr>
+                                    {!completedLoading && sortedCompletedRows.length === 0 && (
+                                        <tr><td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">No completed POs yet.</td></tr>
                                     )}
                                 </tbody>
-                                {/* Totals below come straight from fulfillmentRows (the same array
-                                    rendered above) — no separate query, no cached value. */}
-                                {!fulfillmentLoading && fulfillmentRows.length > 0 && (
+                                {!completedLoading && completedFilteredRows.length > 0 && (
                                     <tfoot className="sticky bottom-0">
                                         <tr className="border-t-2 text-sm" style={{ backgroundColor: "#EFF6FF", borderTopColor: "#2563EB" }}>
-                                            <td className="px-2 py-3 text-left font-bold" style={{ color: "#1D4ED8" }} colSpan={5}>TOTAL</td>
-                                            <td className="px-2 py-3 text-right font-bold text-blue-600 whitespace-nowrap">
-                                                {fulfillmentTotals.required} <span className="text-[10px] font-normal text-muted-foreground">{fulfillmentTotals.uom}</span>
+                                            <td className="p-2 text-center font-bold" style={{ color: "#1D4ED8" }} colSpan={6}>TOTAL</td>
+                                            <td className="px-2 py-3 text-center font-bold text-blue-600 whitespace-nowrap">
+                                                {completedTotals.required} <span className="text-[10px] font-normal text-muted-foreground">{completedTotals.uom}</span>
                                             </td>
-                                            <td className="px-2 py-3 text-right font-bold text-green-600 whitespace-nowrap">
-                                                {fulfillmentTotals.delivered} <span className="text-[10px] font-normal text-muted-foreground">{fulfillmentTotals.uom}</span>
-                                            </td>
-                                            <td className="px-2 py-3 text-right font-bold text-orange-600 whitespace-nowrap">
-                                                {fulfillmentTotals.pending} <span className="text-[10px] font-normal text-muted-foreground">{fulfillmentTotals.uom}</span>
+                                            <td className="px-2 py-3 text-center font-bold text-green-600 whitespace-nowrap">
+                                                {completedTotals.delivered} <span className="text-[10px] font-normal text-muted-foreground">{completedTotals.uom}</span>
                                             </td>
                                         </tr>
                                     </tfoot>
                                 )}
                             </table>
-                        </div>
+                        </StickyScrollArea>
                     </Card>
                 </TabsContent>
 
@@ -349,50 +406,52 @@ const Reports = () => {
                             </div>
                         </Card>
                     </div>
-                    <Card className="shadow-card overflow-hidden">
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
-                                <thead className="bg-muted/50 text-muted-foreground text-[11px] uppercase tracking-wider">
+                    <Card className="shadow-card">
+                        <StickyScrollArea>
+                            <table className="w-full text-sm table-fixed">
+                                <thead className="bg-muted/50 text-foreground text-sm font-bold uppercase tracking-wider">
                                     <tr>
-                                        <th className="text-left font-semibold px-2 py-3">Date</th>
-                                        <th className="text-left font-semibold px-2 py-3">Invoice No</th>
-                                        <th className="text-left font-semibold px-2 py-3">PO No</th>
-                                        <th className="text-right font-semibold px-2 py-3">Subtotal</th>
-                                        <th className="text-right font-semibold px-2 py-3">GST Amount</th>
-                                        <th className="text-right font-semibold px-2 py-3">Grand Total</th>
-                                        <th className="text-left font-semibold px-2 py-3">Payment</th>
+                                        <SortableHeader label="S.No." width={salesWidths.sno} onResizeStart={startSalesResize("sno")} />
+                                        <FilterableHeader label="Date" columnKey="date" type="date" accessor={SalesColumnAccessors.date} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.date} onResizeStart={startSalesResize("date")} rows={salesRows} filterValue={salesFilters.date} onApplyFilter={setSalesFilter} />
+                                        <FilterableHeader label="Invoice No" columnKey="invoice_number" accessor={SalesColumnAccessors.invoice_number} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.invoice_number} onResizeStart={startSalesResize("invoice_number")} rows={salesRows} filterValue={salesFilters.invoice_number} onApplyFilter={setSalesFilter} />
+                                        <FilterableHeader label="PO No" columnKey="po_number" accessor={SalesColumnAccessors.po_number} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.po_number} onResizeStart={startSalesResize("po_number")} rows={salesRows} filterValue={salesFilters.po_number} onApplyFilter={setSalesFilter} />
+                                        <FilterableHeader label="Subtotal" columnKey="subtotal" type="number" align="right" accessor={SalesColumnAccessors.subtotal} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.subtotal} onResizeStart={startSalesResize("subtotal")} rows={salesRows} filterValue={salesFilters.subtotal} onApplyFilter={setSalesFilter} />
+                                        <FilterableHeader label="GST Amount" columnKey="gst_amount" type="number" align="right" accessor={SalesColumnAccessors.gst_amount} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.gst_amount} onResizeStart={startSalesResize("gst_amount")} rows={salesRows} filterValue={salesFilters.gst_amount} onApplyFilter={setSalesFilter} />
+                                        <FilterableHeader label="Grand Total" columnKey="price" type="number" align="right" accessor={SalesColumnAccessors.price} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.price} onResizeStart={startSalesResize("price")} rows={salesRows} filterValue={salesFilters.price} onApplyFilter={setSalesFilter} />
+                                        <FilterableHeader label="Payment" columnKey="payment_status" accessor={SalesColumnAccessors.payment_status} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.payment_status} onResizeStart={startSalesResize("payment_status")} rows={salesRows} filterValue={salesFilters.payment_status} onApplyFilter={setSalesFilter} />
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {salesLoading && <tr><td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">Loading...</td></tr>}
-                                    {salesData?.rows.map((r) => (
+                                    {salesLoading && <tr><td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">Loading...</td></tr>}
+                                    {sortedSalesRows.map((r, idx) => (
                                         <tr key={r.id} className={`border-t border-border hover:bg-muted/30 transition-colors text-[12.5px]${r.payment_note ? " bg-amber-50 dark:bg-amber-950/20" : ""}`}>
-                                            <td className="px-2 py-3 text-muted-foreground whitespace-nowrap">{r.date}</td>
-                                            <td className="px-2 py-3 text-primary font-medium truncate max-w-[120px]" title={r.invoice_number}>{r.invoice_number || "—"}</td>
-                                            <td className="px-2 py-3 text-muted-foreground truncate max-w-[120px]" title={r.po_number}>{r.po_number || "—"}</td>
-                                            <td className="px-2 py-3 text-right font-medium">{inr(r.subtotal)}</td>
-                                            <td className="px-2 py-3 text-right font-medium text-blue-500">{inr(r.gst_amount)}</td>
-                                            <td className="px-2 py-3 text-right font-bold text-foreground">{inr(r.price)}</td>
-                                            <td className="px-2 py-3 text-muted-foreground text-[11px]">{r.payment_status}</td>
+                                            <td className="px-2 py-3 text-center text-muted-foreground">{idx + 1}</td>
+                                            <td className="px-2 py-3 text-center text-muted-foreground whitespace-nowrap">{r.date}</td>
+                                            <td className="px-2 py-3 text-center text-primary font-medium truncate" title={r.invoice_number}>{r.invoice_number || "—"}</td>
+                                            <td className="px-2 py-3 text-center text-muted-foreground truncate" title={r.po_number}>{r.po_number || "—"}</td>
+                                            <td className="px-2 py-3 text-center font-medium">{inr(r.subtotal)}</td>
+                                            <td className="px-2 py-3 text-center font-medium text-blue-500">{inr(r.gst_amount)}</td>
+                                            <td className="px-2 py-3 text-center font-bold text-foreground">{inr(r.price)}</td>
+                                            <td className="px-2 py-3 text-center text-muted-foreground text-[11px]">{r.payment_status}</td>
                                         </tr>
                                     ))}
-                                    {!salesLoading && (!salesData || salesData.rows.length === 0) && (
-                                        <tr><td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">No records match the filters.</td></tr>
+                                    {!salesLoading && sortedSalesRows.length === 0 && (
+                                        <tr><td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">No records match the filters.</td></tr>
                                     )}
                                 </tbody>
-                                {!salesLoading && salesRows.length > 0 && (
+                                {!salesLoading && salesFilteredRows.length > 0 && (
                                     <tfoot className="sticky bottom-0">
                                         <tr className="border-t-2 border-primary bg-primary/10 text-sm">
-                                            <td className="px-2 py-3 text-left font-bold text-primary tracking-wide" colSpan={3}>TOTAL</td>
-                                            <td className="px-2 py-3 text-right font-bold text-primary">{inr(salesTotals.subtotal)}</td>
-                                            <td className="px-2 py-3 text-right font-bold text-blue-500">{inr(salesTotals.gst)}</td>
-                                            <td className="px-2 py-3 text-right font-bold text-success">{inr(salesTotals.grandTotal)}</td>
+                                            <td className="px-2 py-3 text-center font-bold text-primary tracking-wide" colSpan={4}>TOTAL</td>
+                                            <td className="px-2 py-3 text-center font-bold text-primary">{inr(salesTotals.subtotal)}</td>
+                                            <td className="px-2 py-3 text-center font-bold text-blue-500">{inr(salesTotals.gst)}</td>
+                                            <td className="px-2 py-3 text-center font-bold text-success">{inr(salesTotals.grandTotal)}</td>
                                             <td className="px-2 py-3"></td>
                                         </tr>
                                     </tfoot>
                                 )}
                             </table>
-                        </div>
+                        </StickyScrollArea>
                     </Card>
                 </TabsContent>
 
@@ -425,227 +484,196 @@ const Reports = () => {
                             <TabsTrigger value="meter" className={pillTabClass}>Meter</TabsTrigger>
                         </TabsList>
                     </Tabs>
-                    <Card className="shadow-card overflow-hidden">
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
-                                <thead className="bg-muted/50 text-muted-foreground text-[11px] uppercase tracking-wider">
+                    <Card className="shadow-card">
+                        <StickyScrollArea>
+                            <table className="w-full text-sm table-fixed">
+                                <thead className="bg-muted/50 text-foreground text-sm font-bold uppercase tracking-wider">
                                     <tr>
-                                        <th className="text-left font-semibold px-2 py-3">Date</th>
-                                        <th className="text-left font-semibold px-2 py-3">PO Number</th>
-                                        <th className="text-left font-semibold px-2 py-3">Client</th>
-                                        <th className="text-left font-semibold px-2 py-3">Item</th>
-                                        <th className="text-right font-semibold px-2 py-3">Total Qty</th>
-                                        <th className="text-right font-semibold px-2 py-3">Delivered Qty</th>
-                                        <th className="text-right font-semibold px-2 py-3">Pending Qty</th>
-                                        <th className="text-right font-semibold px-2 py-3">Delivered Payment</th>
-                                        <th className="text-right font-semibold px-2 py-3">Pending Payment</th>
-                                        <th className="text-left font-semibold px-2 py-3">Status</th>
+                                        <SortableHeader label="S.No." width={pendingWidths.sno} onResizeStart={startPendingResize("sno")} />
+                                        <FilterableHeader label="Date" columnKey="date" type="date" accessor={PendingColumnAccessors.date} sortConfig={pendingSortConfig} setSort={setPendingSort} width={pendingWidths.date} onResizeStart={startPendingResize("date")} rows={pendingRows} filterValue={pendingFilters.date} onApplyFilter={setPendingFilter} />
+                                        <FilterableHeader label="PO Number" columnKey="po_number" accessor={PendingColumnAccessors.po_number} sortConfig={pendingSortConfig} setSort={setPendingSort} width={pendingWidths.po_number} onResizeStart={startPendingResize("po_number")} rows={pendingRows} filterValue={pendingFilters.po_number} onApplyFilter={setPendingFilter} />
+                                        <FilterableHeader label="Client" columnKey="client_name" accessor={PendingColumnAccessors.client_name} sortConfig={pendingSortConfig} setSort={setPendingSort} width={pendingWidths.client_name} onResizeStart={startPendingResize("client_name")} rows={pendingRows} filterValue={pendingFilters.client_name} onApplyFilter={setPendingFilter} />
+                                        <FilterableHeader label="Project" columnKey="project" accessor={PendingColumnAccessors.project} sortConfig={pendingSortConfig} setSort={setPendingSort} width={pendingWidths.project} onResizeStart={startPendingResize("project")} rows={pendingRows} filterValue={pendingFilters.project} onApplyFilter={setPendingFilter} />
+                                        <FilterableHeader label="Item" columnKey="item" accessor={PendingColumnAccessors.item} sortConfig={pendingSortConfig} setSort={setPendingSort} width={pendingWidths.item} onResizeStart={startPendingResize("item")} rows={pendingRows} filterValue={pendingFilters.item} onApplyFilter={setPendingFilter} />
+                                        <FilterableHeader label="Total Qty" columnKey="total_qty" type="number" align="right" accessor={PendingColumnAccessors.total_qty} sortConfig={pendingSortConfig} setSort={setPendingSort} width={pendingWidths.total_qty} onResizeStart={startPendingResize("total_qty")} rows={pendingRows} filterValue={pendingFilters.total_qty} onApplyFilter={setPendingFilter} />
+                                        <FilterableHeader label="Delivered Qty" columnKey="delivered_qty" type="number" align="right" accessor={PendingColumnAccessors.delivered_qty} sortConfig={pendingSortConfig} setSort={setPendingSort} width={pendingWidths.delivered_qty} onResizeStart={startPendingResize("delivered_qty")} rows={pendingRows} filterValue={pendingFilters.delivered_qty} onApplyFilter={setPendingFilter} />
+                                        <FilterableHeader label="Pending Qty" columnKey="pending_qty" type="number" align="right" accessor={PendingColumnAccessors.pending_qty} sortConfig={pendingSortConfig} setSort={setPendingSort} width={pendingWidths.pending_qty} onResizeStart={startPendingResize("pending_qty")} rows={pendingRows} filterValue={pendingFilters.pending_qty} onApplyFilter={setPendingFilter} />
+                                        <FilterableHeader label="Delivered Payment" columnKey="delivered_payment" type="number" align="right" accessor={PendingColumnAccessors.delivered_payment} sortConfig={pendingSortConfig} setSort={setPendingSort} width={pendingWidths.delivered_payment} onResizeStart={startPendingResize("delivered_payment")} rows={pendingRows} filterValue={pendingFilters.delivered_payment} onApplyFilter={setPendingFilter} />
+                                        <FilterableHeader label="Pending Payment" columnKey="pending_total" type="number" align="right" accessor={PendingColumnAccessors.pending_total} sortConfig={pendingSortConfig} setSort={setPendingSort} width={pendingWidths.pending_total} onResizeStart={startPendingResize("pending_total")} rows={pendingRows} filterValue={pendingFilters.pending_total} onApplyFilter={setPendingFilter} />
+                                        <FilterableHeader label="Status" columnKey="status" accessor={PendingColumnAccessors.status} sortConfig={pendingSortConfig} setSort={setPendingSort} width={pendingWidths.status} onResizeStart={startPendingResize("status")} rows={pendingRows} filterValue={pendingFilters.status} onApplyFilter={setPendingFilter} />
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {pendingLoading && <tr><td colSpan={10} className="px-5 py-12 text-center text-muted-foreground">Loading...</td></tr>}
-                                    {pendingRows.map((r) => (
+                                    {pendingLoading && <tr><td colSpan={12} className="px-5 py-12 text-center text-muted-foreground">Loading...</td></tr>}
+                                    {sortedPendingRows.map((r, idx) => (
                                         <tr key={r.id} className={`border-t border-border hover:bg-muted/30 transition-colors text-[12.5px]${r.remark ? " bg-amber-50 dark:bg-amber-950/20" : ""}`}>
-                                            <td className="px-2 py-3 text-muted-foreground whitespace-nowrap">{r.date}</td>
-                                            <td className="px-2 py-3 font-semibold text-primary truncate max-w-[120px]" title={r.po_number}>
-                                                <button type="button" className="text-left w-full text-primary hover:underline focus:outline-none" onClick={() => setSelectedPOId(r.id)}>
+                                            <td className="px-2 py-3 text-center text-muted-foreground">{idx + 1}</td>
+                                            <td className="px-2 py-3 text-center text-muted-foreground whitespace-nowrap">{r.date}</td>
+                                            <td className="px-2 py-3 text-center font-semibold text-primary truncate" title={r.po_number}>
+                                                <button type="button" className="text-center w-full text-primary hover:underline focus:outline-none" onClick={() => setSelectedPOId(r.id)}>
                                                     {r.po_number}
                                                 </button>
                                             </td>
-                                            <td className="px-2 py-3 text-muted-foreground truncate max-w-[120px]" title={r.client_name}>{r.client_name}</td>
-                                            <td className="px-2 py-3 text-muted-foreground truncate max-w-[140px]" title={r.item}>{r.item}</td>
-                                            <td className="px-2 py-3 text-right font-medium whitespace-nowrap">{r.total_qty} <span className="text-[10px] text-muted-foreground">{r.uom || ''}</span></td>
-                                            <td className="px-2 py-3 text-right font-bold whitespace-nowrap" style={{color:"var(--success)"}}>{r.delivered_qty || 0} <span className="text-[10px] text-muted-foreground">{r.uom || ''}</span></td>
-                                            <td className="px-2 py-3 text-right font-bold whitespace-nowrap">{r.pending_qty} <span className="text-[10px] text-muted-foreground">{r.uom || ''}</span></td>
-                                            <td className="px-2 py-3 text-right font-bold" style={{color:"var(--success)"}}>{inr(r.delivered_payment)}</td>
-                                            <td className="px-2 py-3 text-right font-bold text-orange-500">{inr(r.pending_total)}</td>
-                                            <td className="px-2 py-3 text-left"><StatusBadge status={r.status} label={r.status} /></td>
+                                            <td className="px-2 py-3 text-center text-muted-foreground truncate" title={r.client_name}>
+                                                <button type="button" className="text-center w-full text-primary hover:underline focus:outline-none" onClick={() => setSelectedPOId(r.id)}>
+                                                    {r.client_name}
+                                                </button>
+                                            </td>
+                                            <td className="px-2 py-3 text-center text-muted-foreground truncate" title={r.project}>
+                                                <button type="button" className="text-center w-full text-primary hover:underline focus:outline-none" onClick={() => setSelectedPOId(r.id)}>
+                                                    {r.project}
+                                                </button>
+                                            </td>
+                                            <td className="px-2 py-3 text-center text-muted-foreground truncate" title={r.item}>
+                                                <button type="button" className="text-center w-full text-primary hover:underline focus:outline-none" onClick={() => setSelectedPOId(r.id)}>
+                                                    {r.item}
+                                                </button>
+                                            </td>
+                                            <td className="px-2 py-3 text-center font-medium whitespace-nowrap">{r.total_qty} <span className="text-[10px] text-muted-foreground">{r.uom || ''}</span></td>
+                                            <td className="px-2 py-3 text-center font-bold whitespace-nowrap" style={{color:"var(--success)"}}>{r.delivered_qty || 0} <span className="text-[10px] text-muted-foreground">{r.uom || ''}</span></td>
+                                            <td className="px-2 py-3 text-center font-bold whitespace-nowrap">{r.pending_qty} <span className="text-[10px] text-muted-foreground">{r.uom || ''}</span></td>
+                                            <td className="px-2 py-3 text-center font-bold" style={{color:"var(--success)"}}>{inr(r.delivered_payment)}</td>
+                                            <td className="px-2 py-3 text-center font-bold text-orange-500">{inr(r.pending_total)}</td>
+                                            <td className="px-2 py-3 text-center"><div className="flex justify-center"><StatusBadge status={r.status} label={r.status} /></div></td>
                                         </tr>
                                     ))}
-                                    {!pendingLoading && pendingRows.length === 0 && (
-                                        <tr><td colSpan={10} className="px-5 py-12 text-center text-muted-foreground">
-                                            {pendingRowsAll.length > 0 ? "No pending POs match this UOM." : "No pending POs found."}
+                                    {!pendingLoading && sortedPendingRows.length === 0 && (
+                                        <tr><td colSpan={12} className="px-5 py-12 text-center text-muted-foreground">
+                                            {pendingRowsAll.length > 0 ? "No pending POs match this UOM or filter." : "No pending POs found."}
                                         </td></tr>
                                     )}
                                 </tbody>
-                                {/* Totals below come straight from pendingRows (the same array
-                                    rendered above) — no separate query, no cached value. */}
-                                {!pendingLoading && pendingRows.length > 0 && (
+                                {/* Totals below come straight from pendingFilteredRows (the same
+                                    array the table renders) — no separate query, no cached value. */}
+                                {!pendingLoading && pendingFilteredRows.length > 0 && (
                                     <tfoot className="sticky bottom-0">
                                         <tr className="border-t-2 text-sm" style={{ backgroundColor: "#EFF6FF", borderTopColor: "#2563EB" }}>
-                                            <td className="px-2 py-3 text-left font-bold" style={{ color: "#1D4ED8" }} colSpan={4}>TOTAL</td>
-                                            <td className="px-2 py-3 text-right font-bold text-blue-600 whitespace-nowrap">
+                                            <td className="px-2 py-3 text-center font-bold" style={{ color: "#1D4ED8" }} colSpan={6}>TOTAL</td>
+                                            <td className="px-2 py-3 text-center font-bold text-blue-600 whitespace-nowrap">
                                                 {pendingTotals.totalQty} <span className="text-[10px] font-normal text-muted-foreground">{pendingTotals.uom}</span>
                                             </td>
-                                            <td className="px-2 py-3 text-right font-bold text-green-600 whitespace-nowrap">
+                                            <td className="px-2 py-3 text-center font-bold text-green-600 whitespace-nowrap">
                                                 {pendingTotals.deliveredQty} <span className="text-[10px] font-normal text-muted-foreground">{pendingTotals.uom}</span>
                                             </td>
-                                            <td className="px-2 py-3 text-right font-bold text-orange-600 whitespace-nowrap">
+                                            <td className="px-2 py-3 text-center font-bold text-orange-600 whitespace-nowrap">
                                                 {pendingTotals.pendingQty} <span className="text-[10px] font-normal text-muted-foreground">{pendingTotals.uom}</span>
                                             </td>
-                                            <td className="px-2 py-3 text-right font-bold text-green-600">{inr(pendingTotals.deliveredPayment)}</td>
-                                            <td className="px-2 py-3 text-right font-bold text-red-600">{inr(pendingTotals.pendingPayment)}</td>
+                                            <td className="px-2 py-3 text-center font-bold text-green-600">{inr(pendingTotals.deliveredPayment)}</td>
+                                            <td className="px-2 py-3 text-center font-bold text-red-600">{inr(pendingTotals.pendingPayment)}</td>
                                             <td className="px-2 py-3"></td>
                                         </tr>
                                     </tfoot>
                                 )}
                             </table>
-                        </div>
+                        </StickyScrollArea>
                     </Card>
                 </TabsContent>
             </Tabs>
 
-            {/* ── PO Drill-down Dialog — same view as Purchase Orders module ─── */}
+            {/* ── PO Fulfillment Summary Dialog ─────────────────────────────── */}
             <Dialog open={!!selectedPOId} onOpenChange={(open) => !open && closeViewingPO()}>
                 <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-                    <DialogHeader><DialogTitle>Purchase Order Details</DialogTitle></DialogHeader>
+                    <DialogHeader><DialogTitle>PO Fulfillment Summary</DialogTitle></DialogHeader>
                     {selectedPOLoading && <div className="py-10 text-center text-muted-foreground text-sm">Loading…</div>}
                     {selectedPO && !selectedPOLoading && (() => {
                         const po = selectedPO;
                         return (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
+                            <div className="space-y-5 py-2">
 
-                                <div className="space-y-2 sm:col-span-2">
-                                    <Label>Name of Client</Label>
-                                    <Input value={po.client_name} disabled className="opacity-100 font-medium" />
+                                {/* Header fields */}
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                    <Field label="PO Number" value={po.po_number} />
+                                    <Field label="Client Name" value={po.client_name} />
+                                    <Field label="Project Name" value={po.project || "—"} />
+                                    <Field label="PO Date" value={po.po_date || "—"} />
                                 </div>
 
-                                <div className="space-y-2 sm:col-span-2">
-                                    <Label>Name of Project</Label>
-                                    <Input value={po.project || ""} disabled placeholder="—" className="opacity-100" />
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label>Purchase Order No.</Label>
-                                    <Input value={po.po_number} disabled className="opacity-100 font-medium" />
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label>PO Validity Date</Label>
-                                    <Input type="date" value={po.validity_date ? isoToDateInput(po.validity_date) : ""} disabled className="opacity-100" />
-                                </div>
-
-                                <div className="space-y-3 sm:col-span-2">
-                                    <Label className="text-sm font-semibold">Items</Label>
-                                    <div className="space-y-2">
-                                        {(po.line_items?.length > 0
-                                            ? po.line_items
-                                            : [{ item: po.item, quantity: po.total_quantity, uom: po.uom || "Nos", unit_price: po.unit_price, gst: po.gst || "0", freight: po.freight || 0 }]
-                                        ).map((li, idx) => (
-                                            <div key={idx} className="rounded-lg border border-border bg-muted/20 p-4">
-                                                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                                                    <div className="sm:col-span-2 space-y-1.5">
-                                                        <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Item Name</Label>
-                                                        <Input value={li.item} disabled className="opacity-100" />
-                                                    </div>
-                                                    <div className="space-y-1.5">
-                                                        <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Quantity</Label>
-                                                        <div className="flex gap-1">
-                                                            <Input value={li.quantity ?? ""} disabled className="flex-1 opacity-100" />
-                                                            <Input value={li.uom || "Nos"} disabled className="w-20 opacity-100 text-center" />
-                                                        </div>
-                                                    </div>
-                                                    <div className="space-y-1.5">
-                                                        <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Unit Price</Label>
-                                                        <Input value={li.unit_price ? Number(li.unit_price).toFixed(2) : "0.00"} disabled className="opacity-100" />
-                                                    </div>
-                                                </div>
-                                                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mt-4 pt-4 border-t border-slate-200">
-                                                    <div className="space-y-1.5">
-                                                        <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">GST</Label>
-                                                        <Input value={li.gst || "0"} disabled className="opacity-100" />
-                                                    </div>
-                                                    <div className="space-y-1.5">
-                                                        <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Freight</Label>
-                                                        <Input value={li.freight ?? "0"} disabled className="opacity-100" />
-                                                    </div>
-                                                    <div className="sm:col-span-2 flex items-end justify-end space-x-6">
-                                                        <div className="text-right">
-                                                            <div className="text-[10px] uppercase text-muted-foreground font-semibold">Subtotal</div>
-                                                            <div className="font-medium text-sm">{inr((li.quantity || 0) * (li.unit_price || 0))}</div>
-                                                        </div>
-                                                        <div className="text-right">
-                                                            <div className="text-[10px] uppercase text-muted-foreground font-semibold">Row Total</div>
-                                                            <div className="font-bold text-base text-green-700">
-                                                                {inr(
-                                                                    ((li.quantity || 0) * (li.unit_price || 0)) +
-                                                                    Number(li.freight || 0) +
-                                                                    ((li.gst || "").toString().startsWith("₹")
-                                                                        ? Number((li.gst || "").toString().replace("₹", "") || 0)
-                                                                        : ((li.quantity || 0) * (li.unit_price || 0) * Number(li.gst || 0) / 100))
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))}
+                                {/* Quantity summary */}
+                                <div className="grid grid-cols-3 gap-3">
+                                    <div className="rounded-lg border border-border bg-muted/20 p-3 text-center">
+                                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">PO Quantity</div>
+                                        <div className="text-lg font-bold text-foreground">{po.po_quantity} <span className="text-xs font-normal text-muted-foreground">{po.uom}</span></div>
+                                    </div>
+                                    <div className="rounded-lg border border-border bg-muted/20 p-3 text-center">
+                                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Delivered Quantity</div>
+                                        <div className="text-lg font-bold text-success">{po.delivered_quantity} <span className="text-xs font-normal text-muted-foreground">{po.uom}</span></div>
+                                    </div>
+                                    <div className="rounded-lg border border-border bg-muted/20 p-3 text-center">
+                                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Pending Quantity</div>
+                                        <div className="text-lg font-bold text-warning">{po.pending_quantity} <span className="text-xs font-normal text-muted-foreground">{po.uom}</span></div>
                                     </div>
                                 </div>
 
-                                <div className="sm:col-span-2 mt-2 p-3 rounded-lg bg-slate-100 border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+                                {/* Financial summary */}
+                                <div className="p-3 rounded-lg bg-slate-100 border border-slate-200 flex flex-wrap items-center justify-between gap-4">
                                     <div className="flex items-center gap-6">
                                         <div className="flex items-center gap-2">
-                                            <span className="text-sm font-medium text-slate-600">Subtotal:</span>
-                                            <span className="text-sm font-bold text-slate-900">{inr(po.subtotal || 0)}</span>
+                                            <span className="text-sm font-medium text-slate-600">Sub Total:</span>
+                                            <span className="text-sm font-bold text-slate-900">{inr(po.subtotal)}</span>
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <span className="text-sm font-medium text-slate-600">GST:</span>
-                                            <span className="text-sm font-bold text-slate-900">
-                                                {po.gst && po.gst !== "0" ? po.gst : "Per Item"} ({inr(po.gst_amount || 0)})
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-sm font-medium text-slate-600">Freight:</span>
-                                            <span className="text-sm font-bold text-slate-900">{inr(po.freight || 0)}</span>
+                                            <span className="text-sm font-bold text-slate-900">{inr(po.gst_amount)}</span>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2 bg-primary/10 px-3 py-1.5 rounded-md border border-primary/20">
                                         <span className="text-xs font-bold text-primary uppercase tracking-wider">Grand Total:</span>
-                                        <span className="text-base font-black text-primary">{inr(po.grand_total || 0)}</span>
+                                        <span className="text-base font-black text-primary">{inr(po.grand_total)}</span>
                                     </div>
                                 </div>
 
-                                <div className="space-y-2 sm:col-span-1">
-                                    <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Payment Terms</Label>
-                                    <Input value={po.payment_terms || ""} disabled placeholder="—" className="h-8 opacity-100" />
+                                {/* Dispatch history */}
+                                <div className="space-y-2">
+                                    <Label className="text-sm font-semibold">Dispatch History</Label>
+                                    <div className="rounded-lg border border-border overflow-x-auto">
+                                        <table className="w-full text-xs text-left">
+                                            <thead className="bg-muted text-muted-foreground font-medium border-b border-border">
+                                                <tr>
+                                                    <th className="p-2">Dispatch Date</th>
+                                                    <th className="p-2">Invoice No.</th>
+                                                    <th className="p-2">Item</th>
+                                                    <th className="p-2 text-right">Dispatch Qty</th>
+                                                    <th className="p-2 text-right">Amount</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {po.dispatch_history.map((d, idx) => (
+                                                    <tr key={idx} className="border-b border-border/50">
+                                                        <td className="p-2 whitespace-nowrap">{d.date}</td>
+                                                        <td className="p-2">{d.invoice_number || "—"}</td>
+                                                        <td className="p-2 max-w-[200px] truncate" title={d.item || ""}>{d.item || "—"}</td>
+                                                        <td className="p-2 text-right whitespace-nowrap">{d.dispatch_qty} <span className="text-muted-foreground">{d.uom}</span></td>
+                                                        <td className="p-2 text-right font-medium">{inr(d.amount)}</td>
+                                                    </tr>
+                                                ))}
+                                                {po.dispatch_history.length === 0 && (
+                                                    <tr><td colSpan={5} className="p-4 text-center text-muted-foreground">No dispatches yet.</td></tr>
+                                                )}
+                                            </tbody>
+                                            {po.dispatch_history.length > 0 && (
+                                                <tfoot>
+                                                    <tr className="border-t border-border bg-muted/30 font-semibold">
+                                                        <td className="p-2" colSpan={4}>Total <span className="font-normal text-muted-foreground">(Incl. GST)</span></td>
+                                                        <td className="p-2 text-right">
+                                                            {inr(po.dispatch_history.reduce((sum, d) => sum + (d.amount || 0), 0))}
+                                                        </td>
+                                                    </tr>
+                                                </tfoot>
+                                            )}
+                                        </table>
+                                    </div>
                                 </div>
 
-                                <div className="space-y-2 sm:col-span-2">
-                                    <Label className="font-semibold text-amber-700 dark:text-amber-400">Remark</Label>
-                                    <Textarea
-                                        value={po.remark || ""}
-                                        disabled
-                                        rows={2}
-                                        placeholder="No remarks"
-                                        className="opacity-100 border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-700 text-foreground"
-                                    />
-                                </div>
-
-                                {po.file_url && (
-                                    <div className="sm:col-span-2">
-                                        <Button variant="outline" size="sm" className="w-full" onClick={() => window.open(`http://localhost:8000${po.file_url}`, "_blank")}>
-                                            <FileText className="h-4 w-4 mr-2" /> View Attached PO Document
-                                        </Button>
+                                {/* Dispatch / payment / status summary */}
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+                                    <Field label="Total Dispatches" value={po.total_dispatches} />
+                                    <Field label="Last Dispatch Date" value={po.last_dispatch_date || "—"} />
+                                    <div>
+                                        <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Delivery Status</div>
+                                        <StatusBadge status={poDeliveryStatusBadge(po.delivery_status)} label={po.delivery_status} />
                                     </div>
-                                )}
-
-                                <div className="sm:col-span-2 rounded-lg border border-border bg-muted/30 p-4 space-y-3">
-                                    <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                                        <Clock className="h-4 w-4 text-accent" /> Activity Log
-                                    </div>
-                                    <POActivityEntry label="Created By" by={po.created_by} at={po.created_at} color="primary" />
-                                    <POActivityEntry label="Last Updated By" by={po.last_updated_by} at={po.last_updated_at} color="warning" />
-                                    <POActivityEntry label="Last Opened By" by={po.last_opened_by} at={po.last_opened_at} color="accent" />
-                                    {po.short_closed && (
-                                        <POActivityEntry
-                                            label="Short Closed By"
-                                            by={po.short_closed_by}
-                                            at={po.short_closed_at}
-                                            color="slate-500"
-                                            remark={po.short_closed_remark}
-                                        />
-                                    )}
+                                    <Field label="Payment Received" value={inr(po.payment_received)} />
+                                    <Field label="Pending Payment" value={inr(po.pending_payment)} />
                                 </div>
 
                             </div>
@@ -654,7 +682,7 @@ const Reports = () => {
                     <DialogFooter>
                         <Button variant="outline" onClick={closeViewingPO}>Close</Button>
                         {selectedPO && (
-                            <Button variant="outline" onClick={() => openPODocument(selectedPO.id)}>
+                            <Button variant="outline" onClick={() => openPODocument(selectedPO.po_id)}>
                                 <Printer className="h-4 w-4 mr-2" /> Print PO
                             </Button>
                         )}
@@ -736,7 +764,7 @@ const Reports = () => {
                             Upload a combined report Excel file. Sheets are detected by name and imported automatically:
                         </p>
                         <ul className="text-xs text-muted-foreground space-y-1 pl-2 border-l-2 border-border">
-                            <li><span className="font-medium text-foreground">"Fulfillment Report"</span> → Purchase Orders module</li>
+                            <li><span className="font-medium text-foreground">"PO Fulfillment Report"</span> → Purchase Orders module</li>
                             <li><span className="font-medium text-foreground">"Pending POs"</span> → Purchase Orders module</li>
                             <li><span className="font-medium text-foreground">"Sales Report"</span> → Sales module</li>
                         </ul>
@@ -831,17 +859,6 @@ const Field = ({ label, value, full }) => (
     <div className={full ? "col-span-2" : ""}>
         <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</div>
         <div className="font-medium text-foreground break-words">{value ?? "—"}</div>
-    </div>
-);
-
-const POActivityEntry = ({ label, by, at, color, remark }) => (
-    <div className={`flex items-start gap-3 text-xs border-l-2 border-${color}/40 pl-3`}>
-        <div className="flex-1">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
-            <div className="font-semibold text-foreground">{by || "—"}</div>
-            <div className="text-muted-foreground">{at ? fmtDateTime(at) : "—"}</div>
-            {remark && <div className="mt-1 text-muted-foreground italic border-l-2 border-muted pl-2">"{remark}"</div>}
-        </div>
     </div>
 );
 

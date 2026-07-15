@@ -165,4 +165,16 @@ All colors MUST be HSL.
   .shadow-card {
     box-shadow: var(--shadow-sm);
   }
+
+  /* Hides the browser's own scrollbar on an element while it stays
+     scrollable (via drag, wheel, or JS scrollLeft) — used by
+     StickyScrollArea so only its one custom-drawn scrollbar shows,
+     instead of the native one plus the custom one stacked together. */
+  .scrollbar-hide {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
 }
