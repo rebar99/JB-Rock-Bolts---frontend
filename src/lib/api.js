@@ -91,11 +91,12 @@ export const exportPurchaseOrders = async () => {
     URL.revokeObjectURL(url);
 };
 
-export const importPurchaseOrders = async (file, onConflict = "skip") => {
+export const importPurchaseOrders = async (file, onConflict = "skip", createdBy) => {
     const token = getToken();
     const formData = new FormData();
     formData.append("file", file);
-    const res = await fetch(`${BASE}/api/purchase-orders/import?on_conflict=${onConflict}`, {
+    const qs = createdBy ? `&created_by=${encodeURIComponent(createdBy)}` : "";
+    const res = await fetch(`${BASE}/api/purchase-orders/import?on_conflict=${onConflict}${qs}`, {
         method: "POST",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
@@ -114,6 +115,7 @@ export const createSale = (body) => post("/api/sales", body);
 export const updateSale = (id, body) => put(`/api/sales/${id}`, body);
 export const deleteSale = (id, deletedBy) => del(`/api/sales/${id}`, deletedBy ? { deleted_by: deletedBy } : undefined);
 export const addSaleActivity = (id, body) => post(`/api/sales/${id}/activities`, body);
+export const addSaleDispatch = (id, body) => post(`/api/sales/${id}/dispatches`, body);
 export const markSaleDelivered = (id, body) => put(`/api/sales/${id}/mark-delivered`, body);
 export const uploadInvoiceFile = async (file) => {
     const formData = new FormData();
@@ -142,11 +144,12 @@ export const exportSales = async () => {
     URL.revokeObjectURL(url);
 };
 
-export const importSales = async (file, onConflict = "skip") => {
+export const importSales = async (file, onConflict = "skip", createdBy) => {
     const token = getToken();
     const formData = new FormData();
     formData.append("file", file);
-    const res = await fetch(`${BASE}/api/sales/import?on_conflict=${onConflict}`, {
+    const qs = createdBy ? `&created_by=${encodeURIComponent(createdBy)}` : "";
+    const res = await fetch(`${BASE}/api/sales/import?on_conflict=${onConflict}${qs}`, {
         method: "POST",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
@@ -182,6 +185,7 @@ export const deleteRecord = (id) => del(`/api/records/${id}`);
 export const fetchReport = (params) => get("/api/reports", params);
 export const fetchFulfillmentReport = (params) => get("/api/reports/fulfillment", params);
 export const fetchPendingPOs = () => get("/api/reports/pending-pos");
+export const fetchPOFulfillmentSummary = (poId) => get(`/api/reports/po-fulfillment-summary/${poId}`);
 
 export const exportReport = async (reportType, params = {}) => {
     const token = getToken();
@@ -200,11 +204,12 @@ export const exportReport = async (reportType, params = {}) => {
     URL.revokeObjectURL(url);
 };
 
-export const importReport = async (file, reportType, onConflict = "skip") => {
+export const importReport = async (file, reportType, onConflict = "skip", createdBy) => {
     const token = getToken();
     const formData = new FormData();
     formData.append("file", file);
-    const res = await fetch(`${BASE}/api/reports/import?report_type=${reportType}&on_conflict=${onConflict}`, {
+    const qs = createdBy ? `&created_by=${encodeURIComponent(createdBy)}` : "";
+    const res = await fetch(`${BASE}/api/reports/import?report_type=${reportType}&on_conflict=${onConflict}${qs}`, {
         method: "POST",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
@@ -232,11 +237,12 @@ export const exportCombinedReport = async (sheets, params = {}) => {
     URL.revokeObjectURL(a.href);
 };
 
-export const importCombinedReport = async (file, onConflict = "skip") => {
+export const importCombinedReport = async (file, onConflict = "skip", createdBy) => {
     const token = getToken();
     const formData = new FormData();
     formData.append("file", file);
-    const res = await fetch(`${BASE}/api/reports/import-combined?on_conflict=${onConflict}`, {
+    const qs = createdBy ? `&created_by=${encodeURIComponent(createdBy)}` : "";
+    const res = await fetch(`${BASE}/api/reports/import-combined?on_conflict=${onConflict}${qs}`, {
         method: "POST",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,

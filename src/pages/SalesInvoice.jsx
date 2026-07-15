@@ -14,8 +14,8 @@ import { inr, fmtDate, fmtDateTime, round2 } from "@/lib/format";
 import { getCurrentUser } from "@/lib/currentUser";
 import { useConstants } from "@/lib/constants";
 import {
-    fetchPurchaseOrders, fetchSales, createSale, updateSale,
-    deleteSale as deleteSaleApi, addSaleActivity, openInvoiceDocument, downloadInvoiceDocument,
+    fetchPurchaseOrders, fetchSales, fetchSale, createSale, updateSale,
+    deleteSale as deleteSaleApi, addSaleActivity, addSaleDispatch, openInvoiceDocument, downloadInvoiceDocument,
     uploadInvoiceFile, exportSales, importSales,
 } from "@/lib/api";
 import { toast } from "sonner";
@@ -47,6 +47,13 @@ const SalesInvoice = () => {
         qc.invalidateQueries({ queryKey: ["report"] });
         qc.invalidateQueries({ queryKey: ["fulfillmentReport"] });
         qc.invalidateQueries({ queryKey: ["pendingPOsReport"] });
+        // PO Fulfillment Summary (Reports page drill-down) reads dispatch
+        // history for a specific PO — it must also refetch whenever a sale
+        // is added/edited/deleted, otherwise its 30s staleTime cache can
+        // keep showing a deleted sale's dispatch history as if it still
+        // existed. No poId here, so invalidate the whole key prefix — this
+        // matches every ["po-fulfillment-summary", <anyPoId>] entry.
+        qc.invalidateQueries({ queryKey: ["po-fulfillment-summary"] });
     };
 
     
@@ -151,7 +158,7 @@ const SalesInvoice = () => {
         setSalesImporting(true);
         const tid = toast.loading("Importing…");
         try {
-            const result = await importSales(salesImportFile, salesImportConflict);
+            const result = await importSales(salesImportFile, salesImportConflict, getCurrentUser());
             setSalesImportResult(result);
             toast.success(
                 `Import done — Created: ${result.created}, Updated: ${result.updated}, Skipped: ${result.skipped}`,
@@ -370,7 +377,7 @@ const SalesInvoice = () => {
 
         const urlList = urls.split(";").filter(Boolean);
         const isChallan = label.toLowerCase().includes("challan");
-        
+
         return (
             <Popover>
                 <Tooltip>
@@ -586,9 +593,16 @@ const SalesInvoice = () => {
         if (dispatchItems.length === 0) { toast.error("Add at least one item"); return; }
 
         if (dispatchTarget) {
-            // UPDATE EXISTING SALE
+            // UPDATE EXISTING SALE — always start from the sale's items as
+            // they exist on the server right now, not the possibly-stale
+            // `dispatchTarget` snapshot from whenever this dialog's list was
+            // last rendered. Two "Dispatch More" actions done back-to-back
+            // (or after items changed elsewhere) would otherwise both build
+            // off the same outdated item list, silently dropping whichever
+            // dispatch's items didn't make it into the last save.
+            const freshSale = await fetchSale(dispatchTarget.id);
             const combinedItems = [
-                ...(dispatchTarget.items || []),
+                ...(freshSale.items || []),
                 ...dispatchItems.map(it => ({
                     line_item_id: it.line_item_id,
                     item: it.item,
@@ -610,7 +624,7 @@ const SalesInvoice = () => {
                 gst_amount = applyManualTotalGstRate(combinedItems, subtotal);
             }
 
-            const freight = Number(dispatchTarget.freight) || 0;
+            const freight = Number(freshSale.freight) || 0;
             const grand_total = subtotal + gst_amount + freight;
 
             try {
@@ -635,6 +649,39 @@ const SalesInvoice = () => {
                         by: getCurrentUser()
                     },
                 });
+
+                // Record this as its own dispatch event (distinct from the
+                // invoice's original dispatch) so the PO Fulfillment Summary
+                // can list every dispatch separately, each with its own date.
+                await addSaleDispatch(dispatchTarget.id, {
+                    quantity: dispatchItems.reduce((acc, i) => acc + (Number(i.quantity) || 0), 0),
+                    uom: dispatchItems[0]?.uom || "Nos",
+                    subtotal: dispatchItems.reduce((acc, i) => acc + (Number(i.subtotal) || 0), 0),
+                    gst_amount: dispatchItems.reduce((acc, i) => acc + (Number(i.gst_amount) || 0), 0),
+                    amount: dispatchItems.reduce((acc, i) => acc + (Number(i.total_amount) || 0), 0),
+                    invoice_number: manualInvoiceNumber || null,
+                    e_way_bill_no: eWayBillNo || null,
+                    by: getCurrentUser(),
+                    // Per-item breakdown — keeps each item's own qty/uom
+                    // separate so a dispatch mixing units (e.g. Meter + Nos)
+                    // never gets summed into one misleading total.
+                    items: dispatchItems.map((i) => ({
+                        item: i.item,
+                        uom: i.uom,
+                        quantity: Number(i.quantity) || 0,
+                        subtotal: Number(i.subtotal) || 0,
+                        gst_amount: Number(i.gst_amount) || 0,
+                        amount: Number(i.total_amount) || 0,
+                    })),
+                });
+
+                // The earlier invalidateSales() (from updateMutation, above)
+                // already fired and refetched the PO Fulfillment Summary
+                // before this dispatch record existed — so it missed this
+                // event. Invalidate it again now that the dispatch is
+                // actually in the database, or the summary keeps showing the
+                // pre-dispatch state until its 30s cache naturally expires.
+                qc.invalidateQueries({ queryKey: ["po-fulfillment-summary"] });
 
                 toast.success("Items added to existing dispatch");
                 setDispatchOpen(false);
@@ -672,12 +719,12 @@ const SalesInvoice = () => {
                     payment_note: null,
                     invoice_url: null,
                     e_way_bill_url: null,
-                    invoice_number: null,
+                    invoice_number: manualInvoiceNumber || null,
                     dispatch_from: dispatchFrom || null,
                     ship_to: poData.location || null,
                     bill_to: null,
                     dispatched_through: null,
-                    e_way_bill_no: null,
+                    e_way_bill_no: eWayBillNo || null,
                     buyers_order_no: null,
                     payment_terms: poData.payment_terms || null,
                     hsn_code: null,
@@ -778,6 +825,14 @@ const SalesInvoice = () => {
         
         newItems[idx] = item;
         setEditItems(newItems);
+    };
+
+    const removeEditItem = (idx) => {
+        if (editItems.length <= 1) {
+            toast.error("A sale must have at least one item");
+            return;
+        }
+        setEditItems(editItems.filter((_, i) => i !== idx));
     };
 
     useEffect(() => {
@@ -968,11 +1023,11 @@ const SalesInvoice = () => {
     return (
         <TooltipProvider>
         <div className="space-y-6">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                    <h2 className="text-2xl font-bold tracking-tight text-foreground">Sales</h2>
-                    <p className="text-sm text-muted-foreground mt-1">Manage dispatch, invoicing, payments and activity tracking.</p>
-                </div>
+            <div className="text-center space-y-1">
+                <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight text-foreground">Sales</h2>
+                <p className="text-sm text-muted-foreground">Manage dispatch, invoicing, payments and activity tracking.</p>
+            </div>
+            <div className="flex flex-wrap items-end justify-end gap-3">
                 <div className="flex flex-wrap gap-2">
                     <Button variant="outline" onClick={handleSalesExport} className="border-green-500 text-green-700 hover:bg-green-50">
                         <Download className="h-4 w-4 mr-2" /> Export Excel
@@ -1186,17 +1241,8 @@ const SalesInvoice = () => {
                                                 <Input type="number" value={manualGstRate} onChange={e => setManualGstRate(e.target.value)} />
                                             </div>
                                             <div className="space-y-1">
-                                                <Label>UOM</Label>
-                                                <Select value={manualUom} onValueChange={setManualUom}>
-                                                    <SelectTrigger className="h-10">
-                                                        <SelectValue placeholder="UOM" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {uom_options.map((u) => (
-                                                            <SelectItem key={u} value={u}>{u}</SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
+                                                <Label>UOM (from PO)</Label>
+                                                <Input value={manualUom} disabled readOnly className="h-10 bg-muted/50" />
                                             </div>
                                             <div className="space-y-1">
                                                 <div className="flex justify-between items-center">
@@ -1355,10 +1401,11 @@ const SalesInvoice = () => {
                                                     <tr>
                                                         <th className="text-left p-2">Item</th>
                                                         <th className="text-center p-2 w-16">UOM</th>
-                                                        <th className="text-center p-2 w-20">Qty</th>
+                                                        <th className="text-center p-2 w-24">Qty</th>
                                                         <th className="text-right p-2 w-24">Rate</th>
                                                         <th className="text-right p-2 w-20">GST %</th>
-                                                        <th className="text-right p-2 w-24">Total</th>
+                                                        <th className="text-right p-2 w-28">Total</th>
+                                                        <th className="text-center p-2 w-10"></th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -1378,15 +1425,27 @@ const SalesInvoice = () => {
                                                                 </Select>
                                                             </td>
                                                             <td className="p-2 text-center">
-                                                                <Input type="number" className="h-8 text-xs text-center bg-background" value={item.quantity} onChange={e => updateEditItem(idx, "quantity", e.target.value)} />
+                                                                <Input type="number" className="h-8 text-xs text-center bg-background px-1 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" value={item.quantity} onChange={e => updateEditItem(idx, "quantity", e.target.value)} />
                                                             </td>
                                                             <td className="p-2 text-right">
-                                                                <Input type="number" step="0.01" min="0" className="h-8 text-xs text-right bg-background" value={item.unit_price} onChange={e => updateEditItem(idx, "unit_price", e.target.value)} />
+                                                                <Input type="number" step="0.01" min="0" className="h-8 text-xs text-right bg-background px-1 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" value={item.unit_price} onChange={e => updateEditItem(idx, "unit_price", e.target.value)} />
                                                             </td>
                                                             <td className="p-2 text-right">
-                                                                <Input type="number" className="h-8 text-xs text-right bg-background" value={item.gst_rate} onChange={e => updateEditItem(idx, "gst_rate", e.target.value)} />
+                                                                <Input type="number" className="h-8 text-xs text-right bg-background px-1 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" value={item.gst_rate} onChange={e => updateEditItem(idx, "gst_rate", e.target.value)} />
                                                             </td>
                                                             <td className="p-2 text-right font-bold">{inr((Number(item.subtotal) || 0) + (Number(item.gst_amount) || 0))}</td>
+                                                            <td className="p-2 text-center">
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                                                    onClick={() => removeEditItem(idx)}
+                                                                    title="Remove item"
+                                                                >
+                                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                                </Button>
+                                                            </td>
                                                         </tr>
                                                     ))}
                                                 </tbody>
@@ -1568,6 +1627,16 @@ const SalesInvoice = () => {
                                         </SelectContent>
                                     </Select>
                                 </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                        <Label>Invoice No.</Label>
+                                        <Input placeholder="Enter invoice number" value={manualInvoiceNumber} onChange={e => setManualInvoiceNumber(e.target.value)} />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label>e-Way Bill No.</Label>
+                                        <Input placeholder="Enter e-Way bill number" value={eWayBillNo} onChange={e => setEWayBillNo(e.target.value)} />
+                                    </div>
+                                </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                                     <div className="space-y-1">
                                         <Label>Rate (Rate)</Label>
@@ -1578,17 +1647,8 @@ const SalesInvoice = () => {
                                         <Input type="number" value={manualGstRate} onChange={e => setManualGstRate(e.target.value)} />
                                     </div>
                                     <div className="space-y-1">
-                                        <Label>UOM</Label>
-                                        <Select value={manualUom} onValueChange={setManualUom}>
-                                            <SelectTrigger className="h-10">
-                                                <SelectValue placeholder="UOM" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {uom_options.map((u) => (
-                                                    <SelectItem key={u} value={u}>{u}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
+                                        <Label>UOM (from PO)</Label>
+                                        <Input value={manualUom} disabled readOnly className="h-10 bg-muted/50" />
                                     </div>
                                     <div className="space-y-1">
                                         <div className="flex justify-between items-center">
@@ -1841,7 +1901,7 @@ const SalesInvoice = () => {
                                             }
                                             label={
                                                 (po?.all_dispatches_marked && po?.delivery_status === "Delivered") ? "Delivered" :
-                                                sale.delivery_status === "Delivered" ? "Partially Delivered" : 
+                                                sale.delivery_status === "Delivered" ? "Partially Delivered" :
                                                 "Not Delivered"
                                             }
                                         />
@@ -2008,7 +2068,7 @@ const SalesInvoice = () => {
                                         const isFullyComplete = po?.all_dispatches_marked && po?.delivery_status === "Delivered";
 
                                         let finalBtnClass = "bg-red-600 border-red-600 text-white hover:bg-red-700"; // Default: Red (No challan)
-                                        
+
                                         if (currentSaleHasChallan) {
                                             if (isFullyComplete) {
                                                 finalBtnClass = "bg-green-600 border-green-600 text-white hover:bg-green-700"; // Success: Everything done
@@ -2018,8 +2078,8 @@ const SalesInvoice = () => {
                                         }
 
                                         return (
-                                            <Button 
-                                                size="xs" 
+                                            <Button
+                                                size="xs"
                                                 className={finalBtnClass}
                                                 onClick={() => {
                                                     setMarkDeliveredTarget(sale);

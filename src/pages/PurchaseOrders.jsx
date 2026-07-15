@@ -20,12 +20,26 @@ import {
 } from "@/lib/api";
 import { Pencil, Plus, Search, Trash2, Eye, FileText, Package, Truck, Clock, Printer, X, UploadCloud, Download, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { useSortableRows } from "@/hooks/useSortableRows";
+import { useResizableColumns } from "@/hooks/useResizableColumns";
+import { useResizableRows } from "@/hooks/useResizableRows";
+import { useColumnFilters } from "@/hooks/useColumnFilters";
+import { SortableHeader } from "@/components/SortableHeader";
+import { FilterableHeader } from "@/components/FilterableHeader";
+import { StickyScrollArea } from "@/components/StickyScrollArea";
 
 const emptyLineItem = () => ({ item: "", quantity: "", uom: "Nos", unit_price: "", gst: "0", freight: "" });
+
+const PO_TABLE_WIDTHS = {
+    sno: 56, client_name: 140, project: 120, item: 150, po_number: 130,
+    po_date: 110, total_quantity: 100, delivered_quantity: 100, pending_quantity: 100,
+    validity_date: 110, status: 120, activity: 120, actions: 180,
+};
 
 const empty = () => ({
     clientName: "", clientDropdown: "",
     poNumber: "",
+    poDate: new Date().toISOString().slice(0, 10),
     validityDate: new Date().toISOString().slice(0, 10),
     gst: "", freight: 0,
     project: "",
@@ -36,6 +50,29 @@ const empty = () => ({
 });
 
 const isoToDateInput = (iso) => (iso ? new Date(iso).toISOString().slice(0, 10) : "");
+
+const poStatusLabel = (o) =>
+    o.short_closed ? "Short Closed" :
+    (o.delivery_status === "Delivered" && o.all_dispatches_marked) ? "Delivered" :
+    (o.delivery_status === "Delivered" || o.delivery_status === "Partial") ? "Partial" :
+    "Not Delivered";
+
+// Column accessors shared by sorting and the Excel-style filter checklists —
+// each returns the same value the column sorts by, so "Sort A to Z" and the
+// filter's distinct-value list always agree with each other.
+const poItemDisplay = (o) => (o.line_items?.length > 0 ? o.line_items.map((l) => l.item).join(", ") : o.item);
+const POColumnAccessors = {
+    client_name: (o) => o.client_name,
+    project: (o) => o.project || "",
+    item: poItemDisplay,
+    po_number: (o) => o.po_number,
+    po_date: (o) => (o.po_date ? fmtDate(o.po_date) : ""),
+    total_quantity: (o) => o.total_quantity,
+    delivered_quantity: (o) => o.delivered_quantity,
+    pending_quantity: (o) => o.pending_quantity,
+    validity_date: (o) => (o.validity_date ? fmtDate(o.validity_date) : ""),
+    status: poStatusLabel,
+};
 
 const PurchaseOrders = () => {
     const qc = useQueryClient();
@@ -129,7 +166,7 @@ const PurchaseOrders = () => {
         setImporting(true);
         const tid = toast.loading("Importing…");
         try {
-            const result = await importPurchaseOrders(importFile, importConflict);
+            const result = await importPurchaseOrders(importFile, importConflict, getCurrentUser());
             setImportResult(result);
             toast.success(
                 `Import done — Created: ${result.created}, Updated: ${result.updated}, Skipped: ${result.skipped}`,
@@ -165,14 +202,34 @@ const PurchaseOrders = () => {
         );
     }, [orders, search]);
 
+    const { filters: poFilters, setFilter: setPoFilter } = useColumnFilters();
+
+    // Excel-style column filters (checklists) narrow the search-filtered
+    // array further — every active column's Set of allowed values must match.
+    const columnFiltered = useMemo(() => {
+        const keys = Object.keys(poFilters);
+        if (keys.length === 0) return filtered;
+        return filtered.filter((o) =>
+            keys.every((k) => {
+                const v = POColumnAccessors[k](o);
+                return poFilters[k].has(v == null || v === "" ? "—" : String(v));
+            })
+        );
+    }, [filtered, poFilters]);
+
     // Single source of truth: sum the exact rows the table below renders
-    // (post-search-filter), reading each row's PO/Delivered/Pending Quantity
-    // straight off the same PurchaseOrder objects — no separate SQL query.
+    // (post-search-filter and post-column-filter), reading each row's
+    // PO/Delivered/Pending Quantity straight off the same PurchaseOrder
+    // objects — no separate SQL query.
     const totals = useMemo(() => ({
-        tot: filtered.reduce((s, o) => s + (o.total_quantity || 0), 0),
-        del: filtered.reduce((s, o) => s + (o.delivered_quantity || 0), 0),
-        pending: filtered.reduce((s, o) => s + (o.pending_quantity || 0), 0),
-    }), [filtered]);
+        tot: columnFiltered.reduce((s, o) => s + (o.total_quantity || 0), 0),
+        del: columnFiltered.reduce((s, o) => s + (o.delivered_quantity || 0), 0),
+        pending: columnFiltered.reduce((s, o) => s + (o.pending_quantity || 0), 0),
+    }), [columnFiltered]);
+
+    const { widths: poWidths, startResize: startPoResize } = useResizableColumns("colw:purchase-orders", PO_TABLE_WIDTHS);
+    const { sortedRows: sortedOrders, sortConfig: poSortConfig, requestSort: requestPoSort, setSort: setPoSort } = useSortableRows(columnFiltered);
+    const { getHeight: getPoRowHeight, startResize: startPoRowResize } = useResizableRows("rowh:purchase-orders", 52);
 
     const effectiveClient = form.clientName?.trim() || form.clientDropdown;
     const effectiveProject = form.project;
@@ -193,6 +250,7 @@ const PurchaseOrders = () => {
         setForm({
             clientName: "", clientDropdown: o.client_name,
             poNumber: o.po_number,
+            poDate: isoToDateInput(o.po_date) || new Date().toISOString().slice(0, 10),
             item: "", itemDropdown: o.item,
             uom: o.uom || "Nos",
             totalQuantity: o.total_quantity, deliveredQuantity: o.delivered_quantity,
@@ -339,6 +397,7 @@ const PurchaseOrders = () => {
         const payload = {
             client_name: effectiveClient,
             po_number: form.poNumber,
+            po_date: form.poDate ? new Date(form.poDate).toISOString() : null,
             project: form.project || null,
             gst: form.gst || "0",
             freight: Number(form.freight) || 0,
@@ -373,11 +432,11 @@ const PurchaseOrders = () => {
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                    <h2 className="text-2xl font-bold tracking-tight text-foreground">Purchase Orders</h2>
-                    <p className="text-sm text-muted-foreground mt-1">Track POs with quantities, delivery progress and activity log.</p>
-                </div>
+            <div className="text-center space-y-1">
+                <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight text-foreground">Purchase Orders</h2>
+                <p className="text-sm text-muted-foreground">Track POs with quantities, delivery progress and activity log.</p>
+            </div>
+            <div className="flex flex-wrap items-end justify-end gap-3">
                 <div className="flex flex-wrap gap-2">
                     <Button variant="outline" onClick={handleExport} className="border-green-500 text-green-700 hover:bg-green-50">
                         <Download className="h-4 w-4 mr-2" /> Export Excel
@@ -471,6 +530,11 @@ const PurchaseOrders = () => {
                             <div className="space-y-2">
                                 <Label>Purchase Order No. *</Label>
                                 <Input value={form.poNumber} onChange={(e) => set("poNumber", e.target.value)} placeholder="PO-2025-XXXX" />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>PO Date</Label>
+                                <Input type="date" value={form.poDate} onChange={(e) => set("poDate", e.target.value)} />
                             </div>
 
                             <div className="space-y-2">
@@ -758,68 +822,82 @@ const PurchaseOrders = () => {
                 </div>
             </Card>
 
-            <Card className="shadow-card overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                        <thead className="bg-muted/50 text-muted-foreground text-xs uppercase tracking-wider">
+            <Card className="shadow-card">
+                <StickyScrollArea>
+                    <table className="w-full text-sm table-fixed">
+                        <thead className="bg-muted/50 text-foreground text-sm font-bold uppercase tracking-wider">
                             <tr>
-                                <th className="text-left font-semibold px-1.5 py-3">Client</th>
-                                <th className="text-left font-semibold px-1.5 py-3">Project</th>
-                                <th className="text-left font-semibold px-1.5 py-3">Item</th>
-                                <th className="text-left font-semibold px-1.5 py-3">PO #</th>
-                                <th className="text-right font-semibold px-1.5 py-3">Qty</th>
-                                <th className="text-right font-semibold px-1.5 py-3">Del.</th>
-                                <th className="text-right font-semibold px-1.5 py-3">Pend.</th>
-                                <th className="text-left font-semibold px-1.5 py-3">Validity</th>
-                                <th className="text-left font-semibold px-1.5 py-3">Status</th>
-                                <th className="text-left font-semibold px-1.5 py-3">Activity</th>
-                                <th className="text-right font-semibold px-1.5 py-3">Actions</th>
+                                <SortableHeader label="S.No." width={poWidths.sno} onResizeStart={startPoResize("sno")} />
+                                <FilterableHeader label="Client" columnKey="client_name" accessor={POColumnAccessors.client_name} sortConfig={poSortConfig} setSort={setPoSort} width={poWidths.client_name} onResizeStart={startPoResize("client_name")} rows={filtered} filterValue={poFilters.client_name} onApplyFilter={setPoFilter} />
+                                <FilterableHeader label="Project" columnKey="project" accessor={POColumnAccessors.project} sortConfig={poSortConfig} setSort={setPoSort} width={poWidths.project} onResizeStart={startPoResize("project")} rows={filtered} filterValue={poFilters.project} onApplyFilter={setPoFilter} />
+                                <FilterableHeader label="Item" columnKey="item" accessor={POColumnAccessors.item} sortConfig={poSortConfig} setSort={setPoSort} width={poWidths.item} onResizeStart={startPoResize("item")} rows={filtered} filterValue={poFilters.item} onApplyFilter={setPoFilter} />
+                                <FilterableHeader label="PO #" columnKey="po_number" accessor={POColumnAccessors.po_number} sortConfig={poSortConfig} setSort={setPoSort} width={poWidths.po_number} onResizeStart={startPoResize("po_number")} rows={filtered} filterValue={poFilters.po_number} onApplyFilter={setPoFilter} />
+                                <FilterableHeader label="PO Date" columnKey="po_date" type="date" accessor={POColumnAccessors.po_date} sortConfig={poSortConfig} setSort={setPoSort} width={poWidths.po_date} onResizeStart={startPoResize("po_date")} rows={filtered} filterValue={poFilters.po_date} onApplyFilter={setPoFilter} />
+                                <FilterableHeader label="Qty" columnKey="total_quantity" type="number" align="right" accessor={POColumnAccessors.total_quantity} sortConfig={poSortConfig} setSort={setPoSort} width={poWidths.total_quantity} onResizeStart={startPoResize("total_quantity")} rows={filtered} filterValue={poFilters.total_quantity} onApplyFilter={setPoFilter} />
+                                <FilterableHeader label="Del." columnKey="delivered_quantity" type="number" align="right" accessor={POColumnAccessors.delivered_quantity} sortConfig={poSortConfig} setSort={setPoSort} width={poWidths.delivered_quantity} onResizeStart={startPoResize("delivered_quantity")} rows={filtered} filterValue={poFilters.delivered_quantity} onApplyFilter={setPoFilter} />
+                                <FilterableHeader label="Pend." columnKey="pending_quantity" type="number" align="right" accessor={POColumnAccessors.pending_quantity} sortConfig={poSortConfig} setSort={setPoSort} width={poWidths.pending_quantity} onResizeStart={startPoResize("pending_quantity")} rows={filtered} filterValue={poFilters.pending_quantity} onApplyFilter={setPoFilter} />
+                                <FilterableHeader label="Validity" columnKey="validity_date" type="date" accessor={POColumnAccessors.validity_date} sortConfig={poSortConfig} setSort={setPoSort} width={poWidths.validity_date} onResizeStart={startPoResize("validity_date")} rows={filtered} filterValue={poFilters.validity_date} onApplyFilter={setPoFilter} />
+                                <FilterableHeader label="Status" columnKey="status" accessor={POColumnAccessors.status} sortConfig={poSortConfig} setSort={setPoSort} width={poWidths.status} onResizeStart={startPoResize("status")} rows={filtered} filterValue={poFilters.status} onApplyFilter={setPoFilter} />
+                                <SortableHeader label="Activity" width={poWidths.activity} onResizeStart={startPoResize("activity")} />
+                                <SortableHeader label="Actions" align="right" width={poWidths.actions} onResizeStart={startPoResize("actions")} />
                             </tr>
                         </thead>
                         <tbody>
                             {isLoading && (
-                                <tr><td colSpan={12} className="px-5 py-12 text-center text-muted-foreground">Loading...</td></tr>
+                                <tr><td colSpan={13} className="px-5 py-12 text-center text-muted-foreground">Loading...</td></tr>
                             )}
-                            {filtered.map((o) => {
+                            {sortedOrders.map((o, idx) => {
                                 const lastAct = o.last_opened_at || o.last_updated_at || o.created_at;
                                 const lastBy = o.last_opened_by || o.last_updated_by || o.created_by || "—";
                                 return (
-                                    <tr key={o.id} className={`border-t border-border hover:bg-muted/30 text-sm${o.remark ? " bg-amber-50 dark:bg-amber-950/20" : ""}`}>
-                                        <td className="px-1.5 py-3 text-foreground font-semibold truncate max-w-[100px]" title={o.client_name}>{o.client_name}</td>
-                                        <td className="px-1.5 py-3 text-muted-foreground truncate max-w-[80px]" title={o.project}>{o.project}</td>
-                                        <td className="px-1.5 py-3 text-muted-foreground max-w-[120px] truncate" title={(o.line_items?.length > 0) ? o.line_items.map(l => l.item).join(", ") : o.item}>
+                                    <tr
+                                        key={o.id}
+                                        style={{ height: getPoRowHeight(o.id) }}
+                                        className={`relative border-t border-border hover:bg-muted/30 text-sm${o.remark ? " bg-amber-50 dark:bg-amber-950/20" : ""}`}
+                                    >
+                                        <td className="relative px-1.5 py-3 text-center text-muted-foreground">
+                                            {idx + 1}
+                                            <div
+                                                onMouseDown={startPoRowResize(o.id)}
+                                                className="group absolute left-0 bottom-0 w-full h-2.5 cursor-row-resize hover:bg-primary/20 active:bg-primary/40 z-10 flex items-end"
+                                                title="Drag to resize row"
+                                            >
+                                                <div className="w-full h-[3px] bg-border group-hover:bg-primary group-active:bg-primary rounded-full transition-colors" />
+                                            </div>
+                                        </td>
+                                        <td className="px-1.5 py-3 text-center text-foreground font-semibold truncate" title={o.client_name}>{o.client_name}</td>
+                                        <td className="px-1.5 py-3 text-center text-muted-foreground truncate" title={o.project}>{o.project}</td>
+                                        <td className="px-1.5 py-3 text-center text-muted-foreground truncate" title={(o.line_items?.length > 0) ? o.line_items.map(l => l.item).join(", ") : o.item}>
                                             {(o.line_items?.length > 0) ? o.line_items[0].item : o.item}
                                             {(o.line_items?.length > 1) && <span className="ml-1 text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">+{o.line_items.length - 1}</span>}
                                         </td>
-                                        <td className="px-1.5 py-3 font-medium text-foreground whitespace-nowrap text-xs">{o.po_number}</td>
-                                        <td className="px-1.5 py-3 text-right font-semibold whitespace-nowrap">{o.total_quantity} <span className="text-[10px] font-normal text-muted-foreground">{o.uom || "Nos"}</span></td>
-                                        <td className="px-1.5 py-3 text-right text-success font-bold whitespace-nowrap">{o.delivered_quantity} <span className="text-[10px] font-normal text-muted-foreground">{o.uom || "Nos"}</span></td>
-                                        <td className="px-1.5 py-3 text-right text-warning font-bold whitespace-nowrap">{o.pending_quantity} <span className="text-[10px] font-normal text-muted-foreground">{o.uom || "Nos"}</span></td>
-                                        <td className="px-1.5 py-3 text-muted-foreground whitespace-nowrap text-xs">{o.validity_date ? fmtDate(o.validity_date) : "—"}</td>
-                                        <td className="px-1.5 py-3 scale-90 origin-left -mr-4">
-                                            <StatusBadge
-                                                status={
-                                                    o.short_closed ? "Short Closed" :
-                                                    (o.delivery_status === "Delivered" && o.all_dispatches_marked) ? "Delivered" :
-                                                    (o.delivery_status === "Delivered" || o.delivery_status === "Partial") ? "Partial" :
-                                                    "Not Delivered"
-                                                }
-                                                label={
-                                                    o.short_closed ? "Short Closed" :
-                                                    (o.delivery_status === "Delivered" && o.all_dispatches_marked) ? "Delivered" :
-                                                    o.delivery_status === "Delivered" ? "Dispatched (Pending Challans)" :
-                                                    o.delivery_status
-                                                }
-                                            />
+                                        <td className="px-1.5 py-3 text-center font-medium text-foreground truncate text-xs" title={o.po_number}>{o.po_number}</td>
+                                        <td className="px-1.5 py-3 text-center text-muted-foreground whitespace-nowrap text-xs">{o.po_date ? fmtDate(o.po_date) : "—"}</td>
+                                        <td className="px-1.5 py-3 text-center font-semibold whitespace-nowrap">{o.total_quantity} <span className="text-[10px] font-normal text-muted-foreground">{o.uom || "Nos"}</span></td>
+                                        <td className="px-1.5 py-3 text-center text-success font-bold whitespace-nowrap">{o.delivered_quantity} <span className="text-[10px] font-normal text-muted-foreground">{o.uom || "Nos"}</span></td>
+                                        <td className="px-1.5 py-3 text-center text-warning font-bold whitespace-nowrap">{o.pending_quantity} <span className="text-[10px] font-normal text-muted-foreground">{o.uom || "Nos"}</span></td>
+                                        <td className="px-1.5 py-3 text-center text-muted-foreground whitespace-nowrap text-xs">{o.validity_date ? fmtDate(o.validity_date) : "—"}</td>
+                                        <td className="px-1.5 py-3">
+                                            <div className="flex justify-center">
+                                                <StatusBadge
+                                                    status={poStatusLabel(o)}
+                                                    label={
+                                                        o.short_closed ? "Short Closed" :
+                                                        (o.delivery_status === "Delivered" && o.all_dispatches_marked) ? "Delivered" :
+                                                        o.delivery_status === "Delivered" ? "Dispatched (Pending Challans)" :
+                                                        o.delivery_status
+                                                    }
+                                                />
+                                            </div>
                                         </td>
                                         <td className="px-1.5 py-3">
-                                            <div className="text-[11px] leading-tight">
-                                                <div className="font-bold text-foreground truncate max-w-[70px]">{lastBy}</div>
+                                            <div className="text-[11px] leading-tight text-center">
+                                                <div className="font-bold text-foreground truncate">{lastBy}</div>
                                                 <div className="text-muted-foreground whitespace-nowrap">{lastAct ? fmtDate(lastAct) : "—"}</div>
                                             </div>
                                         </td>
-                                        <td className="px-1.5 py-3 text-right">
-                                            <div className="flex gap-0.5 justify-end">
+                                        <td className="px-1.5 py-3 text-center">
+                                            <div className="flex gap-0.5 justify-center">
                                                 <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setViewing(o)} title="View details"><Eye className="h-3 w-3" /></Button>
                                                 <Button size="icon" variant="ghost" className="h-6 w-6"
                                                     onClick={() => {
@@ -853,12 +931,12 @@ const PurchaseOrders = () => {
                                     </tr>
                                 );
                             })}
-                            {!isLoading && filtered.length === 0 && (
-                                <tr><td colSpan={12} className="px-5 py-12 text-center text-muted-foreground">No purchase orders found.</td></tr>
+                            {!isLoading && sortedOrders.length === 0 && (
+                                <tr><td colSpan={13} className="px-5 py-12 text-center text-muted-foreground">No purchase orders found.</td></tr>
                             )}
                         </tbody>
                     </table>
-                </div>
+                </StickyScrollArea>
             </Card>
 
             <Dialog open={!!viewing} onOpenChange={(o) => !o && setViewing(null)}>
@@ -885,6 +963,12 @@ const PurchaseOrders = () => {
                             <div className="space-y-2">
                                 <Label>Purchase Order No.</Label>
                                 <Input value={viewing.po_number} disabled className="opacity-100 font-medium" />
+                            </div>
+
+                            {/* PO Date */}
+                            <div className="space-y-2">
+                                <Label>PO Date</Label>
+                                <Input type="date" value={viewing.po_date ? isoToDateInput(viewing.po_date) : ""} disabled className="opacity-100" />
                             </div>
 
                             {/* Validity Date */}
