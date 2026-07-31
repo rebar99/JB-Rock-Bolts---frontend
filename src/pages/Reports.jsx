@@ -22,6 +22,7 @@ import { useColumnFilters } from "@/hooks/useColumnFilters";
 import { SortableHeader } from "@/components/SortableHeader";
 import { FilterableHeader } from "@/components/FilterableHeader";
 import { StickyScrollArea } from "@/components/StickyScrollArea";
+import WorkOrderReport from "@/pages/WorkOrderReport";
 
 // Guards footer quantity totals against floating-point drift from repeated
 // addition (e.g. 0.1 + 0.2 producing 0.30000000000000004).
@@ -98,6 +99,7 @@ const Reports = () => {
     const qc = useQueryClient();
     const { products } = useConstants();
     const [searchParams] = useSearchParams();
+    const [reportSection, setReportSection] = useState("po");
     const initialTab = searchParams.get("tab");
     const [tab, setTab] = useState(
         ["completed", "sales", "pending"].includes(initialTab) ? initialTab : "sales"
@@ -265,6 +267,19 @@ const Reports = () => {
                 <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight text-foreground">Reports & Analytics</h2>
                 <p className="text-sm text-muted-foreground">Analyze your sales performance and order fulfillment.</p>
             </div>
+
+            {/* ── Report section selector ─────────────────────────────────────── */}
+            <Tabs value={reportSection} onValueChange={setReportSection} className="w-full">
+                <TabsList className="grid w-full grid-cols-2 mb-6 p-1 bg-muted/50 rounded-xl">
+                    <TabsTrigger value="po" className="rounded-lg py-2 transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-md dark:data-[state=active]:bg-white dark:data-[state=active]:text-slate-900">
+                        <FileText className="h-4 w-4 mr-2" /> Purchase Order Report
+                    </TabsTrigger>
+                    <TabsTrigger value="wo" className="rounded-lg py-2 transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-md dark:data-[state=active]:bg-white dark:data-[state=active]:text-slate-900">
+                        <ClipboardList className="h-4 w-4 mr-2" /> Work Order Report
+                    </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="po" className="space-y-6">
             <div className="flex flex-wrap items-end justify-end gap-3">
                 <div className="flex flex-wrap gap-2">
                     <Button onClick={() => setExportOpen(true)} variant="outline" className="border-green-500 text-green-700 hover:bg-green-50">
@@ -385,8 +400,8 @@ const Reports = () => {
                             <div className="flex items-center gap-3">
                                 <div className="h-11 w-11 rounded-xl bg-primary/10 grid place-items-center"><IndianRupee className="h-5 w-5 text-primary" /></div>
                                 <div>
-                                    <div className="text-xs uppercase tracking-wider text-muted-foreground">Filtered Revenue</div>
-                                    <div className="text-2xl font-bold text-foreground">{inr(salesData?.total_revenue ?? 0)}</div>
+                                    <div className="text-xs uppercase tracking-wider text-muted-foreground">Total Basic Sales</div>
+                                    <div className="text-2xl font-bold text-foreground">{inr(salesData?.rows?.reduce((s, r) => s + (r.subtotal ?? 0), 0) ?? 0)}</div>
                                 </div>
                             </div>
                         </Card>
@@ -394,17 +409,8 @@ const Reports = () => {
                             <div className="flex items-center gap-3">
                                 <div className="h-11 w-11 rounded-xl bg-blue-500/10 grid place-items-center"><TrendingUp className="h-5 w-5 text-blue-500" /></div>
                                 <div>
-                                    <div className="text-xs uppercase tracking-wider text-muted-foreground">Total GST</div>
+                                    <div className="text-xs uppercase tracking-wider text-muted-foreground">Total GST Amount</div>
                                     <div className="text-2xl font-bold text-foreground">{inr(salesData?.rows?.reduce((s, r) => s + (r.gst_amount ?? 0), 0) ?? 0)}</div>
-                                </div>
-                            </div>
-                        </Card>
-                        <Card className="p-5 shadow-card border-l-4 border-accent">
-                            <div className="flex items-center gap-3">
-                                <div className="h-11 w-11 rounded-xl bg-accent/15 grid place-items-center"><Package className="h-5 w-5 text-accent" /></div>
-                                <div>
-                                    <div className="text-xs uppercase tracking-wider text-muted-foreground">Records</div>
-                                    <div className="text-2xl font-bold text-foreground">{salesData?.record_count ?? 0}</div>
                                 </div>
                             </div>
                         </Card>
@@ -412,8 +418,17 @@ const Reports = () => {
                             <div className="flex items-center gap-3">
                                 <div className="h-11 w-11 rounded-xl bg-success/15 grid place-items-center"><TrendingUp className="h-5 w-5 text-success" /></div>
                                 <div>
-                                    <div className="text-xs uppercase tracking-wider text-muted-foreground">Avg Order Value</div>
-                                    <div className="text-2xl font-bold text-foreground">{inr(salesData?.avg_order_value ?? 0)}</div>
+                                    <div className="text-xs uppercase tracking-wider text-muted-foreground">Total Basic Sales + GST</div>
+                                    <div className="text-2xl font-bold text-foreground">{inr(salesData?.rows?.reduce((s, r) => s + (r.subtotal ?? 0) + (r.gst_amount ?? 0), 0) ?? 0)}</div>
+                                </div>
+                            </div>
+                        </Card>
+                        <Card className="p-5 shadow-card border-l-4 border-accent">
+                            <div className="flex items-center gap-3">
+                                <div className="h-11 w-11 rounded-xl bg-accent/15 grid place-items-center"><Package className="h-5 w-5 text-accent" /></div>
+                                <div>
+                                    <div className="text-xs uppercase tracking-wider text-muted-foreground">Total no. Invoice</div>
+                                    <div className="text-2xl font-bold text-foreground">{salesData?.record_count ?? 0}</div>
                                 </div>
                             </div>
                         </Card>
@@ -863,6 +878,12 @@ const Reports = () => {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+                </TabsContent>
+
+                <TabsContent value="wo" className="space-y-6">
+                    <WorkOrderReport />
+                </TabsContent>
+            </Tabs>
         </div>
     );
 };

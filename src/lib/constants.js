@@ -11,6 +11,8 @@ const FALLBACK = {
     payment_statuses: ["Pending", "Partial", "Paid"],
     delivery_statuses: ["Not Delivered", "Delivered"],
     inventory_statuses: ["In Stock", "Low Stock", "Out of Stock"],
+    wo_statuses: ["Pending", "In Progress", "Partial", "Completed", "Closed", "Cancelled"],
+    wo_priorities: ["Low", "Medium", "High", "Urgent"],
 };
 
 export function useConstants() {
