@@ -108,6 +108,80 @@ export const importPurchaseOrders = async (file, onConflict = "skip", createdBy)
     return res.json();
 };
 
+// ── Work Orders ────────────────────────────────────────────────────────────────
+export const fetchWorkOrders = (params) => get("/api/work-orders", params);
+export const fetchWorkOrder = (id, openedBy) =>
+    get(`/api/work-orders/${id}`, openedBy ? { opened_by: openedBy } : undefined);
+export const createWorkOrder = (body) => post("/api/work-orders", body);
+export const updateWorkOrder = (id, body) => put(`/api/work-orders/${id}`, body);
+export const deleteWorkOrder = (id, deletedBy) => del(`/api/work-orders/${id}`, deletedBy ? { deleted_by: deletedBy } : undefined);
+export const closeWorkOrder = (id, body) => post(`/api/work-orders/${id}/close`, body);
+export const fetchNextWONumber = () => get("/api/work-orders/next-number");
+export const uploadWorkOrderFile = async (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`${BASE}/api/work-orders/upload`, {
+        method: "POST",
+        body: formData,
+    });
+    if (!res.ok) throw new Error("Upload failed");
+    return res.json();
+};
+
+// ── Work Order Export / Import ────────────────────────────────────────────────
+export const exportWorkOrders = async () => {
+    const token = getToken();
+    const res = await fetch(`${BASE}/api/work-orders/export`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error("Export failed");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `work-orders-${Date.now()}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+};
+
+export const importWorkOrders = async (file, onConflict = "skip", createdBy) => {
+    const token = getToken();
+    const formData = new FormData();
+    formData.append("file", file);
+    const qs = createdBy ? `&created_by=${encodeURIComponent(createdBy)}` : "";
+    const res = await fetch(`${BASE}/api/work-orders/import?on_conflict=${onConflict}${qs}`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || "Import failed");
+    }
+    return res.json();
+};
+
+// ── Work Order Reports ────────────────────────────────────────────────────────
+export const fetchWorkOrderReport = (params) => get("/api/work-order-reports", params);
+
+export const exportWorkOrderReport = async (params = {}) => {
+    const token = getToken();
+    const qp = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => { if (v != null && v !== "") qp.set(k, v); });
+    const qs = qp.toString();
+    const res = await fetch(`${BASE}/api/work-order-reports/export${qs ? `?${qs}` : ""}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error("Export failed");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `work-order-report-${Date.now()}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+};
+
 // ── Sales ────────────────────────────────────────────────────────────────────
 export const fetchSales = (params) => get("/api/sales", params);
 export const fetchSale = (id) => get(`/api/sales/${id}`);
@@ -160,6 +234,63 @@ export const importSales = async (file, onConflict = "skip", createdBy) => {
     }
     return res.json();
 };
+
+// ── Work Order Sales ─────────────────────────────────────────────────────────
+export const fetchWorkOrderSales = (params) => get("/api/work-order-sales", params);
+export const fetchWorkOrderSale = (id) => get(`/api/work-order-sales/${id}`);
+export const createWorkOrderSale = (body) => post("/api/work-order-sales", body);
+export const updateWorkOrderSale = (id, body) => put(`/api/work-order-sales/${id}`, body);
+export const deleteWorkOrderSale = (id, deletedBy) => del(`/api/work-order-sales/${id}`, deletedBy ? { deleted_by: deletedBy } : undefined);
+export const addWorkOrderSaleActivity = (id, body) => post(`/api/work-order-sales/${id}/activities`, body);
+export const addWorkOrderSaleDispatch = (id, body) => post(`/api/work-order-sales/${id}/dispatches`, body);
+export const deleteWorkOrderSaleDispatch = (id, dispatchId, deletedBy) => del(`/api/work-order-sales/${id}/dispatches/${dispatchId}`, deletedBy ? { deleted_by: deletedBy } : undefined);
+export const markWorkOrderSaleDelivered = (id, body) => put(`/api/work-order-sales/${id}/mark-delivered`, body);
+export const uploadWorkOrderSaleFile = async (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`${BASE}/api/work-order-sales/upload`, {
+        method: "POST",
+        body: formData,
+    });
+    if (!res.ok) throw new Error("Upload failed");
+    return res.json();
+};
+
+// ── Work Order Sales Export / Import ──────────────────────────────────────────
+export const exportWorkOrderSales = async () => {
+    const token = getToken();
+    const res = await fetch(`${BASE}/api/work-order-sales/export`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error("Export failed");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `work-order-sales-${Date.now()}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+};
+
+export const importWorkOrderSales = async (file, onConflict = "skip", createdBy) => {
+    const token = getToken();
+    const formData = new FormData();
+    formData.append("file", file);
+    const qs = createdBy ? `&created_by=${encodeURIComponent(createdBy)}` : "";
+    const res = await fetch(`${BASE}/api/work-order-sales/import?on_conflict=${onConflict}${qs}`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || "Import failed");
+    }
+    return res.json();
+};
+
+// ── Work Order Sales Report ───────────────────────────────────────────────────
+export const fetchWorkOrderSalesReport = (params) => get("/api/work-order-reports/sales", params);
 
 // ── Inventory ────────────────────────────────────────────────────────────────
 export const fetchInventory = () => get("/api/inventory");
@@ -258,11 +389,20 @@ export const importCombinedReport = async (file, onConflict = "skip", createdBy)
 export const openPODocument = (poId) => {
     window.open(`${BASE}/api/documents/po/${poId}`, "_blank");
 };
+export const openWODocument = (woId) => {
+    window.open(`${BASE}/api/documents/wo/${woId}`, "_blank");
+};
 export const openInvoiceDocument = (saleId) => {
     window.open(`${BASE}/api/documents/invoice/${saleId}`, "_blank");
 };
 export const downloadInvoiceDocument = (saleId) => {
     window.open(`${BASE}/api/documents/invoice/${saleId}?download=true`, "_blank");
+};
+export const openWOInvoiceDocument = (saleId) => {
+    window.open(`${BASE}/api/documents/wo-invoice/${saleId}`, "_blank");
+};
+export const downloadWOInvoiceDocument = (saleId) => {
+    window.open(`${BASE}/api/documents/wo-invoice/${saleId}?download=true`, "_blank");
 };
 
 // ── Users ────────────────────────────────────────────────────────────────────
