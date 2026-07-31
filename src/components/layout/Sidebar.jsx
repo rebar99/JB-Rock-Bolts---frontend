@@ -1,11 +1,12 @@
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, FileBarChart2, FileText, ShoppingCart, UserCheck } from "lucide-react";
+import { LayoutDashboard, FileBarChart2, FileText, ShoppingCart, UserCheck, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 
 const items = [
     { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
     { to: "/purchase-orders", label: "Purchase Orders", icon: FileText },
+    { to: "/work-orders", label: "Work Orders", icon: ClipboardList },
     { to: "/sales-invoice", label: "Sales", icon: ShoppingCart },
     { to: "/reports", label: "Reports", icon: FileBarChart2 },
 ];

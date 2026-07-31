@@ -8,7 +8,8 @@ import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { AppLayout } from "@/components/layout/AppLayout";
 import Dashboard from "./pages/Dashboard";
 import PurchaseOrders from "./pages/PurchaseOrders";
-import SalesInvoice from "./pages/SalesInvoice";
+import WorkOrders from "./pages/WorkOrders";
+import Sales from "./pages/Sales";
 import Inventory from "./pages/Inventory";
 import Clients from "./pages/Clients";
 import Reports from "./pages/Reports";
@@ -64,7 +65,8 @@ const App = () => (
                             {/* Protected app routes */}
                             <Route path="/" element={<ProtectedRoute><AppLayout><Dashboard /></AppLayout></ProtectedRoute>} />
                             <Route path="/purchase-orders" element={<ProtectedRoute><AppLayout><PurchaseOrders /></AppLayout></ProtectedRoute>} />
-                            <Route path="/sales-invoice" element={<ProtectedRoute><AppLayout><SalesInvoice /></AppLayout></ProtectedRoute>} />
+                            <Route path="/work-orders" element={<ProtectedRoute><AppLayout><WorkOrders /></AppLayout></ProtectedRoute>} />
+                            <Route path="/sales-invoice" element={<ProtectedRoute><AppLayout><Sales /></AppLayout></ProtectedRoute>} />
                             <Route path="/inventory" element={<ProtectedRoute><AppLayout><Inventory /></AppLayout></ProtectedRoute>} />
                             <Route path="/clients" element={<ProtectedRoute><AppLayout><Clients /></AppLayout></ProtectedRoute>} />
                             <Route path="/reports" element={<ProtectedRoute><AppLayout><Reports /></AppLayout></ProtectedRoute>} />

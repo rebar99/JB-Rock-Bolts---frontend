@@ -10,6 +10,10 @@ const map = {
     Partial: "bg-primary/10 text-primary border-primary/20",
     Out: "bg-destructive/15 text-destructive border-destructive/30",
     "Short Closed": "bg-slate-500/15 text-slate-500 border-slate-500/30",
+    "In Progress": "bg-blue-500/15 text-blue-600 border-blue-500/30",
+    Completed: "bg-success/15 text-success border-success/30",
+    Closed: "bg-slate-500/15 text-slate-500 border-slate-500/30",
+    Cancelled: "bg-destructive/15 text-destructive border-destructive/30",
 };
 
 export const StatusBadge = ({ status, label }) => (
