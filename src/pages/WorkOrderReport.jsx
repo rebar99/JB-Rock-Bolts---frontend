@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,9 +8,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/StatusBadge";
-import { fetchWorkOrderReport, exportWorkOrderReport, fetchWorkOrder, openWODocument, fetchWorkOrderSalesReport } from "@/lib/api";
+import { fetchWorkOrderReport, exportWorkOrderReport, importWorkOrderReport, fetchWorkOrder, openWODocument, fetchWorkOrderSalesReport } from "@/lib/api";
 import { inr, fmtDate, fmtDateTime, round2 } from "@/lib/format";
-import { Download, Printer, Search, ClipboardList, CheckCircle2, Clock, TrendingUp, Eye, BarChart3, IndianRupee } from "lucide-react";
+import { Download, Upload, Search, ClipboardList, CheckCircle2, Clock, TrendingUp, Eye, BarChart3, IndianRupee } from "lucide-react";
 import { toast } from "sonner";
 import { useSortableRows } from "@/hooks/useSortableRows";
 import { useResizableColumns } from "@/hooks/useResizableColumns";
@@ -77,6 +77,8 @@ const applyColumnFilters = (rows, filters, accessors) => {
 
 const WorkOrderReport = () => {
     const [search, setSearch] = useState("");
+    const queryClient = useQueryClient();
+    const importInputRef = useRef(null);
 
     const { data, isLoading } = useQuery({
         queryKey: ["workOrderReport"],
@@ -173,7 +175,23 @@ const WorkOrderReport = () => {
         }
     };
 
-    const handlePrint = () => window.print();
+    const handleImportClick = () => importInputRef.current?.click();
+
+    const handleImportFileChange = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const tid = toast.loading("Importing report…");
+        try {
+            await importWorkOrderReport(file);
+            toast.success("Work Order Report imported", { id: tid });
+            queryClient.invalidateQueries({ queryKey: ["workOrderReport"] });
+            queryClient.invalidateQueries({ queryKey: ["workOrderSalesReport"] });
+        } catch (err) {
+            toast.error("Import failed: " + err.message, { id: tid });
+        } finally {
+            e.target.value = "";
+        }
+    };
 
     const [selectedId, setSelectedId] = useState(null);
     const { data: selected, isLoading: selectedLoading } = useQuery({
@@ -189,9 +207,16 @@ const WorkOrderReport = () => {
                     <Button onClick={handleExport} variant="outline" className="border-green-500 text-green-700 hover:bg-green-50">
                         <Download className="h-4 w-4 mr-2" /> Export Excel
                     </Button>
-                    <Button onClick={handlePrint} variant="outline" className="border-blue-500 text-blue-700 hover:bg-blue-50">
-                        <Printer className="h-4 w-4 mr-2" /> Print Report
+                    <Button onClick={handleImportClick} variant="outline" className="border-blue-500 text-blue-700 hover:bg-blue-50">
+                        <Upload className="h-4 w-4 mr-2" /> Import Excel
                     </Button>
+                    <input
+                        ref={importInputRef}
+                        type="file"
+                        accept=".xlsx"
+                        className="hidden"
+                        onChange={handleImportFileChange}
+                    />
                 </div>
             </div>
 

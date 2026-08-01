@@ -182,6 +182,23 @@ export const exportWorkOrderReport = async (params = {}) => {
     URL.revokeObjectURL(url);
 };
 
+export const importWorkOrderReport = async (file, onConflict = "skip", createdBy) => {
+    const token = getToken();
+    const formData = new FormData();
+    formData.append("file", file);
+    const qs = createdBy ? `&created_by=${encodeURIComponent(createdBy)}` : "";
+    const res = await fetch(`${BASE}/api/work-order-reports/import-combined?on_conflict=${onConflict}${qs}`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || "Import failed");
+    }
+    return res.json();
+};
+
 // ── Sales ────────────────────────────────────────────────────────────────────
 export const fetchSales = (params) => get("/api/sales", params);
 export const fetchSale = (id) => get(`/api/sales/${id}`);
