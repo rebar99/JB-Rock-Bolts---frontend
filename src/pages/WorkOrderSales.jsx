@@ -9,13 +9,14 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Checkbox } from "@/components/ui/checkbox";
 import { StatusBadge } from "@/components/StatusBadge";
 import { inr, fmtDate, fmtDateTime, round2 } from "@/lib/format";
 import { getCurrentUser } from "@/lib/currentUser";
 import { useConstants } from "@/lib/constants";
 import {
     fetchWorkOrders, fetchWorkOrderSales, fetchWorkOrderSale, createWorkOrderSale, updateWorkOrderSale,
-    deleteWorkOrderSale as deleteWorkOrderSaleApi, addWorkOrderSaleActivity, addWorkOrderSaleDispatch, openWOInvoiceDocument, downloadWOInvoiceDocument,
+    deleteWorkOrderSale as deleteWorkOrderSaleApi, bulkDeleteWorkOrderSales, addWorkOrderSaleActivity, addWorkOrderSaleDispatch, openWOInvoiceDocument, downloadWOInvoiceDocument,
     uploadWorkOrderSaleFile, exportWorkOrderSales, importWorkOrderSales,
 } from "@/lib/api";
 import { toast } from "sonner";
@@ -60,6 +61,21 @@ const WorkOrderSales = () => {
             toast.error(err.message || "Failed to delete sale record");
         }
     });
+    const bulkDeleteMutation = useMutation({
+        mutationFn: (ids) => bulkDeleteWorkOrderSales(ids, getCurrentUser()),
+        onSuccess: (result) => {
+            invalidateSales();
+            setSelectedIds(new Set());
+            if (result.errors?.length) {
+                toast.warning(`Deleted ${result.deleted.length} sale(s), ${result.errors.length} failed`);
+            } else {
+                toast.success(`Deleted ${result.deleted.length} sale(s)`);
+            }
+        },
+        onError: (err) => {
+            toast.error(err.message || "Bulk delete failed");
+        }
+    });
     const activityMutation = useMutation({ mutationFn: ({ id, body }) => addWorkOrderSaleActivity(id, body), onSuccess: () => qc.invalidateQueries({ queryKey: ["work-order-sales"] }) });
 
     // Expand/collapse product list per sale card
@@ -99,6 +115,8 @@ const WorkOrderSales = () => {
     const [dispatchTarget, setDispatchTarget] = useState(null);
     const [viewSale, setViewSale] = useState(null);
     const [itemToDelete, setItemToDelete] = useState(null);
+    const [selectedIds, setSelectedIds] = useState(() => new Set());
+    const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
     const [search, setSearch] = useState("");
     const [editOpen, setEditOpen] = useState(false);
     const [editingSale, setEditingSale] = useState(null);
@@ -583,6 +601,14 @@ const WorkOrderSales = () => {
             const freight = Number(freshSale.freight) || 0;
             const grand_total = subtotal + gst_amount + freight;
 
+            // Newly uploaded invoice files from this dispatch session are
+            // appended onto whatever was already on the sale — a "Dispatch
+            // More" action shouldn't wipe out documents uploaded during an
+            // earlier dispatch on the same sale.
+            const existingInvoiceUrls = freshSale.invoice_url ? freshSale.invoice_url.split(";") : [];
+            const newInvoiceUrls = invoiceUrl ? invoiceUrl.split(";") : [];
+            const combinedInvoiceUrl = [...existingInvoiceUrls, ...newInvoiceUrls].filter(Boolean).join(";") || null;
+
             try {
                 await updateMutation.mutateAsync({
                     id: dispatchTarget.id,
@@ -591,6 +617,7 @@ const WorkOrderSales = () => {
                         subtotal,
                         gst_amount,
                         grand_total,
+                        invoice_url: combinedInvoiceUrl,
                         updated_by: getCurrentUser()
                     }
                 });
@@ -666,7 +693,7 @@ const WorkOrderSales = () => {
                     grand_total,
                     payment_status: "Pending",
                     payment_note: null,
-                    invoice_url: null,
+                    invoice_url: invoiceUrl || null,
                     invoice_number: manualInvoiceNumber || null,
                     dispatch_from: dispatchFrom || null,
                     ship_to: woData.site_location || null,
@@ -945,6 +972,18 @@ const WorkOrderSales = () => {
         );
     }, [sales, search]);
 
+    const allVisibleSelected = filteredSales.length > 0 && filteredSales.every((s) => selectedIds.has(s.id));
+    const toggleSelectAll = () => {
+        setSelectedIds(allVisibleSelected ? new Set() : new Set(filteredSales.map((s) => s.id)));
+    };
+    const toggleSelectOne = (id) => {
+        setSelectedIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+        });
+    };
+
     return (
         <TooltipProvider>
         <div className="space-y-6">
@@ -952,6 +991,17 @@ const WorkOrderSales = () => {
                 <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight text-foreground">Work Order Sales</h2>
                 <p className="text-sm text-muted-foreground">Manage dispatch, invoicing, payments and activity tracking for work orders.</p>
             </div>
+            {selectedIds.size > 0 && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-2.5">
+                    <span className="text-sm font-medium text-foreground">{selectedIds.size} selected</span>
+                    <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>Clear</Button>
+                        <Button variant="destructive" size="sm" onClick={() => setBulkDeleteConfirmOpen(true)}>
+                            <Trash2 className="h-4 w-4 mr-2" /> Delete Selected
+                        </Button>
+                    </div>
+                </div>
+            )}
             <div className="flex flex-wrap items-end justify-end gap-3">
                 <div className="flex flex-wrap gap-2">
                     <Button variant="outline" onClick={handleSalesExport} className="border-green-500 text-green-700 hover:bg-green-50">
@@ -1500,9 +1550,28 @@ const WorkOrderSales = () => {
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <div className="space-y-1">
-                                    <Label>Invoice No.</Label>
-                                    <Input placeholder="Enter invoice number" value={manualInvoiceNumber} onChange={e => setManualInvoiceNumber(e.target.value)} />
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                        <Label>Invoice No.</Label>
+                                        <Input placeholder="Enter invoice number" value={manualInvoiceNumber} onChange={e => setManualInvoiceNumber(e.target.value)} />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label>Upload Invoice Document(s) {invoiceUrl && <span className="ml-1 text-primary">({invoiceUrl.split(";").filter(Boolean).length})</span>}</Label>
+                                        <div className="space-y-2">
+                                            <Input type="file" multiple className="hidden" id="dispatch-wo-invoice-file-upload" onChange={handleInvoiceUpload} accept=".pdf,.jpg,.jpeg,.png" />
+                                            <Button type="button" variant="outline" className="w-full border-slate-900 text-slate-900 hover:bg-slate-50" onClick={() => document.getElementById("dispatch-wo-invoice-file-upload").click()}>
+                                                <FileText className={`h-4 w-4 mr-2 ${invoiceUrl ? "text-green-500" : "text-red-500"}`} />
+                                                {invoiceUrl ? `${invoiceUrl.split(";").length} File(s) Uploaded` : "Upload Invoice(s)"}
+                                            </Button>
+                                            {invoiceUrl && (
+                                                <div className="grid grid-cols-1 gap-2 mt-2">
+                                                    {invoiceUrl.split(";").map((url, i) => (
+                                                        <FileItem key={i} url={url} onRemove={() => handleRemoveFile("invoice", url)} />
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                                     <div className="space-y-1">
@@ -1707,10 +1776,18 @@ const WorkOrderSales = () => {
             {/* Search bar */}
             {sales.length > 1 && (
                 <Card className="p-4 shadow-card">
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input className="pl-9" placeholder="Search by WO number, client, item, project..."
-                            value={search} onChange={(e) => setSearch(e.target.value)} />
+                    <div className="flex items-center gap-3">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input className="pl-9" placeholder="Search by WO number, client, item, project..."
+                                value={search} onChange={(e) => setSearch(e.target.value)} />
+                        </div>
+                        {filteredSales.length > 0 && (
+                            <label className="flex items-center gap-2 text-sm text-muted-foreground shrink-0 cursor-pointer">
+                                <Checkbox checked={allVisibleSelected} onCheckedChange={toggleSelectAll} aria-label="Select all" />
+                                Select All
+                            </label>
+                        )}
                     </div>
                 </Card>
             )}
@@ -1736,12 +1813,15 @@ const WorkOrderSales = () => {
                         return (
                             <Card key={sale.id} className={`p-5 shadow-card space-y-4${sale.payment_note ? " bg-amber-50 dark:bg-amber-950/20" : ""}`}>
                                 <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <div>
+                                    <div className="flex items-center gap-3">
+                                        <Checkbox checked={selectedIds.has(sale.id)} onCheckedChange={() => toggleSelectOne(sale.id)} aria-label={`Select sale ${sale.invoice_number || sale.wo_number}`} />
+                                        <div>
                                         <span className="font-semibold text-foreground">{sale.wo_number}</span>
                                         <span className="ml-2 text-sm text-muted-foreground">— {sale.client_name}</span>
                                         {sale.invoice_number && (
                                             <span className="ml-2 text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">{sale.invoice_number}</span>
                                         )}
+                                        </div>
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <StatusBadge
@@ -1933,6 +2013,27 @@ const WorkOrderSales = () => {
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setItemToDelete(null)}>Cancel</Button>
                         <Button variant="destructive" onClick={confirmDeleteSale} disabled={deleteMutation.isPending}>Delete</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={bulkDeleteConfirmOpen} onOpenChange={setBulkDeleteConfirmOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader><DialogTitle>Confirm Bulk Deletion</DialogTitle></DialogHeader>
+                    <div className="py-4">
+                        <p className="text-sm text-muted-foreground">
+                            Delete {selectedIds.size} selected sale{selectedIds.size === 1 ? "" : "s"}? This action cannot be undone.
+                        </p>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setBulkDeleteConfirmOpen(false)}>Cancel</Button>
+                        <Button
+                            variant="destructive"
+                            disabled={bulkDeleteMutation.isPending}
+                            onClick={() => { bulkDeleteMutation.mutate(Array.from(selectedIds)); setBulkDeleteConfirmOpen(false); }}
+                        >
+                            Delete Selected
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

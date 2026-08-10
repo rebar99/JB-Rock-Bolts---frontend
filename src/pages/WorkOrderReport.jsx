@@ -2,15 +2,18 @@ import { useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/StatusBadge";
-import { fetchWorkOrderReport, exportWorkOrderReport, importWorkOrderReport, fetchWorkOrder, openWODocument, fetchWorkOrderSalesReport } from "@/lib/api";
+import { fetchWorkOrderReport, fetchWorkOrder, openWODocument, fetchWorkOrderSalesReport, exportCombinedWorkOrderReport, importCombinedWorkOrderReport } from "@/lib/api";
 import { inr, fmtDate, fmtDateTime, round2 } from "@/lib/format";
-import { Download, Upload, Search, ClipboardList, CheckCircle2, Clock, TrendingUp, Eye, BarChart3, IndianRupee } from "lucide-react";
+import { getCurrentUser } from "@/lib/currentUser";
+import { Download, Upload, UploadCloud, FileText, Search, ClipboardList, CheckCircle2, Clock, TrendingUp, Eye, BarChart3, IndianRupee, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { useSortableRows } from "@/hooks/useSortableRows";
 import { useResizableColumns } from "@/hooks/useResizableColumns";
@@ -29,6 +32,12 @@ const pillTabClass =
     "data-[state=inactive]:bg-card data-[state=inactive]:text-foreground data-[state=inactive]:border-border " +
     "data-[state=inactive]:hover:border-primary/50 data-[state=inactive]:hover:bg-muted/50 " +
     "data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md";
+
+const SHEET_OPTIONS = [
+    { id: "completed", label: "Completed WO Report", desc: "Work orders that are fully completed" },
+    { id: "sales",     label: "Sales Report",        desc: "Invoice records with payment status" },
+    { id: "pending",   label: "Pending WOs Report",  desc: "Open work orders with pending values" },
+];
 
 const COMPLETED_WOR_WIDTHS = { sno: 56, wo_date: 100, client_name: 150, project: 130, wo_number: 130, item: 160, total_quantity: 110, completed_quantity: 110 };
 const SALES_WOR_WIDTHS = { sno: 56, date: 100, invoice_number: 130, wo_number: 130, subtotal: 110, gst_amount: 110, grand_total: 120, payment_status: 100 };
@@ -165,34 +174,6 @@ const WorkOrderReport = () => {
     const { widths: pendingWidths, startResize: startPendingResize } = useResizableColumns("colw:wor-pending", PENDING_WOR_WIDTHS);
     const { sortedRows: sortedPendingRows, sortConfig: pendingSortConfig, setSort: setPendingSort } = useSortableRows(pendingFilteredRows);
 
-    const handleExport = async () => {
-        const tid = toast.loading("Preparing Excel export…");
-        try {
-            await exportWorkOrderReport();
-            toast.success("Work Order Report exported", { id: tid });
-        } catch (err) {
-            toast.error("Export failed: " + err.message, { id: tid });
-        }
-    };
-
-    const handleImportClick = () => importInputRef.current?.click();
-
-    const handleImportFileChange = async (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        const tid = toast.loading("Importing report…");
-        try {
-            await importWorkOrderReport(file);
-            toast.success("Work Order Report imported", { id: tid });
-            queryClient.invalidateQueries({ queryKey: ["workOrderReport"] });
-            queryClient.invalidateQueries({ queryKey: ["workOrderSalesReport"] });
-        } catch (err) {
-            toast.error("Import failed: " + err.message, { id: tid });
-        } finally {
-            e.target.value = "";
-        }
-    };
-
     const [selectedId, setSelectedId] = useState(null);
     const { data: selected, isLoading: selectedLoading } = useQuery({
         queryKey: ["work-order-view", selectedId],
@@ -200,14 +181,82 @@ const WorkOrderReport = () => {
         enabled: !!selectedId,
     });
 
+    // ── Combined export dialog ───────────────────────────────────────────────
+    const qc = useQueryClient();
+    const [exportOpen, setExportOpen] = useState(false);
+    const [exportSheets, setExportSheets] = useState(["completed", "sales", "pending"]);
+    const [exportFrom, setExportFrom] = useState("");
+    const [exportTo, setExportTo] = useState("");
+    const [exporting, setExporting] = useState(false);
+
+    const toggleSheet = (id, checked) =>
+        setExportSheets(prev => checked ? [...prev, id] : prev.filter(s => s !== id));
+
+    const handleCombinedExport = async () => {
+        if (exportSheets.length === 0) return toast.error("Select at least one report section");
+        setExporting(true);
+        const tid = toast.loading("Preparing combined Excel export…");
+        try {
+            const params = {};
+            if (exportFrom) params.from_date = new Date(exportFrom).toISOString();
+            if (exportTo)   params.to_date   = new Date(exportTo).toISOString();
+            await exportCombinedWorkOrderReport(exportSheets, params);
+            toast.success(
+                `Exported ${exportSheets.length} sheet${exportSheets.length > 1 ? "s" : ""} to Excel`,
+                { id: tid }
+            );
+            setExportOpen(false);
+        } catch (err) {
+            toast.error("Export failed: " + err.message, { id: tid });
+        } finally {
+            setExporting(false);
+        }
+    };
+
+    // ── Combined import (backup restore) ────────────────────────────────────
+    const [importOpen, setImportOpen] = useState(false);
+    const [importFile, setImportFile] = useState(null);
+    const [importConflict, setImportConflict] = useState("skip");
+    const [importing, setImporting] = useState(false);
+    const [importResult, setImportResult] = useState(null);
+    const importFileRef = useRef(null);
+
+    const openImport = () => {
+        setImportFile(null);
+        setImportResult(null);
+        setImportOpen(true);
+    };
+
+    const handleImport = async () => {
+        if (!importFile) return toast.error("Please select an Excel (.xlsx) file");
+        setImporting(true);
+        const tid = toast.loading("Importing…");
+        try {
+            const result = await importCombinedWorkOrderReport(importFile, importConflict, getCurrentUser());
+            setImportResult(result);
+            toast.success(
+                `Import done — Created: ${result.created}, Updated: ${result.updated}, Skipped: ${result.skipped}`,
+                { id: tid, duration: 6000 }
+            );
+            qc.invalidateQueries({ queryKey: ["workOrderReport"] });
+            qc.invalidateQueries({ queryKey: ["workOrderSalesReport"] });
+            qc.invalidateQueries({ queryKey: ["work-orders"] });
+            qc.invalidateQueries({ queryKey: ["work-order-sales"] });
+        } catch (err) {
+            toast.error("Import failed: " + err.message, { id: tid });
+        } finally {
+            setImporting(false);
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex flex-wrap items-end justify-end gap-3">
                 <div className="flex flex-wrap gap-2">
-                    <Button onClick={handleExport} variant="outline" className="border-green-500 text-green-700 hover:bg-green-50">
+                    <Button onClick={() => setExportOpen(true)} variant="outline" className="border-green-500 text-green-700 hover:bg-green-50">
                         <Download className="h-4 w-4 mr-2" /> Export Excel
                     </Button>
-                    <Button onClick={handleImportClick} variant="outline" className="border-blue-500 text-blue-700 hover:bg-blue-50">
+                    <Button onClick={openImport} variant="outline" className="border-blue-500 text-blue-700 hover:bg-blue-50">
                         <Upload className="h-4 w-4 mr-2" /> Import Excel
                     </Button>
                     <input
@@ -566,6 +615,167 @@ const WorkOrderReport = () => {
                                 <Printer className="h-4 w-4 mr-2" /> Print
                             </Button>
                         )}
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* ── Combined Export Dialog ──────────────────────────────────────── */}
+            <Dialog open={exportOpen} onOpenChange={(o) => { if (!exporting) setExportOpen(o); }}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Download className="h-5 w-5 text-green-600" />
+                            Export Reports to Excel
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-5 py-2">
+                        <div className="space-y-3">
+                            <Label className="text-sm font-semibold">Select report sections to export</Label>
+                            <p className="text-xs text-muted-foreground">
+                                Each selected section will appear as a separate sheet in one Excel file.
+                            </p>
+                            {SHEET_OPTIONS.map(({ id, label, desc }) => (
+                                <div key={id} className="flex items-start gap-3 rounded-lg border border-border p-3 hover:bg-muted/30 transition-colors">
+                                    <Checkbox
+                                        id={`wo-exp-${id}`}
+                                        checked={exportSheets.includes(id)}
+                                        onCheckedChange={(checked) => toggleSheet(id, checked === true)}
+                                        className="mt-0.5"
+                                    />
+                                    <div className="space-y-0.5 leading-tight">
+                                        <Label htmlFor={`wo-exp-${id}`} className="cursor-pointer font-medium text-sm">{label}</Label>
+                                        <p className="text-xs text-muted-foreground">{desc}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label className="text-sm font-semibold">Date range <span className="font-normal text-muted-foreground">(optional — applies to Completed &amp; Sales)</span></Label>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1">
+                                    <Label className="text-xs text-muted-foreground">From</Label>
+                                    <Input type="date" value={exportFrom} onChange={(e) => setExportFrom(e.target.value)} />
+                                </div>
+                                <div className="space-y-1">
+                                    <Label className="text-xs text-muted-foreground">To</Label>
+                                    <Input type="date" value={exportTo} onChange={(e) => setExportTo(e.target.value)} />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setExportOpen(false)} disabled={exporting}>Cancel</Button>
+                        <Button
+                            onClick={handleCombinedExport}
+                            disabled={exportSheets.length === 0 || exporting}
+                            className="bg-green-600 hover:bg-green-700 text-white"
+                        >
+                            {exporting
+                                ? "Exporting…"
+                                : `Export${exportSheets.length > 0 ? ` (${exportSheets.length} sheet${exportSheets.length > 1 ? "s" : ""})` : ""}`}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* ── Import Dialog (backup restore) ──────────────────────────────── */}
+            <Dialog open={importOpen} onOpenChange={(o) => { setImportOpen(o); if (!o) { setImportFile(null); setImportResult(null); } }}>
+                <DialogContent className="sm:max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Upload className="h-5 w-5 text-blue-600" />
+                            Import Work Order Backup Data
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                        <p className="text-sm text-muted-foreground">
+                            Upload a Work Order backup Excel file. Sheets are detected by name and imported automatically:
+                        </p>
+                        <ul className="text-xs text-muted-foreground space-y-1 pl-2 border-l-2 border-border">
+                            <li><span className="font-medium text-foreground">"Work Orders"</span> → Work Orders module</li>
+                            <li><span className="font-medium text-foreground">"Work Order Sales"</span> → Work Order Sales module</li>
+                        </ul>
+
+                        <div className="space-y-2">
+                            <Label>Select file (.xlsx)</Label>
+                            <div
+                                className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:border-primary transition-colors"
+                                onClick={() => importFileRef.current?.click()}
+                            >
+                                {importFile ? (
+                                    <div className="flex items-center justify-center gap-2 text-sm text-green-700">
+                                        <FileText className="h-4 w-4" />
+                                        <span className="font-medium">{importFile.name}</span>
+                                        <span className="text-muted-foreground">({(importFile.size / 1024).toFixed(1)} KB)</span>
+                                    </div>
+                                ) : (
+                                    <div className="text-muted-foreground text-sm">
+                                        <UploadCloud className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
+                                        Click to choose or drop a file here
+                                    </div>
+                                )}
+                            </div>
+                            <input
+                                ref={importFileRef}
+                                type="file"
+                                className="hidden"
+                                accept=".xlsx"
+                                onChange={(e) => { setImportFile(e.target.files[0] || null); setImportResult(null); }}
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>If record already exists</Label>
+                            <Select value={importConflict} onValueChange={setImportConflict}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="skip">Skip — keep existing record (safe)</SelectItem>
+                                    <SelectItem value="update">Update — overwrite matching record</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        {importResult && (
+                            <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm space-y-2">
+                                <div className="font-semibold text-foreground">Import Results</div>
+                                <div className="flex gap-4 flex-wrap text-xs">
+                                    <span className="text-green-700">Total Created: <strong>{importResult.created}</strong></span>
+                                    <span className="text-blue-700">Total Updated: <strong>{importResult.updated}</strong></span>
+                                    <span className="text-orange-600">Total Skipped: <strong>{importResult.skipped}</strong></span>
+                                </div>
+                                {importResult.sheets && Object.entries(importResult.sheets).map(([sheetName, r]) => (
+                                    <div key={sheetName} className="border-t border-border pt-2">
+                                        <div className="font-medium text-xs text-muted-foreground mb-1">{sheetName}</div>
+                                        <div className="flex gap-3 flex-wrap text-xs">
+                                            <span className="text-green-700">Created: <strong>{r.created}</strong></span>
+                                            <span className="text-blue-700">Updated: <strong>{r.updated}</strong></span>
+                                            <span className="text-orange-600">Skipped: <strong>{r.skipped}</strong></span>
+                                        </div>
+                                    </div>
+                                ))}
+                                {importResult.errors?.length > 0 && (
+                                    <div className="border-t border-border pt-2">
+                                        <div className="text-destructive font-medium text-xs mb-1">Errors ({importResult.errors.length}):</div>
+                                        <ul className="space-y-0.5 max-h-28 overflow-y-auto">
+                                            {importResult.errors.map((e, i) => (
+                                                <li key={i} className="text-destructive text-xs">• {e}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setImportOpen(false)}>Close</Button>
+                        <Button
+                            onClick={handleImport}
+                            disabled={!importFile || importing}
+                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                            {importing ? "Importing…" : "Import"}
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

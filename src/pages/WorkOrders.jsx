@@ -7,15 +7,16 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { StatusBadge } from "@/components/StatusBadge";
 import { inr, fmtDate, fmtDateTime } from "@/lib/format";
 import { getCurrentUser } from "@/lib/currentUser";
 import { useConstants } from "@/lib/constants";
 import {
     fetchWorkOrders, createWorkOrder, updateWorkOrder,
-    deleteWorkOrder, fetchWorkOrder, openWODocument, closeWorkOrder,
+    deleteWorkOrder, bulkDeleteWorkOrders, fetchWorkOrder, openWODocument, closeWorkOrder,
     createClient, createProject, fetchProjects, fetchNextWONumber,
-    exportWorkOrders, importWorkOrders,
+    exportWorkOrders, importWorkOrders, uploadWorkOrderFile,
 } from "@/lib/api";
 import { Pencil, Plus, Search, Trash2, Eye, FileText, Package, CheckCircle2, Clock, Printer, X, Download, Upload, UploadCloud, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -51,10 +52,16 @@ const empty = () => ({
     targetCompletionDate: "",
     remarks: "",
     status: "Pending",
+    fileUrl: "",
     lineItems: [emptyLineItem()],
 });
 
-const isoToDateInput = (iso) => (iso ? new Date(iso).toISOString().slice(0, 10) : "");
+// Pulls the calendar date straight off the ISO string (e.g. "2026-07-02" from
+// "2026-07-02T00:00:00") instead of round-tripping through `new Date()` — a
+// browser not in UTC would otherwise shift the date by a day (local midnight
+// converted to UTC can land on the previous day), which made an untouched
+// date field look "changed" on every save.
+const isoToDateInput = (iso) => (iso ? String(iso).slice(0, 10) : "");
 
 const woItemDisplay = (o) => (o.line_items?.length > 0 ? o.line_items.map((l) => l.item).join(", ") : o.item);
 const WOColumnAccessors = {
@@ -72,7 +79,7 @@ const WOColumnAccessors = {
 
 const WorkOrders = () => {
     const qc = useQueryClient();
-    const { clients, projects, uom_options, wo_statuses, wo_priorities } = useConstants();
+    const { wo_clients: clients, projects, uom_options, wo_statuses, wo_priorities } = useConstants();
 
     const { data: orders = [], isLoading } = useQuery({
         queryKey: ["work-orders"],
@@ -94,6 +101,21 @@ const WorkOrders = () => {
         },
         onError: (err) => {
             toast.error(err.message || "Failed to delete Work Order");
+        }
+    });
+    const bulkDeleteMutation = useMutation({
+        mutationFn: (ids) => bulkDeleteWorkOrders(ids, getCurrentUser()),
+        onSuccess: (result) => {
+            invalidate();
+            setSelectedIds(new Set());
+            if (result.errors?.length) {
+                toast.warning(`Deleted ${result.deleted.length} work order(s), ${result.errors.length} failed`);
+            } else {
+                toast.success(`Deleted ${result.deleted.length} work order(s)`);
+            }
+        },
+        onError: (err) => {
+            toast.error(err.message || "Bulk delete failed");
         }
     });
     const markOpenedMutation = useMutation({ mutationFn: (id) => fetchWorkOrder(id, getCurrentUser()), onSuccess: invalidate });
@@ -126,6 +148,8 @@ const WorkOrders = () => {
     const [form, setForm] = useState(empty());
     const [viewing, setViewing] = useState(null);
     const [itemToDelete, setItemToDelete] = useState(null);
+    const [selectedIds, setSelectedIds] = useState(() => new Set());
+    const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
     const [generatingNumber, setGeneratingNumber] = useState(false);
 
     const [closeItem, setCloseItem] = useState(null);
@@ -209,12 +233,24 @@ const WorkOrders = () => {
     const { sortedRows: sortedOrders, sortConfig: woSortConfig, requestSort: requestWoSort, setSort: setWoSort } = useSortableRows(columnFiltered);
     const { getHeight: getWoRowHeight, startResize: startWoRowResize } = useResizableRows("rowh:work-orders", 52);
 
+    const allVisibleSelected = sortedOrders.length > 0 && sortedOrders.every((o) => selectedIds.has(o.id));
+    const toggleSelectAll = () => {
+        setSelectedIds(allVisibleSelected ? new Set() : new Set(sortedOrders.map((o) => o.id)));
+    };
+    const toggleSelectOne = (id) => {
+        setSelectedIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+        });
+    };
+
     const effectiveClient = form.clientName?.trim() || form.clientDropdown;
     const effectiveProject = form.project;
 
     const { data: clientProjects = [], isLoading: isLoadingProjects } = useQuery({
-        queryKey: ["projects", effectiveClient],
-        queryFn: () => fetchProjects({ client_name: effectiveClient }),
+        queryKey: ["projects", effectiveClient, "wo"],
+        queryFn: () => fetchProjects({ client_name: effectiveClient, source: "wo" }),
         enabled: !!effectiveClient,
     });
 
@@ -239,12 +275,25 @@ const WorkOrders = () => {
             targetCompletionDate: isoToDateInput(o.target_completion_date),
             remarks: o.remarks || "",
             status: o.status || "Pending",
+            fileUrl: o.file_url || "",
             lineItems: li,
         });
         setDialogOpen(true);
     };
     const openView = (o) => { markOpenedMutation.mutate(o.id); setViewing(o); };
     const set = (field, val) => setForm((f) => ({ ...f, [field]: val }));
+
+    const handleFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        try {
+            const data = await uploadWorkOrderFile(file);
+            set("fileUrl", data.file_url);
+            toast.success("WO File uploaded");
+        } catch (err) {
+            toast.error("File upload failed: " + err.message);
+        }
+    };
 
     const handleGenerateNumber = async () => {
         setGeneratingNumber(true);
@@ -354,6 +403,7 @@ const WorkOrders = () => {
             target_completion_date: form.targetCompletionDate ? new Date(form.targetCompletionDate).toISOString() : null,
             remarks: form.remarks || null,
             status: form.status || "Pending",
+            file_url: form.fileUrl || null,
             created_by: getCurrentUser(),
             last_updated_by: getCurrentUser(),
             line_items: (form.lineItems || []).map(li => ({
@@ -369,10 +419,14 @@ const WorkOrders = () => {
         };
         try {
             const tid = toast.loading(editingId ? "Updating Work Order..." : "Creating Work Order...");
-            editingId
+            const result = editingId
                 ? await updateMutation.mutateAsync({ id: editingId, body: payload })
                 : await createMutation.mutateAsync(payload);
-            toast.success("Work Order " + (editingId ? "updated" : "created"), { id: tid });
+            if (editingId && result?.no_changes) {
+                toast.info("No changes to save", { id: tid });
+            } else {
+                toast.success("Work Order " + (editingId ? "updated" : "created"), { id: tid });
+            }
             invalidate();
             setDialogOpen(false);
         } catch (e) {
@@ -386,6 +440,17 @@ const WorkOrders = () => {
                 <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight text-foreground">Work Orders</h2>
                 <p className="text-sm text-muted-foreground">Track work orders with quantities, completion progress and activity log.</p>
             </div>
+            {selectedIds.size > 0 && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-2.5">
+                    <span className="text-sm font-medium text-foreground">{selectedIds.size} selected</span>
+                    <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>Clear</Button>
+                        <Button variant="destructive" size="sm" onClick={() => setBulkDeleteConfirmOpen(true)}>
+                            <Trash2 className="h-4 w-4 mr-2" /> Delete Selected
+                        </Button>
+                    </div>
+                </div>
+            )}
             <div className="flex flex-wrap items-end justify-end gap-3">
                 <div className="flex flex-wrap gap-2">
                     <Button variant="outline" onClick={handleExport} className="border-green-500 text-green-700 hover:bg-green-50">
@@ -744,6 +809,29 @@ const WorkOrders = () => {
                                 />
                             </div>
 
+                            <div className="space-y-2 sm:col-span-2">
+                                <Label>Upload WO Document</Label>
+                                <div className="flex items-center gap-2">
+                                    <Input type="file" className="hidden" id="wo-file-upload" onChange={handleFileUpload} accept=".pdf,.jpg,.jpeg,.png" />
+                                    <Button type="button" variant="outline" className="w-full" onClick={() => document.getElementById("wo-file-upload").click()}>
+                                        <FileText className={`h-4 w-4 mr-2 ${form.fileUrl ? "text-green-500" : "text-red-500"}`} />
+                                        {form.fileUrl ? "File Uploaded ✓" : "Upload File"}
+                                    </Button>
+                                    {form.fileUrl && (
+                                        <div className="flex flex-col gap-1 w-full">
+                                            <div className="flex items-center gap-2">
+                                                <Button type="button" variant="ghost" size="sm" onClick={() => set("fileUrl", "")} className="text-destructive hover:bg-destructive/10">
+                                                    <Trash2 className="h-4 w-4 mr-2" /> Remove upload file
+                                                </Button>
+                                                <Button type="button" variant="link" size="sm" className="text-primary text-xs" onClick={() => window.open(`http://localhost:8000${form.fileUrl}`, "_blank")}>
+                                                    View current file
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
                         </div>
                         <DialogFooter>
                             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
@@ -795,6 +883,9 @@ const WorkOrders = () => {
                     <table className="w-full text-sm table-fixed">
                         <thead className="bg-muted/50 text-foreground text-sm font-bold uppercase tracking-wider">
                             <tr>
+                                <th className="px-1.5 py-3 text-center" style={{ width: 40, minWidth: 40 }}>
+                                    <Checkbox checked={allVisibleSelected} onCheckedChange={toggleSelectAll} aria-label="Select all" />
+                                </th>
                                 <SortableHeader label="S.No." width={woWidths.sno} onResizeStart={startWoResize("sno")} />
                                 <FilterableHeader label="Client" columnKey="client_name" accessor={WOColumnAccessors.client_name} sortConfig={woSortConfig} setSort={setWoSort} width={woWidths.client_name} onResizeStart={startWoResize("client_name")} rows={filtered} filterValue={woFilters.client_name} onApplyFilter={setWoFilter} />
                                 <FilterableHeader label="Project" columnKey="project" accessor={WOColumnAccessors.project} sortConfig={woSortConfig} setSort={setWoSort} width={woWidths.project} onResizeStart={startWoResize("project")} rows={filtered} filterValue={woFilters.project} onApplyFilter={setWoFilter} />
@@ -812,11 +903,14 @@ const WorkOrders = () => {
                         </thead>
                         <tbody>
                             {isLoading && (
-                                <tr><td colSpan={13} className="px-5 py-12 text-center text-muted-foreground">Loading...</td></tr>
+                                <tr><td colSpan={14} className="px-5 py-12 text-center text-muted-foreground">Loading...</td></tr>
                             )}
                             {sortedOrders.map((o, idx) => {
-                                const lastAct = o.last_opened_at || o.last_updated_at || o.created_at;
-                                const lastBy = o.last_opened_by || o.last_updated_by || o.created_by || "—";
+                                // Only a real edit should change who's shown here — merely opening/
+                                // viewing a WO (last_opened_at/by) must never override this, or the
+                                // name would flip just from someone looking at the record.
+                                const lastAct = o.last_updated_at || o.created_at;
+                                const lastBy = o.last_updated_by || o.created_by || "—";
                                 const isClosedLike = CLOSED_STATUSES.includes(o.status);
                                 return (
                                     <tr
@@ -824,6 +918,9 @@ const WorkOrders = () => {
                                         style={{ height: getWoRowHeight(o.id) }}
                                         className={`relative border-t border-border hover:bg-muted/30 text-sm${o.remarks ? " bg-amber-50 dark:bg-amber-950/20" : ""}`}
                                     >
+                                        <td className="px-1.5 py-3 text-center">
+                                            <Checkbox checked={selectedIds.has(o.id)} onCheckedChange={() => toggleSelectOne(o.id)} aria-label={`Select WO ${o.wo_number}`} />
+                                        </td>
                                         <td className="relative px-1.5 py-3 text-center text-muted-foreground">
                                             {idx + 1}
                                             <div
@@ -834,13 +931,17 @@ const WorkOrders = () => {
                                                 <div className="w-full h-[3px] bg-border group-hover:bg-primary group-active:bg-primary rounded-full transition-colors" />
                                             </div>
                                         </td>
-                                        <td className="px-1.5 py-3 text-center text-foreground font-semibold truncate" title={o.client_name}>{o.client_name}</td>
-                                        <td className="px-1.5 py-3 text-center text-muted-foreground truncate" title={o.project}>{o.project}</td>
-                                        <td className="px-1.5 py-3 text-center text-muted-foreground truncate" title={(o.line_items?.length > 0) ? o.line_items.map(l => l.item).join(", ") : o.item}>
+                                        <td className="px-1.5 py-3 text-center text-foreground font-semibold truncate cursor-pointer hover:underline" title={o.client_name} onClick={() => setViewing(o)}>{o.client_name}</td>
+                                        <td className="px-1.5 py-3 text-center text-muted-foreground truncate cursor-pointer hover:underline" title={o.project} onClick={() => setViewing(o)}>{o.project}</td>
+                                        <td
+                                            className="px-1.5 py-3 text-center text-muted-foreground truncate cursor-pointer hover:underline"
+                                            title={(o.line_items?.length > 0) ? o.line_items.map(l => l.item).join(", ") : o.item}
+                                            onClick={() => setViewing(o)}
+                                        >
                                             {(o.line_items?.length > 0) ? o.line_items[0].item : o.item}
                                             {(o.line_items?.length > 1) && <span className="ml-1 text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">+{o.line_items.length - 1}</span>}
                                         </td>
-                                        <td className="px-1.5 py-3 text-center font-medium text-foreground truncate text-xs" title={o.wo_number}>{o.wo_number}</td>
+                                        <td className="px-1.5 py-3 text-center font-medium text-foreground truncate text-xs cursor-pointer hover:underline" title={o.wo_number} onClick={() => setViewing(o)}>{o.wo_number}</td>
                                         <td className="px-1.5 py-3 text-center text-muted-foreground whitespace-nowrap text-xs">{o.wo_date ? fmtDate(o.wo_date) : "—"}</td>
                                         <td className="px-1.5 py-3 text-center font-semibold whitespace-nowrap">{o.total_quantity} <span className="text-[10px] font-normal text-muted-foreground">{o.uom || "Nos"}</span></td>
                                         <td className="px-1.5 py-3 text-center text-success font-bold whitespace-nowrap">{o.completed_quantity} <span className="text-[10px] font-normal text-muted-foreground">{o.uom || "Nos"}</span></td>
@@ -876,7 +977,7 @@ const WorkOrders = () => {
                                 );
                             })}
                             {!isLoading && sortedOrders.length === 0 && (
-                                <tr><td colSpan={13} className="px-5 py-12 text-center text-muted-foreground">No work orders found.</td></tr>
+                                <tr><td colSpan={14} className="px-5 py-12 text-center text-muted-foreground">No work orders found.</td></tr>
                             )}
                         </tbody>
                     </table>
@@ -1037,6 +1138,14 @@ const WorkOrders = () => {
                                 />
                             </div>
 
+                            {viewing.file_url && (
+                                <div className="sm:col-span-2">
+                                    <Button variant="outline" size="sm" className="w-full" onClick={() => window.open(`http://localhost:8000${viewing.file_url}`, "_blank")}>
+                                        <FileText className="h-4 w-4 mr-2" /> View Attached WO Document
+                                    </Button>
+                                </div>
+                            )}
+
                             <div className="sm:col-span-2 rounded-lg border border-border bg-muted/30 p-4 space-y-3">
                                 <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
                                     <Clock className="h-4 w-4 text-accent" /> Activity Log
@@ -1117,6 +1226,27 @@ const WorkOrders = () => {
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setItemToDelete(null)}>Cancel</Button>
                         <Button variant="destructive" onClick={() => { deleteMutation.mutate(itemToDelete); setItemToDelete(null); }}>Delete</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={bulkDeleteConfirmOpen} onOpenChange={setBulkDeleteConfirmOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader><DialogTitle>Confirm Bulk Deletion</DialogTitle></DialogHeader>
+                    <div className="py-4">
+                        <p className="text-sm text-muted-foreground">
+                            Delete {selectedIds.size} selected work order{selectedIds.size === 1 ? "" : "s"}? Any linked WO Sales/Invoices will be deleted first. This action cannot be undone.
+                        </p>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setBulkDeleteConfirmOpen(false)}>Cancel</Button>
+                        <Button
+                            variant="destructive"
+                            disabled={bulkDeleteMutation.isPending}
+                            onClick={() => { bulkDeleteMutation.mutate(Array.from(selectedIds)); setBulkDeleteConfirmOpen(false); }}
+                        >
+                            Delete Selected
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
