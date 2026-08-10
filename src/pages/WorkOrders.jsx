@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ItemCombobox } from "@/components/ItemCombobox";
 import { ItemMasterManageDialog } from "@/components/ItemMasterManageDialog";
+import { UomManageDialog } from "@/components/UomManageDialog";
 import { inr, fmtDate, fmtDateTime } from "@/lib/format";
 import { getCurrentUser } from "@/lib/currentUser";
 import { useAuth } from "@/context/AuthContext";
@@ -197,6 +198,7 @@ const WorkOrders = () => {
 
     const [addClientOpen, setAddClientOpen] = useState(false);
     const [manageItemsOpen, setManageItemsOpen] = useState(false);
+    const [manageUomOpen, setManageUomOpen] = useState(false);
     const { data: itemMasterList = [] } = useQuery({
         queryKey: ["item-master", "WO"],
         queryFn: () => fetchItemMasterList("WO"),
@@ -575,9 +577,14 @@ const WorkOrders = () => {
                                     <Label className="text-sm font-semibold">Items *</Label>
                                     <div className="flex items-center gap-2">
                                         {isAdmin && (
-                                            <Button type="button" size="sm" variant="outline" onClick={() => setManageItemsOpen(true)}>
-                                                <Settings className="h-3.5 w-3.5 mr-1" /> Manage Items
-                                            </Button>
+                                            <>
+                                                <Button type="button" size="sm" variant="outline" onClick={() => setManageItemsOpen(true)}>
+                                                    <Settings className="h-3.5 w-3.5 mr-1" /> Manage Items
+                                                </Button>
+                                                <Button type="button" size="sm" variant="outline" onClick={() => setManageUomOpen(true)}>
+                                                    <Settings className="h-3.5 w-3.5 mr-1" /> Manage UOM
+                                                </Button>
+                                            </>
                                         )}
                                         <Button type="button" size="sm" variant="outline" onClick={addLineItem}>
                                             <Plus className="h-3.5 w-3.5 mr-1" /> Add Item
@@ -1344,6 +1351,7 @@ const WorkOrders = () => {
                 </DialogContent>
             </Dialog>
             <ItemMasterManageDialog open={manageItemsOpen} onOpenChange={setManageItemsOpen} type="WO" />
+            <UomManageDialog open={manageUomOpen} onOpenChange={setManageUomOpen} />
         </div>
     );
 };

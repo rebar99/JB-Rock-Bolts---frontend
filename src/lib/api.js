@@ -506,3 +506,10 @@ export function openLogStream(onLog, onError, user = null) {
     if (onError) es.onerror = onError;
     return es;
 }
+
+// 🔹 UOM Management 🔹
+export const fetchUomOptions = () => get("/api/uom");
+export const createUomOption = (body) => post("/api/uom", body);
+export const updateUomOption = (id, body) => put(`/api/uom/${id}`, body);
+export const deleteUomOption = (id) => del(`/api/uom/${id}`);
+
