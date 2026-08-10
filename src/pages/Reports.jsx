@@ -41,7 +41,7 @@ const pillTabClass =
     "data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md";
 
 const SALES_WIDTHS = { sno: 56, date: 100, invoice_number: 130, po_number: 130, subtotal: 110, gst_amount: 110, price: 120, payment_status: 100 };
-const PENDING_WIDTHS = { sno: 56, date: 100, po_number: 130, client_name: 140, project: 120, item: 160, total_qty: 100, delivered_qty: 100, pending_qty: 100, delivered_payment: 130, pending_total: 130, status: 110 };
+const PENDING_WIDTHS = { sno: 56, date: 100, invoice_number: 140, po_number: 130, client_name: 140, project: 120, item: 160, total_qty: 100, delivered_qty: 100, pending_qty: 100, delivered_payment: 130, pending_total: 130, status: 110 };
 const COMPLETED_WIDTHS = { sno: 56, date: 100, client_name: 140, project: 120, po_number: 130, item: 160, total_required: 110, delivered: 110 };
 
 // Column accessors shared by sorting and the Excel-style filter checklists —
@@ -67,6 +67,7 @@ const SalesColumnAccessors = {
 };
 const PendingColumnAccessors = {
     date: (r) => r.date,
+    invoice_number: (r) => r.invoice_number,
     po_number: (r) => r.po_number,
     client_name: (r) => r.client_name,
     project: (r) => r.project,
@@ -544,6 +545,9 @@ const Reports = () => {
                                         <tr key={r.id} className={`border-t border-border hover:bg-muted/30 transition-colors text-[12.5px]${r.remark ? " bg-amber-50 dark:bg-amber-950/20" : ""}`}>
                                             <td className="px-2 py-3 text-center text-muted-foreground">{idx + 1}</td>
                                             <td className="px-2 py-3 text-center text-muted-foreground whitespace-nowrap">{r.date}</td>
+                                            <td className="px-2 py-3 text-center text-primary truncate" title={r.invoice_number}>
+                                                {r.invoice_number || "—"}
+                                            </td>
                                             <td className="px-2 py-3 text-center font-semibold text-primary truncate" title={r.po_number}>
                                                 <button type="button" className="text-center w-full text-primary hover:underline focus:outline-none" onClick={() => setSelectedPOId(r.id)}>
                                                     {r.po_number}

@@ -9,16 +9,19 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { StatusBadge } from "@/components/StatusBadge";
+import { ItemCombobox } from "@/components/ItemCombobox";
+import { ItemMasterManageDialog } from "@/components/ItemMasterManageDialog";
 import { inr, fmtDate, fmtDateTime } from "@/lib/format";
 import { getCurrentUser } from "@/lib/currentUser";
+import { useAuth } from "@/context/AuthContext";
 import { useConstants } from "@/lib/constants";
 import {
     fetchWorkOrders, createWorkOrder, updateWorkOrder,
     deleteWorkOrder, bulkDeleteWorkOrders, fetchWorkOrder, openWODocument, closeWorkOrder,
     createClient, createProject, fetchProjects, fetchNextWONumber,
-    exportWorkOrders, importWorkOrders, uploadWorkOrderFile,
+    exportWorkOrders, importWorkOrders, uploadWorkOrderFile, fetchItemMasterList,
 } from "@/lib/api";
-import { Pencil, Plus, Search, Trash2, Eye, FileText, Package, CheckCircle2, Clock, Printer, X, Download, Upload, UploadCloud, RefreshCw } from "lucide-react";
+import { Pencil, Plus, Search, Trash2, Eye, FileText, Package, CheckCircle2, Clock, Printer, X, Download, Upload, UploadCloud, RefreshCw, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { useSortableRows } from "@/hooks/useSortableRows";
 import { useResizableColumns } from "@/hooks/useResizableColumns";
@@ -80,6 +83,8 @@ const WOColumnAccessors = {
 const WorkOrders = () => {
     const qc = useQueryClient();
     const { wo_clients: clients, projects, uom_options, wo_statuses, wo_priorities } = useConstants();
+    const { user } = useAuth();
+    const isAdmin = !!user?.is_admin;
 
     const { data: orders = [], isLoading } = useQuery({
         queryKey: ["work-orders"],
@@ -191,6 +196,11 @@ const WorkOrders = () => {
     };
 
     const [addClientOpen, setAddClientOpen] = useState(false);
+    const [manageItemsOpen, setManageItemsOpen] = useState(false);
+    const { data: itemMasterList = [] } = useQuery({
+        queryKey: ["item-master", "WO"],
+        queryFn: () => fetchItemMasterList("WO"),
+    });
     const [addProjectOpen, setAddProjectOpen] = useState(false);
     const [newClientName, setNewClientName] = useState("");
     const [newClientSalutation, setNewClientSalutation] = useState("M/s.");
@@ -563,9 +573,16 @@ const WorkOrders = () => {
                             <div className="space-y-3 sm:col-span-2">
                                 <div className="flex items-center justify-between">
                                     <Label className="text-sm font-semibold">Items *</Label>
-                                    <Button type="button" size="sm" variant="outline" onClick={addLineItem}>
-                                        <Plus className="h-3.5 w-3.5 mr-1" /> Add Item
-                                    </Button>
+                                    <div className="flex items-center gap-2">
+                                        {isAdmin && (
+                                            <Button type="button" size="sm" variant="outline" onClick={() => setManageItemsOpen(true)}>
+                                                <Settings className="h-3.5 w-3.5 mr-1" /> Manage Items
+                                            </Button>
+                                        )}
+                                        <Button type="button" size="sm" variant="outline" onClick={addLineItem}>
+                                            <Plus className="h-3.5 w-3.5 mr-1" /> Add Item
+                                        </Button>
+                                    </div>
                                 </div>
                                 <div className="space-y-2">
                                     {(form.lineItems || []).map((li, idx) => (
@@ -586,10 +603,10 @@ const WorkOrders = () => {
                                             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                                                 <div className="sm:col-span-2 space-y-1.5">
                                                     <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Item Name</Label>
-                                                    <Input
-                                                        placeholder="Enter item name"
+                                                    <ItemCombobox
                                                         value={li.item}
-                                                        onChange={(e) => setLineItem(idx, "item", e.target.value)}
+                                                        onChange={(v) => setLineItem(idx, "item", v)}
+                                                        items={itemMasterList}
                                                     />
                                                 </div>
                                                 <div className="space-y-1.5">
@@ -787,11 +804,6 @@ const WorkOrders = () => {
                                         {wo_statuses.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label>Start Date</Label>
-                                <Input type="date" value={form.startDate} onChange={(e) => set("startDate", e.target.value)} />
                             </div>
 
                             <div className="space-y-2">
@@ -1119,10 +1131,6 @@ const WorkOrders = () => {
                                 <Input value={viewing.status || ""} disabled className="opacity-100" />
                             </div>
                             <div className="space-y-2">
-                                <Label>Start Date</Label>
-                                <Input type="date" value={viewing.start_date ? isoToDateInput(viewing.start_date) : ""} disabled className="opacity-100" />
-                            </div>
-                            <div className="space-y-2">
                                 <Label>Target Completion Date</Label>
                                 <Input type="date" value={viewing.target_completion_date ? isoToDateInput(viewing.target_completion_date) : ""} disabled className="opacity-100" />
                             </div>
@@ -1335,6 +1343,7 @@ const WorkOrders = () => {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+            <ItemMasterManageDialog open={manageItemsOpen} onOpenChange={setManageItemsOpen} type="WO" />
         </div>
     );
 };

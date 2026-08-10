@@ -348,7 +348,7 @@ export const fetchProjects = (params) => get("/api/projects", { limit: 10000, ..
 export const createProject = (body) => post("/api/projects", body);
 
 // ── Item Master (PO Item field) ─────────────────────────────────────────────
-export const fetchItemMasterList = () => get("/api/item-master");
+export const fetchItemMasterList = (type = "PO") => get(`/api/item-master?type=${type}`);
 export const createItemMasterItem = (body) => post("/api/item-master", body);
 export const updateItemMasterItem = (id, body) => put(`/api/item-master/${id}`, body);
 export const deleteItemMasterItem = (id, deletedBy) => del(`/api/item-master/${id}`, deletedBy ? { deleted_by: deletedBy } : undefined);
