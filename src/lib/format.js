@@ -1,4 +1,4 @@
-import { fmtDateIST, fmtDateTimeIST } from "./timezone";
+import { fmtDateIST, fmtDateTimeIST, fmtDateTimeDMY } from "./timezone";
 
 // Rounds to 2 decimal places (nearest paisa), guarding against
 // floating-point drift from repeated arithmetic (e.g. 0.1 + 0.2). Use this
@@ -19,3 +19,4 @@ export const inr = (n) => {
 // All callers of fmtDate / fmtDateTime automatically get IST output.
 export const fmtDate     = fmtDateIST;
 export const fmtDateTime = fmtDateTimeIST;
+export const fmtDateTimeDMYIST = fmtDateTimeDMY;

@@ -8,17 +8,21 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { StatusBadge } from "@/components/StatusBadge";
+import { ItemCombobox } from "@/components/ItemCombobox";
+import { ItemMasterManageDialog } from "@/components/ItemMasterManageDialog";
 import { inr, fmtDate, fmtDateTime } from "@/lib/format";
 import { getCurrentUser } from "@/lib/currentUser";
 import { useConstants } from "@/lib/constants";
+import { useAuth } from "@/context/AuthContext";
 import {
     fetchPurchaseOrders, createPurchaseOrder, updatePurchaseOrder,
-    deletePurchaseOrder, fetchPurchaseOrder, openPODocument,
-    createClient, createProject, fetchProjects, uploadPOFile,
+    deletePurchaseOrder, bulkDeletePurchaseOrders, fetchPurchaseOrder, openPODocument,
+    createClient, createProject, fetchProjects, uploadPOFile, fetchItemMasterList,
     exportPurchaseOrders, importPurchaseOrders, shortClosePurchaseOrder,
 } from "@/lib/api";
-import { Pencil, Plus, Search, Trash2, Eye, FileText, Package, Truck, Clock, Printer, X, UploadCloud, Download, Upload } from "lucide-react";
+import { Pencil, Plus, Search, Trash2, Eye, FileText, Package, Truck, Clock, Printer, X, UploadCloud, Download, Upload, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { useSortableRows } from "@/hooks/useSortableRows";
 import { useResizableColumns } from "@/hooks/useResizableColumns";
@@ -49,13 +53,50 @@ const empty = () => ({
     lineItems: [emptyLineItem()],
 });
 
-const isoToDateInput = (iso) => (iso ? new Date(iso).toISOString().slice(0, 10) : "");
+// Pulls the calendar date straight off the ISO string (e.g. "2026-07-02" from
+// "2026-07-02T00:00:00") instead of round-tripping through `new Date()` — a
+// browser not in UTC would otherwise shift the date by a day (local midnight
+// converted to UTC can land on the previous day), which made an untouched
+// date field look "changed" on every save.
+const isoToDateInput = (iso) => (iso ? String(iso).slice(0, 10) : "");
 
 const poStatusLabel = (o) =>
     o.short_closed ? "Short Closed" :
     (o.delivery_status === "Delivered" && o.all_dispatches_marked) ? "Delivered" :
     (o.delivery_status === "Delivered" || o.delivery_status === "Partial") ? "Partial" :
     "Not Delivered";
+
+
+// Same keyword families the backend's parse_item_type_and_size() groups by
+// (app/utils/helpers.py) — kept in sync manually since this is a client-side
+// port used only for the quick quantity-breakdown popup, not for anything
+// that needs byte-identical size parsing.
+const KNOWN_PRODUCT_KEYWORDS = [
+    ["sda cross bit", "SDA Cross Bit"],
+    ["sda rod", "SDA Rod"],
+    ["sda nut", "SDA Nut"],
+    ["sda plate", "SDA Plate"],
+    ["sda coupler", "SDA Coupler"],
+    ["coupler", "Coupler"],
+    ["pipe", "Pipe"],
+];
+const PO_CODE_PREFIX_RE = /^[A-Za-z0-9]{4,}\s*-+\s*/;
+const PO_MAKE_SUFFIX_RE = /\bmake\s*[:-].*$/i;
+
+const simpleProductType = (itemName) => {
+    const raw = (itemName || "").trim();
+    if (!raw) return "Uncategorized";
+    let working = raw.replace(PO_CODE_PREFIX_RE, "").trim();
+    if (!working) working = raw;
+    let remainder = working.replace(PO_MAKE_SUFFIX_RE, "").trim();
+    remainder = remainder.replace(/^[\s\-,/:]+/, "").replace(/[\s\-,/:]+$/, "").trim();
+    const fallback = remainder || working;
+    const lower = fallback.toLowerCase();
+    for (const [kw, canonical] of KNOWN_PRODUCT_KEYWORDS) {
+        if (lower.includes(kw)) return canonical;
+    }
+    return fallback.replace(/\w\S*/g, (t) => t[0].toUpperCase() + t.slice(1).toLowerCase());
+};
 
 // Column accessors shared by sorting and the Excel-style filter checklists —
 // each returns the same value the column sorts by, so "Sort A to Z" and the
@@ -79,6 +120,18 @@ const PurchaseOrders = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const { products, clients, projects, payment_terms, uom_options } = useConstants();
+    const { user } = useAuth();
+    const isAdmin = !!user?.is_admin;
+    const [manageItemsOpen, setManageItemsOpen] = useState(false);
+
+    // Item Master — the only source for the Item Name field below. Read by
+    // both Admin and User (matches the backend's GET /api/item-master,
+    // which has no role gate); only Add/Edit/Delete (inside
+    // ItemMasterManageDialog) are Admin-only, enforced server-side too.
+    const { data: itemMasterList = [] } = useQuery({
+        queryKey: ["item-master"],
+        queryFn: fetchItemMasterList,
+    });
 
     // Fetch the complete Purchase Order list (no pagination cap) — this is the
     // single source of truth for both the table rows below and the dashboard
@@ -107,6 +160,21 @@ const PurchaseOrders = () => {
         },
         onError: (err) => {
             toast.error(err.message || "Failed to delete Purchase Order");
+        }
+    });
+    const bulkDeleteMutation = useMutation({
+        mutationFn: (ids) => bulkDeletePurchaseOrders(ids, getCurrentUser()),
+        onSuccess: (result) => {
+            invalidate();
+            setSelectedIds(new Set());
+            if (result.errors?.length) {
+                toast.warning(`Deleted ${result.deleted.length} purchase order(s), ${result.errors.length} failed`);
+            } else {
+                toast.success(`Deleted ${result.deleted.length} purchase order(s)`);
+            }
+        },
+        onError: (err) => {
+            toast.error(err.message || "Bulk delete failed");
         }
     });
     const markOpenedMutation = useMutation({ mutationFn: (id) => fetchPurchaseOrder(id, getCurrentUser()), onSuccess: invalidate });
@@ -140,6 +208,8 @@ const PurchaseOrders = () => {
     const [viewing, setViewing] = useState(null);
     const [uploadingPoId, setUploadingPoId] = useState(null);
     const [itemToDelete, setItemToDelete] = useState(null);
+    const [selectedIds, setSelectedIds] = useState(() => new Set());
+    const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
 
     const [shortCloseItem, setShortCloseItem] = useState(null);
     const [shortCloseRemark, setShortCloseRemark] = useState("");
@@ -227,9 +297,43 @@ const PurchaseOrders = () => {
         pending: columnFiltered.reduce((s, o) => s + (o.pending_quantity || 0), 0),
     }), [columnFiltered]);
 
+    // Product-type breakdown behind the "Total Pos Quantity" card — same
+    // keyword grouping the Overview report uses server-side
+    // (parse_item_type_and_size), ported here so the breakdown always adds
+    // up to exactly the number on the card (same columnFiltered rows/qty,
+    // no separate API call or re-filtering).
+    const [qtyBreakdownOpen, setQtyBreakdownOpen] = useState(false);
+    const qtyBreakdown = useMemo(() => {
+        const totals = new Map(); // product_type -> qty
+        for (const o of columnFiltered) {
+            const items = (o.line_items && o.line_items.length > 0)
+                ? o.line_items
+                : [{ item: o.item, quantity: o.total_quantity }];
+            for (const li of items) {
+                const type = simpleProductType(li.item);
+                totals.set(type, (totals.get(type) || 0) + (li.quantity || 0));
+            }
+        }
+        return Array.from(totals.entries())
+            .map(([product_type, qty]) => ({ product_type, qty }))
+            .sort((a, b) => b.qty - a.qty);
+    }, [columnFiltered]);
+
     const { widths: poWidths, startResize: startPoResize } = useResizableColumns("colw:purchase-orders", PO_TABLE_WIDTHS);
     const { sortedRows: sortedOrders, sortConfig: poSortConfig, requestSort: requestPoSort, setSort: setPoSort } = useSortableRows(columnFiltered);
     const { getHeight: getPoRowHeight, startResize: startPoRowResize } = useResizableRows("rowh:purchase-orders", 52);
+
+    const allVisibleSelected = sortedOrders.length > 0 && sortedOrders.every((o) => selectedIds.has(o.id));
+    const toggleSelectAll = () => {
+        setSelectedIds(allVisibleSelected ? new Set() : new Set(sortedOrders.map((o) => o.id)));
+    };
+    const toggleSelectOne = (id) => {
+        setSelectedIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+        });
+    };
 
     const effectiveClient = form.clientName?.trim() || form.clientDropdown;
     const effectiveProject = form.project;
@@ -419,10 +523,14 @@ const PurchaseOrders = () => {
         };
         try {
             const tid = toast.loading(editingId ? "Updating PO..." : "Creating PO...");
-            const result = editingId 
+            const result = editingId
                 ? await updateMutation.mutateAsync({ id: editingId, body: payload })
                 : await createMutation.mutateAsync(payload);
-            toast.success("Purchase Order " + (editingId ? "updated" : "created"), { id: tid });
+            if (editingId && result?.no_changes) {
+                toast.info("No changes to save", { id: tid });
+            } else {
+                toast.success("Purchase Order " + (editingId ? "updated" : "created"), { id: tid });
+            }
             invalidate();
             setDialogOpen(false);
         } catch (e) {
@@ -436,6 +544,17 @@ const PurchaseOrders = () => {
                 <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight text-foreground">Purchase Orders</h2>
                 <p className="text-sm text-muted-foreground">Track POs with quantities, delivery progress and activity log.</p>
             </div>
+            {selectedIds.size > 0 && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-2.5">
+                    <span className="text-sm font-medium text-foreground">{selectedIds.size} selected</span>
+                    <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>Clear</Button>
+                        <Button variant="destructive" size="sm" onClick={() => setBulkDeleteConfirmOpen(true)}>
+                            <Trash2 className="h-4 w-4 mr-2" /> Delete Selected
+                        </Button>
+                    </div>
+                </div>
+            )}
             <div className="flex flex-wrap items-end justify-end gap-3">
                 <div className="flex flex-wrap gap-2">
                     <Button variant="outline" onClick={handleExport} className="border-green-500 text-green-700 hover:bg-green-50">
@@ -545,33 +664,40 @@ const PurchaseOrders = () => {
                             <div className="space-y-3 sm:col-span-2">
                                 <div className="flex items-center justify-between">
                                     <Label className="text-sm font-semibold">Items *</Label>
-                                    <Button type="button" size="sm" variant="outline" onClick={addLineItem}>
-                                        <Plus className="h-3.5 w-3.5 mr-1" /> Add Item
-                                    </Button>
+                                    <div className="flex items-center gap-2">
+                                        {isAdmin && (
+                                            <Button type="button" size="sm" variant="outline" onClick={() => setManageItemsOpen(true)}>
+                                                <Settings className="h-3.5 w-3.5 mr-1" /> Manage Items
+                                            </Button>
+                                        )}
+                                        <Button type="button" size="sm" variant="outline" onClick={addLineItem}>
+                                            <Plus className="h-3.5 w-3.5 mr-1" /> Add Item
+                                        </Button>
+                                    </div>
                                 </div>
                                 <div className="space-y-2">
                                     {(form.lineItems || []).map((li, idx) => (
                                         <div key={idx} className="relative rounded-lg border border-border bg-muted/20 p-4 pt-8 sm:pt-4">
                                             {form.lineItems.length > 1 && (
-                                                <Button 
-                                                    type="button" 
-                                                    size="icon" 
-                                                    variant="ghost" 
-                                                    className="absolute top-1 right-1 h-7 w-7 text-destructive hover:bg-destructive/10" 
+                                                <Button
+                                                    type="button"
+                                                    size="icon"
+                                                    variant="ghost"
+                                                    className="absolute top-1 right-1 h-7 w-7 text-destructive hover:bg-destructive/10"
                                                     onClick={() => removeLineItem(idx)}
                                                     title="Remove item"
                                                 >
                                                     <X className="h-4 w-4" />
                                                 </Button>
                                             )}
-                                            
+
                                             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                                                 <div className="sm:col-span-2 space-y-1.5">
                                                     <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Item Name</Label>
-                                                    <Input 
-                                                        placeholder="Enter item name" 
-                                                        value={li.item} 
-                                                        onChange={(e) => setLineItem(idx, "item", e.target.value)} 
+                                                    <ItemCombobox
+                                                        value={li.item}
+                                                        onChange={(v) => setLineItem(idx, "item", v)}
+                                                        items={itemMasterList}
                                                     />
                                                 </div>
                                                 <div className="space-y-1.5">
@@ -792,28 +918,49 @@ const PurchaseOrders = () => {
                 <Card className="p-5 shadow-card">
                     <div className="flex items-center gap-3">
                         <div className="h-11 w-11 rounded-xl bg-primary/10 grid place-items-center"><FileText className="h-5 w-5 text-primary" /></div>
-                        <div><div className="text-xs uppercase tracking-wider text-muted-foreground">Total POs</div><div className="text-2xl font-bold text-foreground">{orders.length}</div></div>
+                        <div><div className="text-xs uppercase tracking-wider text-muted-foreground">Total Pending POs</div><div className="text-2xl font-bold text-foreground">{orders.length}</div></div>
                     </div>
                 </Card>
-                <Card className="p-5 shadow-card">
+                <Card className="p-5 shadow-card cursor-pointer hover:shadow-elegant transition-shadow" onClick={() => setQtyBreakdownOpen(true)}>
                     <div className="flex items-center gap-3">
                         <div className="h-11 w-11 rounded-xl bg-accent/15 grid place-items-center"><Package className="h-5 w-5 text-accent" /></div>
-                        <div><div className="text-xs uppercase tracking-wider text-muted-foreground">Total Qty</div><div className="text-2xl font-bold text-foreground">{totals.tot.toLocaleString()}</div></div>
+                        <div><div className="text-xs uppercase tracking-wider text-muted-foreground">Total Pos Quantity</div><div className="text-2xl font-bold text-foreground">{totals.tot.toLocaleString()}</div></div>
                     </div>
                 </Card>
                 <Card className="p-5 shadow-card">
                     <div className="flex items-center gap-3">
                         <div className="h-11 w-11 rounded-xl bg-success/15 grid place-items-center"><Truck className="h-5 w-5 text-success" /></div>
-                        <div><div className="text-xs uppercase tracking-wider text-muted-foreground">Delivered</div><div className="text-2xl font-bold text-foreground">{totals.del.toLocaleString()}</div></div>
+                        <div><div className="text-xs uppercase tracking-wider text-muted-foreground">Total Delivered Quantity</div><div className="text-2xl font-bold text-foreground">{totals.del.toLocaleString()}</div></div>
                     </div>
                 </Card>
                 <Card className="p-5 shadow-card">
                     <div className="flex items-center gap-3">
                         <div className="h-11 w-11 rounded-xl bg-warning/15 grid place-items-center"><Clock className="h-5 w-5 text-warning" /></div>
-                        <div><div className="text-xs uppercase tracking-wider text-muted-foreground">Pending</div><div className="text-2xl font-bold text-foreground">{totals.pending.toLocaleString()}</div></div>
+                        <div><div className="text-xs uppercase tracking-wider text-muted-foreground">Total Pending Quantity</div><div className="text-2xl font-bold text-foreground">{totals.pending.toLocaleString()}</div></div>
                     </div>
                 </Card>
             </div>
+
+            <Dialog open={qtyBreakdownOpen} onOpenChange={setQtyBreakdownOpen}>
+                <DialogContent className="sm:max-w-md max-h-[80vh] flex flex-col">
+                    <DialogHeader><DialogTitle>Total Pos Quantity — Product-wise</DialogTitle></DialogHeader>
+                    <div className="overflow-y-auto -mx-1 px-1 space-y-1.5">
+                        {qtyBreakdown.map((p) => (
+                            <div key={p.product_type} className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg bg-muted/40 text-sm">
+                                <span className="font-medium text-foreground truncate" title={p.product_type}>{p.product_type}</span>
+                                <span className="font-bold text-foreground shrink-0">{p.qty.toLocaleString()}</span>
+                            </div>
+                        ))}
+                        {qtyBreakdown.length === 0 && (
+                            <div className="text-center text-sm text-muted-foreground py-8">No items found.</div>
+                        )}
+                    </div>
+                    <div className="flex items-center justify-between border-t border-border pt-3 text-sm font-bold text-foreground">
+                        <span>Total</span>
+                        <span>{totals.tot.toLocaleString()}</span>
+                    </div>
+                </DialogContent>
+            </Dialog>
 
             <Card className="p-4 shadow-card">
                 <div className="relative">
@@ -827,6 +974,9 @@ const PurchaseOrders = () => {
                     <table className="w-full text-sm table-fixed">
                         <thead className="bg-muted/50 text-foreground text-sm font-bold uppercase tracking-wider">
                             <tr>
+                                <th className="px-1.5 py-3 text-center" style={{ width: 40, minWidth: 40 }}>
+                                    <Checkbox checked={allVisibleSelected} onCheckedChange={toggleSelectAll} aria-label="Select all" />
+                                </th>
                                 <SortableHeader label="S.No." width={poWidths.sno} onResizeStart={startPoResize("sno")} />
                                 <FilterableHeader label="Client" columnKey="client_name" accessor={POColumnAccessors.client_name} sortConfig={poSortConfig} setSort={setPoSort} width={poWidths.client_name} onResizeStart={startPoResize("client_name")} rows={filtered} filterValue={poFilters.client_name} onApplyFilter={setPoFilter} />
                                 <FilterableHeader label="Project" columnKey="project" accessor={POColumnAccessors.project} sortConfig={poSortConfig} setSort={setPoSort} width={poWidths.project} onResizeStart={startPoResize("project")} rows={filtered} filterValue={poFilters.project} onApplyFilter={setPoFilter} />
@@ -844,17 +994,23 @@ const PurchaseOrders = () => {
                         </thead>
                         <tbody>
                             {isLoading && (
-                                <tr><td colSpan={13} className="px-5 py-12 text-center text-muted-foreground">Loading...</td></tr>
+                                <tr><td colSpan={14} className="px-5 py-12 text-center text-muted-foreground">Loading...</td></tr>
                             )}
                             {sortedOrders.map((o, idx) => {
-                                const lastAct = o.last_opened_at || o.last_updated_at || o.created_at;
-                                const lastBy = o.last_opened_by || o.last_updated_by || o.created_by || "—";
+                                // Only a real edit should change who's shown here — merely opening/
+                                // viewing a PO (last_opened_at/by) must never override this, or the
+                                // name would flip just from someone looking at the record.
+                                const lastAct = o.last_updated_at || o.created_at;
+                                const lastBy = o.last_updated_by || o.created_by || "—";
                                 return (
                                     <tr
                                         key={o.id}
                                         style={{ height: getPoRowHeight(o.id) }}
                                         className={`relative border-t border-border hover:bg-muted/30 text-sm${o.remark ? " bg-amber-50 dark:bg-amber-950/20" : ""}`}
                                     >
+                                        <td className="px-1.5 py-3 text-center">
+                                            <Checkbox checked={selectedIds.has(o.id)} onCheckedChange={() => toggleSelectOne(o.id)} aria-label={`Select PO ${o.po_number}`} />
+                                        </td>
                                         <td className="relative px-1.5 py-3 text-center text-muted-foreground">
                                             {idx + 1}
                                             <div
@@ -865,18 +1021,22 @@ const PurchaseOrders = () => {
                                                 <div className="w-full h-[3px] bg-border group-hover:bg-primary group-active:bg-primary rounded-full transition-colors" />
                                             </div>
                                         </td>
-                                        <td className="px-1.5 py-3 text-center text-foreground font-semibold truncate" title={o.client_name}>{o.client_name}</td>
-                                        <td className="px-1.5 py-3 text-center text-muted-foreground truncate" title={o.project}>{o.project}</td>
-                                        <td className="px-1.5 py-3 text-center text-muted-foreground truncate" title={(o.line_items?.length > 0) ? o.line_items.map(l => l.item).join(", ") : o.item}>
+                                        <td className={`px-1.5 py-3 text-center font-semibold truncate cursor-pointer hover:underline ${o.short_closed ? "text-destructive" : "text-foreground"}`} title={o.client_name} onClick={() => setViewing(o)}>{o.client_name}</td>
+                                        <td className={`px-1.5 py-3 text-center truncate cursor-pointer hover:underline ${o.short_closed ? "text-destructive" : "text-muted-foreground"}`} title={o.project} onClick={() => setViewing(o)}>{o.project}</td>
+                                        <td
+                                            className={`px-1.5 py-3 text-center truncate cursor-pointer hover:underline ${o.short_closed ? "text-destructive" : "text-muted-foreground"}`}
+                                            title={(o.line_items?.length > 0) ? o.line_items.map(l => l.item).join(", ") : o.item}
+                                            onClick={() => setViewing(o)}
+                                        >
                                             {(o.line_items?.length > 0) ? o.line_items[0].item : o.item}
                                             {(o.line_items?.length > 1) && <span className="ml-1 text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">+{o.line_items.length - 1}</span>}
                                         </td>
-                                        <td className="px-1.5 py-3 text-center font-medium text-foreground truncate text-xs" title={o.po_number}>{o.po_number}</td>
-                                        <td className="px-1.5 py-3 text-center text-muted-foreground whitespace-nowrap text-xs">{o.po_date ? fmtDate(o.po_date) : "—"}</td>
-                                        <td className="px-1.5 py-3 text-center font-semibold whitespace-nowrap">{o.total_quantity} <span className="text-[10px] font-normal text-muted-foreground">{o.uom || "Nos"}</span></td>
-                                        <td className="px-1.5 py-3 text-center text-success font-bold whitespace-nowrap">{o.delivered_quantity} <span className="text-[10px] font-normal text-muted-foreground">{o.uom || "Nos"}</span></td>
-                                        <td className="px-1.5 py-3 text-center text-warning font-bold whitespace-nowrap">{o.pending_quantity} <span className="text-[10px] font-normal text-muted-foreground">{o.uom || "Nos"}</span></td>
-                                        <td className="px-1.5 py-3 text-center text-muted-foreground whitespace-nowrap text-xs">{o.validity_date ? fmtDate(o.validity_date) : "—"}</td>
+                                        <td className={`px-1.5 py-3 text-center font-medium truncate text-xs cursor-pointer hover:underline ${o.short_closed ? "text-destructive" : "text-foreground"}`} title={o.po_number} onClick={() => setViewing(o)}>{o.po_number}</td>
+                                        <td className={`px-1.5 py-3 text-center whitespace-nowrap text-xs ${o.short_closed ? "text-destructive" : "text-muted-foreground"}`}>{o.po_date ? fmtDate(o.po_date) : "—"}</td>
+                                        <td className={`px-1.5 py-3 text-center font-semibold whitespace-nowrap ${o.short_closed ? "text-destructive" : ""}`}>{o.total_quantity} <span className="text-[10px] font-normal text-muted-foreground">{o.uom || "Nos"}</span></td>
+                                        <td className={`px-1.5 py-3 text-center font-bold whitespace-nowrap ${o.short_closed ? "text-destructive" : "text-success"}`}>{o.delivered_quantity} <span className="text-[10px] font-normal text-muted-foreground">{o.uom || "Nos"}</span></td>
+                                        <td className={`px-1.5 py-3 text-center font-bold whitespace-nowrap ${o.short_closed ? "text-destructive" : "text-warning"}`}>{o.pending_quantity} <span className="text-[10px] font-normal text-muted-foreground">{o.uom || "Nos"}</span></td>
+                                        <td className={`px-1.5 py-3 text-center whitespace-nowrap text-xs ${o.short_closed ? "text-destructive" : "text-muted-foreground"}`}>{o.validity_date ? fmtDate(o.validity_date) : "—"}</td>
                                         <td className="px-1.5 py-3">
                                             <div className="flex justify-center">
                                                 <StatusBadge
@@ -920,7 +1080,7 @@ const PurchaseOrders = () => {
                                                 <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => openEdit(o)} disabled={o.short_closed} title="Edit">
                                                     <Pencil className={`h-3 w-3 ${o.short_closed ? "text-muted-foreground" : "text-blue-500"}`} />
                                                 </Button>
-                                                {o.delivery_status !== "Delivered" && !o.short_closed && (
+                                                {isAdmin && o.delivery_status !== "Delivered" && !o.short_closed && (
                                                     <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[10px] font-semibold text-slate-600 hover:bg-slate-100" onClick={() => setShortCloseItem(o)} title="Short Close PO">
                                                         Close
                                                     </Button>
@@ -932,7 +1092,7 @@ const PurchaseOrders = () => {
                                 );
                             })}
                             {!isLoading && sortedOrders.length === 0 && (
-                                <tr><td colSpan={13} className="px-5 py-12 text-center text-muted-foreground">No purchase orders found.</td></tr>
+                                <tr><td colSpan={14} className="px-5 py-12 text-center text-muted-foreground">No purchase orders found.</td></tr>
                             )}
                         </tbody>
                     </table>
@@ -1172,6 +1332,27 @@ const PurchaseOrders = () => {
                 </DialogContent>
             </Dialog>
 
+            <Dialog open={bulkDeleteConfirmOpen} onOpenChange={setBulkDeleteConfirmOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader><DialogTitle>Confirm Bulk Deletion</DialogTitle></DialogHeader>
+                    <div className="py-4">
+                        <p className="text-sm text-muted-foreground">
+                            Delete {selectedIds.size} selected purchase order{selectedIds.size === 1 ? "" : "s"}? Any linked Sales/Invoices will be deleted first. This action cannot be undone.
+                        </p>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setBulkDeleteConfirmOpen(false)}>Cancel</Button>
+                        <Button
+                            variant="destructive"
+                            disabled={bulkDeleteMutation.isPending}
+                            onClick={() => { bulkDeleteMutation.mutate(Array.from(selectedIds)); setBulkDeleteConfirmOpen(false); }}
+                        >
+                            Delete Selected
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
             <input
                 type="file"
                 id="direct-file-upload"
@@ -1264,6 +1445,8 @@ const PurchaseOrders = () => {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <ItemMasterManageDialog open={manageItemsOpen} onOpenChange={setManageItemsOpen} />
         </div>
     );
 };

@@ -5,6 +5,7 @@ const FALLBACK = {
     products: [],
     uom_options: ["Nos", "MT", "Kg", "Ton", "Set", "Meter", "Sqm", "Cum", "Ltr", "Box", "Unit", "ZNS", "PC"],
     clients: [],
+    wo_clients: [],
     locations: [],
     projects: [],
     payment_terms: [],

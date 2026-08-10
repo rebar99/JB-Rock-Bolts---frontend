@@ -57,6 +57,33 @@ export function fmtDateTimeIST(str) {
 }
 
 /**
+ * "05-08-2026 03:45 PM" — date and time, IST, DD-MM-YYYY layout (used by the
+ * Reports → Overview dashboard's "As on Updated" header, which needs this
+ * exact format rather than the "23 Jul 2026, 10:45 AM" style used elsewhere).
+ */
+export function fmtDateTimeDMY(str) {
+    const d = parseUTC(str);
+    if (!d) return "—";
+    const parts = new Intl.DateTimeFormat("en-GB", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+        timeZone: IST,
+    }).formatToParts(d);
+    const get = (type) => parts.find((p) => p.type === type)?.value ?? "";
+    const dayPart = get("day");
+    const monthPart = get("month");
+    const yearPart = get("year");
+    const hourPart = get("hour");
+    const minutePart = get("minute");
+    const dayPeriod = get("dayPeriod").toUpperCase();
+    return `${dayPart}-${monthPart}-${yearPart} ${hourPart}:${minutePart} ${dayPeriod}`;
+}
+
+/**
  * Human-friendly relative time in IST:
  *   < 1 min    → "Just now"
  *   1–59 min   → "5 mins ago"
