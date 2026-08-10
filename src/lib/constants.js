@@ -9,7 +9,7 @@ const FALLBACK = {
     locations: [],
     projects: [],
     payment_terms: [],
-    payment_statuses: ["Pending", "Partial", "Paid"],
+    payment_statuses: ["Pending", "Paid"],
     delivery_statuses: ["Not Delivered", "Delivered"],
     inventory_statuses: ["In Stock", "Low Stock", "Out of Stock"],
     wo_statuses: ["Pending", "In Progress", "Partial", "Completed", "Closed", "Cancelled"],
