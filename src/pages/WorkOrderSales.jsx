@@ -23,7 +23,7 @@ import {
 import { toast } from "sonner";
 import { Plus, Truck, Clock, CreditCard, Eye, Package, User, Trash2, Search, Download, UploadCloud, FileText, X, Pencil, CheckCircle, Printer, FileDown, Upload, ChevronDown, ChevronUp } from "lucide-react";
 
-const PAYMENT_STATUS = ["Pending", "Partial", "Paid"];
+const PAYMENT_STATUS = ["Pending", "Paid"];
 
 
 const parseInvoiceStr = (fullStr, defaultSuffix, prefix) => {

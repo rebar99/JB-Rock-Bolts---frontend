@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ItemCombobox } from "@/components/ItemCombobox";
 import { ItemMasterManageDialog } from "@/components/ItemMasterManageDialog";
+import { UomManageDialog } from "@/components/UomManageDialog";
 import { inr, fmtDate, fmtDateTime } from "@/lib/format";
 import { getCurrentUser } from "@/lib/currentUser";
 import { useConstants } from "@/lib/constants";
@@ -123,6 +124,7 @@ const PurchaseOrders = () => {
     const { user } = useAuth();
     const isAdmin = !!user?.is_admin;
     const [manageItemsOpen, setManageItemsOpen] = useState(false);
+    const [manageUomOpen, setManageUomOpen] = useState(false);
 
     // Item Master — the only source for the Item Name field below. Read by
     // both Admin and User (matches the backend's GET /api/item-master,
@@ -675,9 +677,14 @@ const PurchaseOrders = () => {
                                     <Label className="text-sm font-semibold">Items *</Label>
                                     <div className="flex items-center gap-2">
                                         {isAdmin && (
-                                            <Button type="button" size="sm" variant="outline" onClick={() => setManageItemsOpen(true)}>
-                                                <Settings className="h-3.5 w-3.5 mr-1" /> Manage Items
-                                            </Button>
+                                            <>
+                                                <Button type="button" size="sm" variant="outline" onClick={() => setManageItemsOpen(true)}>
+                                                    <Settings className="h-3.5 w-3.5 mr-1" /> Manage Items
+                                                </Button>
+                                                <Button type="button" size="sm" variant="outline" onClick={() => setManageUomOpen(true)}>
+                                                    <Settings className="h-3.5 w-3.5 mr-1" /> Manage UOM
+                                                </Button>
+                                            </>
                                         )}
                                         <Button type="button" size="sm" variant="outline" onClick={addLineItem}>
                                             <Plus className="h-3.5 w-3.5 mr-1" /> Add Item
@@ -1539,6 +1546,7 @@ const PurchaseOrders = () => {
             </Dialog>
 
             <ItemMasterManageDialog open={manageItemsOpen} onOpenChange={setManageItemsOpen} type="PO" />
+            <UomManageDialog open={manageUomOpen} onOpenChange={setManageUomOpen} />
         </div>
     );
 };
