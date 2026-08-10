@@ -86,6 +86,8 @@ const applyColumnFilters = (rows, filters, accessors) => {
 
 const WorkOrderReport = () => {
     const [search, setSearch] = useState("");
+    const queryClient = useQueryClient();
+    const importInputRef = useRef(null);
 
     const { data, isLoading } = useQuery({
         queryKey: ["workOrderReport"],
@@ -257,6 +259,13 @@ const WorkOrderReport = () => {
                     <Button onClick={openImport} variant="outline" className="border-blue-500 text-blue-700 hover:bg-blue-50">
                         <Upload className="h-4 w-4 mr-2" /> Import Excel
                     </Button>
+                    <input
+                        ref={importInputRef}
+                        type="file"
+                        accept=".xlsx"
+                        className="hidden"
+                        onChange={handleImportFileChange}
+                    />
                 </div>
             </div>
 
