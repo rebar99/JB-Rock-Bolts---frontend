@@ -1,6 +1,4 @@
-const BASE =
-    import.meta.env.VITE_API_URL ||
-    "http://127.0.0.1:8000";
+const BASE = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
 
 const getToken = () => localStorage.getItem("auth_token");
 
@@ -55,14 +53,17 @@ export const fetchConstants = () => get("/api/constants");
 export const fetchDashboardStats = () => get("/api/dashboard/stats");
 export const fetchDashboardCharts = () => get("/api/dashboard/charts");
 export const fetchRecentSales = (limit = 6) => get("/api/dashboard/recent-sales", { limit });
+export const fetchDashboardClients = () => get("/api/dashboard/clients");
+export const fetchMonthlyProductSales = (year) => get("/api/dashboard/monthly-product-sales", year ? { year } : undefined);
 
 // ── Purchase Orders ───────────────────────────────────────────────────────────
-export const fetchPurchaseOrders = (params) => get("/api/purchase-orders", params);
+export const fetchPurchaseOrders = (params) => get("/api/purchase-orders", { limit: 10000, ...params });
 export const fetchPurchaseOrder = (id, openedBy) =>
     get(`/api/purchase-orders/${id}`, openedBy ? { opened_by: openedBy } : undefined);
 export const createPurchaseOrder = (body) => post("/api/purchase-orders", body);
 export const updatePurchaseOrder = (id, body) => put(`/api/purchase-orders/${id}`, body);
 export const deletePurchaseOrder = (id, deletedBy) => del(`/api/purchase-orders/${id}`, deletedBy ? { deleted_by: deletedBy } : undefined);
+export const bulkDeletePurchaseOrders = (ids, deletedBy) => post("/api/purchase-orders/bulk-delete", { ids, deleted_by: deletedBy });
 export const shortClosePurchaseOrder = (id, body) => post(`/api/purchase-orders/${id}/short-close`, body);
 export const uploadPOFile = async (file) => {
     const formData = new FormData();
@@ -109,12 +110,13 @@ export const importPurchaseOrders = async (file, onConflict = "skip", createdBy)
 };
 
 // ── Work Orders ────────────────────────────────────────────────────────────────
-export const fetchWorkOrders = (params) => get("/api/work-orders", params);
+export const fetchWorkOrders = (params) => get("/api/work-orders", { limit: 10000, ...params });
 export const fetchWorkOrder = (id, openedBy) =>
     get(`/api/work-orders/${id}`, openedBy ? { opened_by: openedBy } : undefined);
 export const createWorkOrder = (body) => post("/api/work-orders", body);
 export const updateWorkOrder = (id, body) => put(`/api/work-orders/${id}`, body);
 export const deleteWorkOrder = (id, deletedBy) => del(`/api/work-orders/${id}`, deletedBy ? { deleted_by: deletedBy } : undefined);
+export const bulkDeleteWorkOrders = (ids, deletedBy) => post("/api/work-orders/bulk-delete", { ids, deleted_by: deletedBy });
 export const closeWorkOrder = (id, body) => post(`/api/work-orders/${id}/close`, body);
 export const fetchNextWONumber = () => get("/api/work-orders/next-number");
 export const uploadWorkOrderFile = async (file) => {
@@ -156,7 +158,8 @@ export const importWorkOrders = async (file, onConflict = "skip", createdBy) => 
     });
     if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }));
-        throw new Error(err.detail || "Import failed");
+        const errorMessage = Array.isArray(err.detail) ? err.detail.map(e => e.msg).join(", ") : (err.detail || "Import failed");
+        throw new Error(errorMessage);
     }
     return res.json();
 };
@@ -182,12 +185,47 @@ export const exportWorkOrderReport = async (params = {}) => {
     URL.revokeObjectURL(url);
 };
 
+export const exportCombinedWorkOrderReport = async (sheets, params = {}) => {
+    const token = getToken();
+    const qp = new URLSearchParams({ sheets: sheets.join(",") });
+    Object.entries(params).forEach(([k, v]) => { if (v != null && v !== "") qp.set(k, v); });
+    const res = await fetch(`${BASE}/api/work-order-reports/export-combined?${qp.toString()}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error("Export failed");
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `work-order-reports-combined-${Date.now()}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+};
+
+export const importCombinedWorkOrderReport = async (file, onConflict = "skip", createdBy) => {
+    const token = getToken();
+    const formData = new FormData();
+    formData.append("file", file);
+    const qs = createdBy ? `&created_by=${encodeURIComponent(createdBy)}` : "";
+    const res = await fetch(`${BASE}/api/work-order-reports/import-combined?on_conflict=${onConflict}${qs}`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        const errorMessage = Array.isArray(err.detail) ? err.detail.map(e => e.msg).join(", ") : (err.detail || "Import failed");
+        throw new Error(errorMessage);
+    }
+    return res.json();
+};
+
 // ── Sales ────────────────────────────────────────────────────────────────────
-export const fetchSales = (params) => get("/api/sales", params);
+export const fetchSales = (params) => get("/api/sales", { limit: 10000, ...params });
 export const fetchSale = (id) => get(`/api/sales/${id}`);
 export const createSale = (body) => post("/api/sales", body);
 export const updateSale = (id, body) => put(`/api/sales/${id}`, body);
 export const deleteSale = (id, deletedBy) => del(`/api/sales/${id}`, deletedBy ? { deleted_by: deletedBy } : undefined);
+export const bulkDeleteSales = (ids, deletedBy) => post("/api/sales/bulk-delete", { ids, deleted_by: deletedBy });
 export const addSaleActivity = (id, body) => post(`/api/sales/${id}/activities`, body);
 export const addSaleDispatch = (id, body) => post(`/api/sales/${id}/dispatches`, body);
 export const markSaleDelivered = (id, body) => put(`/api/sales/${id}/mark-delivered`, body);
@@ -230,17 +268,19 @@ export const importSales = async (file, onConflict = "skip", createdBy) => {
     });
     if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }));
-        throw new Error(err.detail || "Import failed");
+        const errorMessage = Array.isArray(err.detail) ? err.detail.map(e => e.msg).join(", ") : (err.detail || "Import failed");
+        throw new Error(errorMessage);
     }
     return res.json();
 };
 
 // ── Work Order Sales ─────────────────────────────────────────────────────────
-export const fetchWorkOrderSales = (params) => get("/api/work-order-sales", params);
+export const fetchWorkOrderSales = (params) => get("/api/work-order-sales", { limit: 10000, ...params });
 export const fetchWorkOrderSale = (id) => get(`/api/work-order-sales/${id}`);
 export const createWorkOrderSale = (body) => post("/api/work-order-sales", body);
 export const updateWorkOrderSale = (id, body) => put(`/api/work-order-sales/${id}`, body);
 export const deleteWorkOrderSale = (id, deletedBy) => del(`/api/work-order-sales/${id}`, deletedBy ? { deleted_by: deletedBy } : undefined);
+export const bulkDeleteWorkOrderSales = (ids, deletedBy) => post("/api/work-order-sales/bulk-delete", { ids, deleted_by: deletedBy });
 export const addWorkOrderSaleActivity = (id, body) => post(`/api/work-order-sales/${id}/activities`, body);
 export const addWorkOrderSaleDispatch = (id, body) => post(`/api/work-order-sales/${id}/dispatches`, body);
 export const deleteWorkOrderSaleDispatch = (id, dispatchId, deletedBy) => del(`/api/work-order-sales/${id}/dispatches/${dispatchId}`, deletedBy ? { deleted_by: deletedBy } : undefined);
@@ -284,7 +324,8 @@ export const importWorkOrderSales = async (file, onConflict = "skip", createdBy)
     });
     if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }));
-        throw new Error(err.detail || "Import failed");
+        const errorMessage = Array.isArray(err.detail) ? err.detail.map(e => e.msg).join(", ") : (err.detail || "Import failed");
+        throw new Error(errorMessage);
     }
     return res.json();
 };
@@ -299,15 +340,23 @@ export const updateProduct = (id, body) => put(`/api/inventory/${id}`, body);
 export const deleteProduct = (id) => del(`/api/inventory/${id}`);
 
 // ── Clients & Projects ───────────────────────────────────────────────────────
-export const fetchClients = (params) => get("/api/clients", params);
+export const fetchClients = (params) => get("/api/clients", { limit: 10000, ...params });
 export const fetchClientStats = () => get("/api/clients/stats");
 export const createClient = (body) => post("/api/clients", body);
 export const deleteClient = (id, deletedBy) => del(`/api/clients/${id}`, deletedBy ? { deleted_by: deletedBy } : undefined);
-export const fetchProjects = (params) => get("/api/projects", params);
+export const fetchProjects = (params) => get("/api/projects", { limit: 10000, ...params });
 export const createProject = (body) => post("/api/projects", body);
 
+// ── Item Master (PO Item field) ─────────────────────────────────────────────
+export const fetchItemMasterList = () => get("/api/item-master");
+export const createItemMasterItem = (body) => post("/api/item-master", body);
+export const updateItemMasterItem = (id, body) => put(`/api/item-master/${id}`, body);
+export const deleteItemMasterItem = (id, deletedBy) => del(`/api/item-master/${id}`, deletedBy ? { deleted_by: deletedBy } : undefined);
+export const addItemMasterSize = (itemId, body) => post(`/api/item-master/${itemId}/sizes`, body);
+export const deleteItemMasterSize = (itemId, sizeId, deletedBy) => del(`/api/item-master/${itemId}/sizes/${sizeId}`, deletedBy ? { deleted_by: deletedBy } : undefined);
+
 // ── Records ──────────────────────────────────────────────────────────────────
-export const fetchRecords = (params) => get("/api/records", params);
+export const fetchRecords = (params) => get("/api/records", { limit: 10000, ...params });
 export const createRecord = (body) => post("/api/records", body);
 export const updateRecord = (id, body) => put(`/api/records/${id}`, body);
 export const deleteRecord = (id) => del(`/api/records/${id}`);
@@ -317,6 +366,7 @@ export const fetchReport = (params) => get("/api/reports", params);
 export const fetchFulfillmentReport = (params) => get("/api/reports/fulfillment", params);
 export const fetchPendingPOs = () => get("/api/reports/pending-pos");
 export const fetchPOFulfillmentSummary = (poId) => get(`/api/reports/po-fulfillment-summary/${poId}`);
+export const fetchOverviewReport = () => get("/api/reports/overview");
 
 export const exportReport = async (reportType, params = {}) => {
     const token = getToken();
@@ -347,7 +397,8 @@ export const importReport = async (file, reportType, onConflict = "skip", create
     });
     if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }));
-        throw new Error(err.detail || "Import failed");
+        const errorMessage = Array.isArray(err.detail) ? err.detail.map(e => e.msg).join(", ") : (err.detail || "Import failed");
+        throw new Error(errorMessage);
     }
     return res.json();
 };

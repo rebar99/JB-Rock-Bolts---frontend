@@ -15,7 +15,7 @@ import { inr, fmtDate, round2 } from "@/lib/format";
 import { StatusBadge } from "@/components/StatusBadge";
 import { getCurrentUser } from "@/lib/currentUser";
 import { toast } from "sonner";
-import { Download, Upload, IndianRupee, Package, TrendingUp, ClipboardList, BarChart3, Clock, FileText, UploadCloud, Printer, CheckCircle2 } from "lucide-react";
+import { Download, Upload, IndianRupee, Package, TrendingUp, ClipboardList, BarChart3, Clock, FileText, UploadCloud, Printer, CheckCircle2, LayoutDashboard } from "lucide-react";
 import { useSortableRows } from "@/hooks/useSortableRows";
 import { useResizableColumns } from "@/hooks/useResizableColumns";
 import { useColumnFilters } from "@/hooks/useColumnFilters";
@@ -23,6 +23,7 @@ import { SortableHeader } from "@/components/SortableHeader";
 import { FilterableHeader } from "@/components/FilterableHeader";
 import { StickyScrollArea } from "@/components/StickyScrollArea";
 import WorkOrderReport from "@/pages/WorkOrderReport";
+import OverviewReport from "@/pages/OverviewReport";
 
 // Guards footer quantity totals against floating-point drift from repeated
 // addition (e.g. 0.1 + 0.2 producing 0.30000000000000004).
@@ -270,7 +271,10 @@ const Reports = () => {
 
             {/* ── Report section selector ─────────────────────────────────────── */}
             <Tabs value={reportSection} onValueChange={setReportSection} className="w-full">
-                <TabsList className="grid w-full grid-cols-2 mb-6 p-1 bg-muted/50 rounded-xl">
+                <TabsList className="grid w-full grid-cols-3 mb-6 p-1 bg-muted/50 rounded-xl">
+                    <TabsTrigger value="overview" className="rounded-lg py-2 transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-md dark:data-[state=active]:bg-white dark:data-[state=active]:text-slate-900">
+                        <LayoutDashboard className="h-4 w-4 mr-2" /> Overview
+                    </TabsTrigger>
                     <TabsTrigger value="po" className="rounded-lg py-2 transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-md dark:data-[state=active]:bg-white dark:data-[state=active]:text-slate-900">
                         <FileText className="h-4 w-4 mr-2" /> Purchase Order Report
                     </TabsTrigger>
@@ -278,6 +282,10 @@ const Reports = () => {
                         <ClipboardList className="h-4 w-4 mr-2" /> Work Order Report
                     </TabsTrigger>
                 </TabsList>
+
+                <TabsContent value="overview" className="space-y-6">
+                    <OverviewReport />
+                </TabsContent>
 
                 <TabsContent value="po" className="space-y-6">
             <div className="flex flex-wrap items-end justify-end gap-3">
