@@ -20,7 +20,7 @@ import {
     fetchPurchaseOrders, createPurchaseOrder, updatePurchaseOrder,
     deletePurchaseOrder, bulkDeletePurchaseOrders, fetchPurchaseOrder, openPODocument,
     createClient, createProject, fetchProjects, uploadPOFile, fetchItemMasterList,
-    exportPurchaseOrders, importPurchaseOrders, shortClosePurchaseOrder,
+    exportPurchaseOrders, importPurchaseOrders, shortClosePurchaseOrder, fetchPOFulfillmentSummary
 } from "@/lib/api";
 import { Pencil, Plus, Search, Trash2, Eye, FileText, Package, Truck, Clock, Printer, X, UploadCloud, Download, Upload, Settings } from "lucide-react";
 import { toast } from "sonner";
@@ -129,8 +129,8 @@ const PurchaseOrders = () => {
     // which has no role gate); only Add/Edit/Delete (inside
     // ItemMasterManageDialog) are Admin-only, enforced server-side too.
     const { data: itemMasterList = [] } = useQuery({
-        queryKey: ["item-master"],
-        queryFn: fetchItemMasterList,
+        queryKey: ["item-master", "PO"],
+        queryFn: () => fetchItemMasterList("PO"),
     });
 
     // Fetch the complete Purchase Order list (no pagination cap) — this is the
@@ -213,6 +213,15 @@ const PurchaseOrders = () => {
 
     const [shortCloseItem, setShortCloseItem] = useState(null);
     const [shortCloseRemark, setShortCloseRemark] = useState("");
+
+    const { data: poFulfillment, isLoading: poFulfillmentLoading } = useQuery({
+        queryKey: ["po-fulfillment-summary", viewing?.id],
+        queryFn: () => fetchPOFulfillmentSummary(viewing.id),
+        enabled: !!viewing?.id,
+    });
+
+    const poDeliveryStatusBadge = (status) =>
+        status === "Completed" ? "Delivered" : status === "Short Closed" ? "Short Closed" : status;
 
     const [importOpen, setImportOpen] = useState(false);
     const [importFile, setImportFile] = useState(null);
@@ -1247,6 +1256,89 @@ const PurchaseOrders = () => {
                                 </div>
                             )}
 
+                            {/* PO Fulfillment Summary section */}
+                            {poFulfillmentLoading && <div className="sm:col-span-2 py-4 text-center text-muted-foreground text-sm">Loading fulfillment summary…</div>}
+                            {poFulfillment && !poFulfillmentLoading && (() => {
+                                const po = poFulfillment;
+                                return (
+                                    <div className="sm:col-span-2 space-y-5 py-4 border-t border-border mt-4">
+                                        <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                                            <Package className="h-4 w-4 text-primary" /> PO Fulfillment Summary
+                                        </h3>
+                                        
+                                        {/* Quantity summary */}
+                                        <div className="grid grid-cols-3 gap-3">
+                                            <div className="rounded-lg border border-border bg-muted/20 p-3 text-center">
+                                                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">PO Quantity</div>
+                                                <div className="text-lg font-bold text-foreground">{po.po_quantity} <span className="text-xs font-normal text-muted-foreground">{po.uom}</span></div>
+                                            </div>
+                                            <div className="rounded-lg border border-border bg-muted/20 p-3 text-center">
+                                                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Delivered Quantity</div>
+                                                <div className="text-lg font-bold text-success">{po.delivered_quantity} <span className="text-xs font-normal text-muted-foreground">{po.uom}</span></div>
+                                            </div>
+                                            <div className="rounded-lg border border-border bg-muted/20 p-3 text-center">
+                                                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Pending Quantity</div>
+                                                <div className="text-lg font-bold text-warning">{po.pending_quantity} <span className="text-xs font-normal text-muted-foreground">{po.uom}</span></div>
+                                            </div>
+                                        </div>
+
+                                        {/* Dispatch history */}
+                                        <div className="space-y-2">
+                                            <Label className="text-sm font-semibold">Dispatch History</Label>
+                                            <div className="rounded-lg border border-border overflow-x-auto">
+                                                <table className="w-full text-xs text-left">
+                                                    <thead className="bg-muted text-muted-foreground font-medium border-b border-border">
+                                                        <tr>
+                                                            <th className="p-2">Dispatch Date</th>
+                                                            <th className="p-2">Invoice No.</th>
+                                                            <th className="p-2">Item</th>
+                                                            <th className="p-2 text-right">Dispatch Qty</th>
+                                                            <th className="p-2 text-right">Amount</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {po.dispatch_history?.map((d, idx) => (
+                                                            <tr key={idx} className="border-b border-border/50">
+                                                                <td className="p-2 whitespace-nowrap">{d.date}</td>
+                                                                <td className="p-2">{d.invoice_number || "—"}</td>
+                                                                <td className="p-2 max-w-[200px] truncate" title={d.item || ""}>{d.item || "—"}</td>
+                                                                <td className="p-2 text-right whitespace-nowrap">{d.dispatch_qty} <span className="text-muted-foreground">{d.uom}</span></td>
+                                                                <td className="p-2 text-right font-medium">{inr(d.amount)}</td>
+                                                            </tr>
+                                                        ))}
+                                                        {(!po.dispatch_history || po.dispatch_history.length === 0) && (
+                                                            <tr><td colSpan={5} className="p-4 text-center text-muted-foreground">No dispatches yet.</td></tr>
+                                                        )}
+                                                    </tbody>
+                                                    {po.dispatch_history?.length > 0 && (
+                                                        <tfoot>
+                                                            <tr className="border-t border-border bg-muted/30 font-semibold">
+                                                                <td className="p-2" colSpan={4}>Total <span className="font-normal text-muted-foreground">(Incl. GST)</span></td>
+                                                                <td className="p-2 text-right">
+                                                                    {inr(po.dispatch_history.reduce((sum, d) => sum + (d.amount || 0), 0))}
+                                                                </td>
+                                                            </tr>
+                                                        </tfoot>
+                                                    )}
+                                                </table>
+                                            </div>
+                                        </div>
+
+                                        {/* Dispatch / payment / status summary */}
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm border-b border-border pb-4">
+                                            <Field label="Total Dispatches" value={po.total_dispatches} />
+                                            <Field label="Last Dispatch Date" value={po.last_dispatch_date || "—"} />
+                                            <div>
+                                                <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Delivery Status</div>
+                                                <StatusBadge status={poDeliveryStatusBadge(po.delivery_status)} label={po.delivery_status} />
+                                            </div>
+                                            <Field label="Payment Received" value={inr(po.payment_received)} />
+                                            <Field label="Pending Payment" value={inr(po.pending_payment)} />
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
                             {/* Activity Log */}
                             <div className="sm:col-span-2 rounded-lg border border-border bg-muted/30 p-4 space-y-3">
                                 <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
@@ -1446,7 +1538,7 @@ const PurchaseOrders = () => {
                 </DialogContent>
             </Dialog>
 
-            <ItemMasterManageDialog open={manageItemsOpen} onOpenChange={setManageItemsOpen} />
+            <ItemMasterManageDialog open={manageItemsOpen} onOpenChange={setManageItemsOpen} type="PO" />
         </div>
     );
 };

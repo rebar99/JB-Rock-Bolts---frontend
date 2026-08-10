@@ -14,6 +14,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { inr, fmtDate, fmtDateTime, round2 } from "@/lib/format";
 import { getCurrentUser } from "@/lib/currentUser";
 import { useConstants } from "@/lib/constants";
+import { useAuth } from "@/context/AuthContext";
 import {
     fetchWorkOrders, fetchWorkOrderSales, fetchWorkOrderSale, createWorkOrderSale, updateWorkOrderSale,
     deleteWorkOrderSale as deleteWorkOrderSaleApi, bulkDeleteWorkOrderSales, addWorkOrderSaleActivity, addWorkOrderSaleDispatch, openWOInvoiceDocument, downloadWOInvoiceDocument,
@@ -24,8 +25,46 @@ import { Plus, Truck, Clock, CreditCard, Eye, Package, User, Trash2, Search, Dow
 
 const PAYMENT_STATUS = ["Pending", "Partial", "Paid"];
 
+
+const parseInvoiceStr = (fullStr, defaultSuffix, prefix) => {
+    if (!fullStr) return { num: "", suffix: defaultSuffix };
+    let rest = fullStr;
+    if (rest.startsWith(prefix)) rest = rest.substring(prefix.length);
+    const slashIdx = rest.indexOf("/");
+    if (slashIdx !== -1) return { num: rest.substring(0, slashIdx), suffix: rest.substring(slashIdx) };
+    return { num: rest, suffix: defaultSuffix };
+};
+const buildInvoiceStr = (num, suffix, prefix) => {
+    if (!num) return "";
+    return prefix + num + suffix;
+};
+const InvoiceInput = ({ value, onChange, prefix, suffix, setSuffix, isAdmin, storageKey }) => (
+    <div className="flex items-center">
+        <span className="px-3 py-2 h-9 bg-muted border border-r-0 border-border rounded-l-md text-sm text-muted-foreground whitespace-nowrap">
+            {prefix}
+        </span>
+        <Input 
+            className="h-9 rounded-none border-x-0 focus-visible:ring-0" 
+            placeholder="No."
+            value={value} 
+            onChange={(e) => onChange(e.target.value)}
+        />
+        <Input 
+            className="h-9 w-24 rounded-l-none focus-visible:ring-0 text-center px-1 disabled:opacity-75 disabled:cursor-not-allowed"
+            value={suffix}
+            onChange={(e) => {
+                setSuffix(e.target.value);
+                localStorage.setItem(storageKey, e.target.value);
+            }}
+            disabled={!isAdmin}
+        />
+    </div>
+);
+
 const WorkOrderSales = () => {
     const qc = useQueryClient();
+    const { user } = useAuth();
+    const isAdmin = !!user?.is_admin;
     const { uom_options } = useConstants();
 
     const { data: orders = [] } = useQuery({
@@ -104,6 +143,7 @@ const WorkOrderSales = () => {
     const [shipTo, setShipTo] = useState("");
     const [billTo, setBillTo] = useState("");
     const [manualInvoiceNumber, setManualInvoiceNumber] = useState("");
+    const [invoiceSuffix, setInvoiceSuffix] = useState(() => localStorage.getItem("woInvoiceSuffix") || "/26");
     const [dispatchedThrough, setDispatchedThrough] = useState("");
     const [buyersOrderNo, setBuyersOrderNo] = useState("");
     const [paymentTerms, setPaymentTerms] = useState("");
@@ -121,6 +161,7 @@ const WorkOrderSales = () => {
     const [editOpen, setEditOpen] = useState(false);
     const [editingSale, setEditingSale] = useState(null);
     const [editInvoiceNumber, setEditInvoiceNumber] = useState("");
+    const [editInvoiceSuffix, setEditInvoiceSuffix] = useState("");
     const [editDispatchedThrough, setEditDispatchedThrough] = useState("");
     const [editBuyersOrderNo, setEditBuyersOrderNo] = useState("");
     const [editDispatchFrom, setEditDispatchFrom] = useState("");
@@ -535,7 +576,7 @@ const WorkOrderSales = () => {
                 payment_status: paymentStatus,
                 payment_note: paymentNote || null,
                 invoice_url: invoiceUrl || null,
-                invoice_number: manualInvoiceNumber || null,
+                invoice_number: buildInvoiceStr(manualInvoiceNumber, invoiceSuffix, "JbenggJW-") || null,
                 dispatch_from: dispatchFrom || null,
                 ship_to: shipTo || null,
                 bill_to: billTo || null,
@@ -642,7 +683,7 @@ const WorkOrderSales = () => {
                     subtotal: dispatchItems.reduce((acc, i) => acc + (Number(i.subtotal) || 0), 0),
                     gst_amount: dispatchItems.reduce((acc, i) => acc + (Number(i.gst_amount) || 0), 0),
                     amount: dispatchItems.reduce((acc, i) => acc + (Number(i.total_amount) || 0), 0),
-                    invoice_number: manualInvoiceNumber || null,
+                    invoice_number: buildInvoiceStr(manualInvoiceNumber, invoiceSuffix, "JbenggJW-") || null,
                     by: getCurrentUser(),
                     // Per-item breakdown — keeps each item's own qty/uom
                     // separate so a dispatch mixing units (e.g. Meter + Nos)
@@ -694,7 +735,7 @@ const WorkOrderSales = () => {
                     payment_status: "Pending",
                     payment_note: null,
                     invoice_url: invoiceUrl || null,
-                    invoice_number: manualInvoiceNumber || null,
+                    invoice_number: buildInvoiceStr(manualInvoiceNumber, invoiceSuffix, "JbenggJW-") || null,
                     dispatch_from: dispatchFrom || null,
                     ship_to: woData.site_location || null,
                     bill_to: null,
@@ -747,7 +788,9 @@ const WorkOrderSales = () => {
 
     const openEditSale = (sale) => {
         setEditingSale(sale);
-        setEditInvoiceNumber(sale.invoice_number || "");
+        const parsed = parseInvoiceStr(sale.invoice_number, localStorage.getItem("woInvoiceSuffix") || "/26", "JbenggJW-");
+        setEditInvoiceNumber(parsed.num);
+        setEditInvoiceSuffix(parsed.suffix);
         setEditBuyersOrderNo(sale.buyers_order_no || "");
         setEditDispatchedThrough(sale.dispatched_through || "");
         setEditDispatchFrom(sale.dispatch_from || "");
@@ -861,7 +904,7 @@ const WorkOrderSales = () => {
                             };
                         });
                     })(),
-                    invoice_number: editInvoiceNumber || null,
+                    invoice_number: buildInvoiceStr(editInvoiceNumber, editInvoiceSuffix, "JbenggJW-") || null,
                     dispatched_through: editDispatchedThrough || null,
                     buyers_order_no: editBuyersOrderNo || null,
                     dispatch_from: editDispatchFrom || null,
@@ -968,7 +1011,8 @@ const WorkOrderSales = () => {
             (s.wo_number || "").toLowerCase().includes(q) ||
             (s.client_name || "").toLowerCase().includes(q) ||
             (s.item || "").toLowerCase().includes(q) ||
-            (s.project || "").toLowerCase().includes(q)
+            (s.project || "").toLowerCase().includes(q) ||
+            (s.invoice_number || "").toLowerCase().includes(q)
         );
     }, [sales, search]);
 
@@ -1078,11 +1122,7 @@ const WorkOrderSales = () => {
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border">
                                     <div className="space-y-1">
                                         <Label>Invoice Number (Manual)</Label>
-                                        <Input
-                                            placeholder="Enter invoice number (optional)"
-                                            value={manualInvoiceNumber}
-                                            onChange={(e) => setManualInvoiceNumber(e.target.value)}
-                                        />
+                                        <InvoiceInput value={manualInvoiceNumber} onChange={setManualInvoiceNumber} prefix="JbenggJW-" suffix={invoiceSuffix} setSuffix={setInvoiceSuffix} isAdmin={isAdmin} storageKey="woInvoiceSuffix" />
                                     </div>
                                     <div className="space-y-1">
                                         <Label>Upload Invoice Document(s) {invoiceUrl && <span className="ml-1 text-primary">({invoiceUrl.split(";").filter(Boolean).length})</span>}</Label>
@@ -1432,7 +1472,7 @@ const WorkOrderSales = () => {
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border">
                                 <div className="space-y-1">
                                     <Label>Invoice Number</Label>
-                                    <Input value={editInvoiceNumber} onChange={(e) => setEditInvoiceNumber(e.target.value)} />
+                                    <InvoiceInput value={editInvoiceNumber} onChange={setEditInvoiceNumber} prefix="JbenggJW-" suffix={editInvoiceSuffix} setSuffix={setEditInvoiceSuffix} isAdmin={isAdmin} storageKey="woInvoiceSuffix" />
                                 </div>
                                 <div className="space-y-1">
                                     <Label>Upload Updated Invoice Document(s) {editInvoiceUrl && <span className="ml-1 text-primary">({editInvoiceUrl.split(";").filter(Boolean).length})</span>}</Label>
@@ -1553,7 +1593,7 @@ const WorkOrderSales = () => {
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-1">
                                         <Label>Invoice No.</Label>
-                                        <Input placeholder="Enter invoice number" value={manualInvoiceNumber} onChange={e => setManualInvoiceNumber(e.target.value)} />
+                                        <InvoiceInput value={manualInvoiceNumber} onChange={setManualInvoiceNumber} prefix="JbenggJW-" suffix={invoiceSuffix} setSuffix={setInvoiceSuffix} isAdmin={isAdmin} storageKey="woInvoiceSuffix" />
                                     </div>
                                     <div className="space-y-1">
                                         <Label>Upload Invoice Document(s) {invoiceUrl && <span className="ml-1 text-primary">({invoiceUrl.split(";").filter(Boolean).length})</span>}</Label>
@@ -1779,7 +1819,7 @@ const WorkOrderSales = () => {
                     <div className="flex items-center gap-3">
                         <div className="relative flex-1">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input className="pl-9" placeholder="Search by WO number, client, item, project..."
+                            <Input className="pl-9" placeholder="Search by WO number, invoice, client, item, project..."
                                 value={search} onChange={(e) => setSearch(e.target.value)} />
                         </div>
                         {filteredSales.length > 0 && (
@@ -1949,12 +1989,8 @@ const WorkOrderSales = () => {
                                 </div>
 
                                 <div className="flex flex-wrap gap-2">
-                                    <Button size="xs" variant="outline" className="border-slate-900 text-slate-900 hover:bg-slate-50" onClick={() => openDispatch(sale)}>
-                                        <Truck className="h-3 w-3 mr-1" /> Dispatch More
-                                    </Button>
-                                    <Button size="xs" variant="outline" className="border-slate-900 text-slate-900 hover:bg-slate-50" onClick={() => openWOInvoiceDocument(sale.id)}>
-                                        <Package className="h-3 w-3 mr-1" /> Generate Invoice
-                                    </Button>
+                                    
+                                    
                                     <Button size="xs" variant="outline" className="border-slate-900 text-slate-900 hover:bg-slate-50" onClick={() => downloadWOInvoiceDocument(sale.id)}>
                                         <Download className="h-3 w-3 mr-1" /> Download Invoice
                                     </Button>
