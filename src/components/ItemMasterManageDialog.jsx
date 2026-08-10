@@ -21,7 +21,7 @@ import { getCurrentUser } from "@/lib/currentUser";
 //
 // Each item can also carry its own list of sizes (e.g. Couplers -> 16mm,
 // 20mm...) — expand a row to manage them the same way (add/delete).
-export const ItemMasterManageDialog = ({ open, onOpenChange }) => {
+export const ItemMasterManageDialog = ({ open, onOpenChange, type = "PO" }) => {
     const qc = useQueryClient();
     const [newName, setNewName] = useState("");
     const [editingId, setEditingId] = useState(null);
@@ -31,19 +31,19 @@ export const ItemMasterManageDialog = ({ open, onOpenChange }) => {
     const [newSize, setNewSize] = useState("");
 
     const { data: items = [], isLoading } = useQuery({
-        queryKey: ["item-master"],
-        queryFn: fetchItemMasterList,
+        queryKey: ["item-master", type],
+        queryFn: () => fetchItemMasterList(type),
         enabled: open,
     });
 
-    const invalidate = () => qc.invalidateQueries({ queryKey: ["item-master"] });
+    const invalidate = () => qc.invalidateQueries({ queryKey: ["item-master", type] });
 
     const onMutationError = (err) => {
         toast.error(err.message || "Something went wrong");
     };
 
     const createMutation = useMutation({
-        mutationFn: (name) => createItemMasterItem({ name, created_by: getCurrentUser() }),
+        mutationFn: (name) => createItemMasterItem({ name, type, created_by: getCurrentUser() }),
         onSuccess: () => {
             invalidate();
             setNewName("");
