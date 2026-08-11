@@ -936,10 +936,6 @@ const SalesInvoice = () => {
 
     const handleUpdateSale = async () => {
         if (!editingSale) return;
-        if (editInvoiceDate && new Date(editInvoiceDate) < new Date("2026-04-01")) {
-            toast.error("Invoice Date cannot be before 1 April 2026.");
-            return;
-        }
         try {
             await updateMutation.mutateAsync({
                 id: Number(editingSale.id),
@@ -1600,7 +1596,7 @@ const SalesInvoice = () => {
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border">
                                 <div className="space-y-1">
                                     <Label>Invoice Date *</Label>
-                                    <Input type="date" value={editInvoiceDate} onChange={(e) => setEditInvoiceDate(e.target.value)} min="2026-04-01" />
+                                    <Input type="date" value={editInvoiceDate} onChange={(e) => setEditInvoiceDate(e.target.value)} />
                                 </div>
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">

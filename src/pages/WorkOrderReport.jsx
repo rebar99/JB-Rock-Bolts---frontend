@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/StatusBadge";
-import { fetchWorkOrderReport, fetchWorkOrder, openWODocument, fetchWorkOrderSalesReport, exportCombinedWorkOrderReport, importCombinedWorkOrderReport } from "@/lib/api";
+import { fetchWorkOrderReport, fetchWorkOrder, openWODocument, fetchWorkOrderSalesReport, exportCombinedWorkOrderReport, importCombinedWorkOrderReport, fetchWorkOrderSale } from "@/lib/api";
 import { inr, fmtDate, fmtDateTime, round2 } from "@/lib/format";
 import { getCurrentUser } from "@/lib/currentUser";
 import { Download, Upload, UploadCloud, FileText, Search, ClipboardList, CheckCircle2, Clock, TrendingUp, Eye, BarChart3, IndianRupee, Printer } from "lucide-react";
@@ -178,7 +178,13 @@ const WorkOrderReport = () => {
     const { data: selected, isLoading: selectedLoading } = useQuery({
         queryKey: ["work-order-view", selectedId],
         queryFn: () => fetchWorkOrder(selectedId),
-        enabled: !!selectedId,
+    });
+
+    const [selectedSaleId, setSelectedSaleId] = useState(null);
+    const { data: selectedSale, isLoading: selectedSaleLoading } = useQuery({
+        queryKey: ["work-order-sale-view", selectedSaleId],
+        queryFn: () => fetchWorkOrderSale(selectedSaleId),
+        enabled: !!selectedSaleId,
     });
 
     // ── Combined export dialog ───────────────────────────────────────────────
@@ -413,7 +419,7 @@ const WorkOrderReport = () => {
                                 <thead className="bg-muted/50 text-foreground text-sm font-bold uppercase tracking-wider">
                                     <tr>
                                         <SortableHeader label="S.No." width={salesWidths.sno} onResizeStart={startSalesResize("sno")} />
-                                        <FilterableHeader label="Date" columnKey="date" type="date" accessor={SalesWORColumnAccessors.date} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.date} onResizeStart={startSalesResize("date")} rows={salesRowsAll} filterValue={salesFilters.date} onApplyFilter={setSalesFilter} />
+                                        <FilterableHeader label="Invoice Date" columnKey="date" type="date" accessor={SalesWORColumnAccessors.date} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.date} onResizeStart={startSalesResize("date")} rows={salesRowsAll} filterValue={salesFilters.date} onApplyFilter={setSalesFilter} />
                                         <FilterableHeader label="Invoice No" columnKey="invoice_number" accessor={SalesWORColumnAccessors.invoice_number} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.invoice_number} onResizeStart={startSalesResize("invoice_number")} rows={salesRowsAll} filterValue={salesFilters.invoice_number} onApplyFilter={setSalesFilter} />
                                         <FilterableHeader label="WO Number" columnKey="wo_number" accessor={SalesWORColumnAccessors.wo_number} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.wo_number} onResizeStart={startSalesResize("wo_number")} rows={salesRowsAll} filterValue={salesFilters.wo_number} onApplyFilter={setSalesFilter} />
                                         <FilterableHeader label="Subtotal" columnKey="subtotal" type="number" align="right" accessor={SalesWORColumnAccessors.subtotal} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.subtotal} onResizeStart={startSalesResize("subtotal")} rows={salesRowsAll} filterValue={salesFilters.subtotal} onApplyFilter={setSalesFilter} />
@@ -428,7 +434,13 @@ const WorkOrderReport = () => {
                                         <tr key={r.id} className="border-t border-border hover:bg-muted/30 transition-colors text-[12.5px]">
                                             <td className="px-2 py-3 text-center text-muted-foreground">{idx + 1}</td>
                                             <td className="px-2 py-3 text-center text-muted-foreground whitespace-nowrap">{r.date}</td>
-                                            <td className="px-2 py-3 text-center text-primary font-medium truncate" title={r.invoice_number}>{r.invoice_number || "—"}</td>
+                                            <td className="px-2 py-3 text-center text-primary font-medium truncate" title={r.invoice_number}>
+                                                {r.invoice_number ? (
+                                                    <button type="button" className="text-center w-full text-primary hover:underline focus:outline-none" onClick={() => setSelectedSaleId(r.id)}>
+                                                        {r.invoice_number}
+                                                    </button>
+                                                ) : "—"}
+                                            </td>
                                             <td className="px-2 py-3 text-center text-muted-foreground truncate" title={r.wo_number}>{r.wo_number || "—"}</td>
                                             <td className="px-2 py-3 text-center font-medium">{inr(r.subtotal)}</td>
                                             <td className="px-2 py-3 text-center font-medium text-blue-500">{inr(r.gst_amount)}</td>
@@ -615,6 +627,58 @@ const WorkOrderReport = () => {
                                 <Printer className="h-4 w-4 mr-2" /> Print
                             </Button>
                         )}
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* 🔥 Work Order Sale Details Dialog 🔥 */}
+            <Dialog open={!!selectedSaleId} onOpenChange={(open) => !open && setSelectedSaleId(null)}>
+                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader><DialogTitle>Invoice Details</DialogTitle></DialogHeader>
+                    {selectedSaleLoading && <div className="py-10 text-center text-muted-foreground text-sm">Loading...</div>}
+                    {selectedSale && !selectedSaleLoading && (() => {
+                        const sale = selectedSale;
+                        return (
+                            <div className="space-y-5 py-2">
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                    <div className="space-y-1"><div className="text-xs text-muted-foreground">Invoice Number</div><div className="font-medium text-sm truncate" title={sale.invoice_number}>{sale.invoice_number || "-"}</div></div>
+                                    <div className="space-y-1"><div className="text-xs text-muted-foreground">WO Number</div><div className="font-medium text-sm truncate" title={sale.wo_number}>{sale.wo_number || "-"}</div></div>
+                                    <div className="space-y-1"><div className="text-xs text-muted-foreground">Client Name</div><div className="font-medium text-sm truncate" title={sale.client_name}>{sale.client_name || "-"}</div></div>
+                                    <div className="space-y-1"><div className="text-xs text-muted-foreground">Invoice Date</div><div className="font-medium text-sm truncate" title={fmtDate(sale.invoice_date || sale.created_at)}>{fmtDate(sale.invoice_date || sale.created_at) || "-"}</div></div>
+                                </div>
+
+                                <div className="rounded-lg border border-border overflow-x-auto">
+                                    <table className="w-full text-xs text-left">
+                                        <thead className="bg-muted text-muted-foreground font-medium border-b border-border">
+                                            <tr>
+                                                <th className="p-2">Item</th>
+                                                <th className="p-2 text-center">Qty</th>
+                                                <th className="p-2 text-right">Rate</th>
+                                                <th className="p-2 text-right">GST</th>
+                                                <th className="p-2 text-right">Total</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {(sale.items || []).map((it, idx) => (
+                                                <tr key={idx} className="border-b border-border/50">
+                                                    <td className="p-2 font-medium">{it.item}</td>
+                                                    <td className="p-2 text-center">{it.quantity} {it.uom}</td>
+                                                    <td className="p-2 text-right">{inr(it.rate)}</td>
+                                                    <td className="p-2 text-right text-muted-foreground">{it.gst_percent}%</td>
+                                                    <td className="p-2 text-right font-medium">{inr(it.total_amount)}</td>
+                                                </tr>
+                                            ))}
+                                            {(sale.items || []).length === 0 && (
+                                                <tr><td colSpan={5} className="p-4 text-center text-muted-foreground">No items recorded.</td></tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        );
+                    })()}
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setSelectedSaleId(null)}>Close</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
