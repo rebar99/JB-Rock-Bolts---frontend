@@ -227,6 +227,13 @@ const WorkOrderReport = () => {
         setImportOpen(true);
     };
 
+    const handleImportFileChange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            setImportFile(file);
+        }
+    };
+
     const handleImport = async () => {
         if (!importFile) return toast.error("Please select an Excel (.xlsx) file");
         setImporting(true);
