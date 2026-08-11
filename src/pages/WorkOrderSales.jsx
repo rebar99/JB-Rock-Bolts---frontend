@@ -143,6 +143,7 @@ const WorkOrderSales = () => {
     const [shipTo, setShipTo] = useState("");
     const [billTo, setBillTo] = useState("");
     const [manualInvoiceNumber, setManualInvoiceNumber] = useState("");
+    const [invoiceDate, setInvoiceDate] = useState("");
     const [invoiceSuffix, setInvoiceSuffix] = useState(() => localStorage.getItem("woInvoiceSuffix") || "/26");
     const [dispatchedThrough, setDispatchedThrough] = useState("");
     const [buyersOrderNo, setBuyersOrderNo] = useState("");
@@ -161,6 +162,7 @@ const WorkOrderSales = () => {
     const [editOpen, setEditOpen] = useState(false);
     const [editingSale, setEditingSale] = useState(null);
     const [editInvoiceNumber, setEditInvoiceNumber] = useState("");
+    const [editInvoiceDate, setEditInvoiceDate] = useState("");
     const [editInvoiceSuffix, setEditInvoiceSuffix] = useState("");
     const [editDispatchedThrough, setEditDispatchedThrough] = useState("");
     const [editBuyersOrderNo, setEditBuyersOrderNo] = useState("");
@@ -303,6 +305,7 @@ const WorkOrderSales = () => {
         setShipTo(wo?.site_location || "");
         setBillTo(""); // Leave empty as requested (don't fill name here)
         setManualInvoiceNumber("");
+        setInvoiceDate("");
         setDispatchedThrough("");
         setBuyersOrderNo("");
         setPaymentTerms("");
@@ -577,6 +580,7 @@ const WorkOrderSales = () => {
                 payment_note: paymentNote || null,
                 invoice_url: invoiceUrl || null,
                 invoice_number: buildInvoiceStr(manualInvoiceNumber, invoiceSuffix, "JbenggJW-") || null,
+                invoice_date: invoiceDate || null,
                 dispatch_from: dispatchFrom || null,
                 ship_to: shipTo || null,
                 bill_to: billTo || null,
@@ -736,6 +740,7 @@ const WorkOrderSales = () => {
                     payment_note: null,
                     invoice_url: invoiceUrl || null,
                     invoice_number: buildInvoiceStr(manualInvoiceNumber, invoiceSuffix, "JbenggJW-") || null,
+                    invoice_date: invoiceDate || null,
                     dispatch_from: dispatchFrom || null,
                     ship_to: woData.site_location || null,
                     bill_to: null,
@@ -790,6 +795,7 @@ const WorkOrderSales = () => {
         setEditingSale(sale);
         const parsed = parseInvoiceStr(sale.invoice_number, localStorage.getItem("woInvoiceSuffix") || "/26", "JbenggJW-");
         setEditInvoiceNumber(parsed.num);
+        setEditInvoiceDate(sale.invoice_date || "");
         setEditInvoiceSuffix(parsed.suffix);
         setEditBuyersOrderNo(sale.buyers_order_no || "");
         setEditDispatchedThrough(sale.dispatched_through || "");
@@ -905,6 +911,7 @@ const WorkOrderSales = () => {
                         });
                     })(),
                     invoice_number: buildInvoiceStr(editInvoiceNumber, editInvoiceSuffix, "JbenggJW-") || null,
+                    invoice_date: editInvoiceDate || null,
                     dispatched_through: editDispatchedThrough || null,
                     buyers_order_no: editBuyersOrderNo || null,
                     dispatch_from: editDispatchFrom || null,
@@ -1120,6 +1127,15 @@ const WorkOrderSales = () => {
 
                                 {/* 1. Invoice Details */}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border">
+                                    <div className="space-y-1">
+                                        <Label>Invoice Date</Label>
+                                        <Input
+                                            type="date"
+                                            min="2026-04-01"
+                                            value={invoiceDate}
+                                            onChange={(e) => setInvoiceDate(e.target.value)}
+                                        />
+                                    </div>
                                     <div className="space-y-1">
                                         <Label>Invoice Number (Manual)</Label>
                                         <InvoiceInput value={manualInvoiceNumber} onChange={setManualInvoiceNumber} prefix="JbenggJW-" suffix={invoiceSuffix} setSuffix={setInvoiceSuffix} isAdmin={isAdmin} storageKey="woInvoiceSuffix" />
@@ -1471,6 +1487,14 @@ const WorkOrderSales = () => {
                             {/* 1. Invoice Details */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border">
                                 <div className="space-y-1">
+                                    <Label>Invoice Date</Label>
+                                    <Input
+                                        type="date"
+                                        value={editInvoiceDate}
+                                        onChange={(e) => setEditInvoiceDate(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-1">
                                     <Label>Invoice Number</Label>
                                     <InvoiceInput value={editInvoiceNumber} onChange={setEditInvoiceNumber} prefix="JbenggJW-" suffix={editInvoiceSuffix} setSuffix={setEditInvoiceSuffix} isAdmin={isAdmin} storageKey="woInvoiceSuffix" />
                                 </div>
@@ -1591,6 +1615,15 @@ const WorkOrderSales = () => {
                                     </Select>
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                        <Label>Invoice Date</Label>
+                                        <Input
+                                            type="date"
+                                            min="2026-04-01"
+                                            value={invoiceDate}
+                                            onChange={(e) => setInvoiceDate(e.target.value)}
+                                        />
+                                    </div>
                                     <div className="space-y-1">
                                         <Label>Invoice No.</Label>
                                         <InvoiceInput value={manualInvoiceNumber} onChange={setManualInvoiceNumber} prefix="JbenggJW-" suffix={invoiceSuffix} setSuffix={setInvoiceSuffix} isAdmin={isAdmin} storageKey="woInvoiceSuffix" />
