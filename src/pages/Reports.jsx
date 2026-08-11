@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useConstants } from "@/lib/constants";
-import { fetchReport, fetchFulfillmentReport, fetchPendingPOs, fetchPOFulfillmentSummary, openPODocument, exportCombinedReport, importCombinedReport } from "@/lib/api";
+import { fetchReport, fetchFulfillmentReport, fetchPendingPOs, fetchPOFulfillmentSummary, openPODocument, exportCombinedReport, importCombinedReport, fetchSale } from "@/lib/api";
 import { inr, fmtDate, round2 } from "@/lib/format";
 import { StatusBadge } from "@/components/StatusBadge";
 import { getCurrentUser } from "@/lib/currentUser";
@@ -262,6 +262,14 @@ const Reports = () => {
     const poDeliveryStatusBadge = (status) =>
         status === "Completed" ? "Delivered" : status === "Short Closed" ? "Short Closed" : status;
 
+    const [selectedSaleId, setSelectedSaleId] = useState(null);
+    const { data: selectedSale, isLoading: selectedSaleLoading } = useQuery({
+        queryKey: ["sale-details", selectedSaleId],
+        queryFn: () => fetchSale(selectedSaleId),
+        enabled: !!selectedSaleId,
+    });
+    const closeViewingSale = () => setSelectedSaleId(null);
+
     return (
         <div className="space-y-6">
             {/* ── Page header ─────────────────────────────────────────────────── */}
@@ -448,7 +456,7 @@ const Reports = () => {
                                 <thead className="bg-muted/50 text-foreground text-sm font-bold uppercase tracking-wider">
                                     <tr>
                                         <SortableHeader label="S.No." width={salesWidths.sno} onResizeStart={startSalesResize("sno")} />
-                                        <FilterableHeader label="Date" columnKey="date" type="date" accessor={SalesColumnAccessors.date} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.date} onResizeStart={startSalesResize("date")} rows={salesRows} filterValue={salesFilters.date} onApplyFilter={setSalesFilter} />
+                                        <FilterableHeader label="Invoice Date" columnKey="date" type="date" accessor={SalesColumnAccessors.date} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.date} onResizeStart={startSalesResize("date")} rows={salesRows} filterValue={salesFilters.date} onApplyFilter={setSalesFilter} />
                                         <FilterableHeader label="Invoice No" columnKey="invoice_number" accessor={SalesColumnAccessors.invoice_number} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.invoice_number} onResizeStart={startSalesResize("invoice_number")} rows={salesRows} filterValue={salesFilters.invoice_number} onApplyFilter={setSalesFilter} />
                                         <FilterableHeader label="PO No" columnKey="po_number" accessor={SalesColumnAccessors.po_number} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.po_number} onResizeStart={startSalesResize("po_number")} rows={salesRows} filterValue={salesFilters.po_number} onApplyFilter={setSalesFilter} />
                                         <FilterableHeader label="Subtotal" columnKey="subtotal" type="number" align="right" accessor={SalesColumnAccessors.subtotal} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.subtotal} onResizeStart={startSalesResize("subtotal")} rows={salesRows} filterValue={salesFilters.subtotal} onApplyFilter={setSalesFilter} />
@@ -463,7 +471,13 @@ const Reports = () => {
                                         <tr key={r.id} className={`border-t border-border hover:bg-muted/30 transition-colors text-[12.5px]${r.payment_note ? " bg-amber-50 dark:bg-amber-950/20" : ""}`}>
                                             <td className="px-2 py-3 text-center text-muted-foreground">{idx + 1}</td>
                                             <td className="px-2 py-3 text-center text-muted-foreground whitespace-nowrap">{r.date}</td>
-                                            <td className="px-2 py-3 text-center text-primary font-medium truncate" title={r.invoice_number}>{r.invoice_number || "—"}</td>
+                                            <td className="px-2 py-3 text-center text-primary font-medium truncate" title={r.invoice_number}>
+                                                {r.invoice_number ? (
+                                                    <button type="button" className="text-center w-full text-primary hover:underline focus:outline-none" onClick={() => setSelectedSaleId(r.id)}>
+                                                        {r.invoice_number}
+                                                    </button>
+                                                ) : "—"}
+                                            </td>
                                             <td className="px-2 py-3 text-center text-muted-foreground truncate" title={r.po_number}>{r.po_number || "—"}</td>
                                             <td className="px-2 py-3 text-center font-medium">{inr(r.subtotal)}</td>
                                             <td className="px-2 py-3 text-center font-medium text-blue-500">{inr(r.gst_amount)}</td>
@@ -545,9 +559,6 @@ const Reports = () => {
                                         <tr key={r.id} className={`border-t border-border hover:bg-muted/30 transition-colors text-[12.5px]${r.remark ? " bg-amber-50 dark:bg-amber-950/20" : ""}`}>
                                             <td className="px-2 py-3 text-center text-muted-foreground">{idx + 1}</td>
                                             <td className="px-2 py-3 text-center text-muted-foreground whitespace-nowrap">{r.date}</td>
-                                            <td className="px-2 py-3 text-center text-primary truncate" title={r.invoice_number}>
-                                                {r.invoice_number || "—"}
-                                            </td>
                                             <td className="px-2 py-3 text-center font-semibold text-primary truncate" title={r.po_number}>
                                                 <button type="button" className="text-center w-full text-primary hover:underline focus:outline-none" onClick={() => setSelectedPOId(r.id)}>
                                                     {r.po_number}
@@ -668,7 +679,7 @@ const Reports = () => {
                                         <table className="w-full text-xs text-left">
                                             <thead className="bg-muted text-muted-foreground font-medium border-b border-border">
                                                 <tr>
-                                                    <th className="p-2">Dispatch Date</th>
+                                                    <th className="p-2">Invoice Date</th>
                                                     <th className="p-2">Invoice No.</th>
                                                     <th className="p-2">Item</th>
                                                     <th className="p-2 text-right">Dispatch Qty</th>
@@ -706,7 +717,7 @@ const Reports = () => {
                                 {/* Dispatch / payment / status summary */}
                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
                                     <Field label="Total Dispatches" value={po.total_dispatches} />
-                                    <Field label="Last Dispatch Date" value={po.last_dispatch_date || "—"} />
+                                    <Field label="Last Invoice Date" value={po.last_dispatch_date || "-"} />
                                     <div>
                                         <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Delivery Status</div>
                                         <StatusBadge status={poDeliveryStatusBadge(po.delivery_status)} label={po.delivery_status} />
@@ -725,6 +736,80 @@ const Reports = () => {
                                 <Printer className="h-4 w-4 mr-2" /> Print PO
                             </Button>
                         )}
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* ── Sale Details Dialog ────────────────────────────────────────────── */}
+            <Dialog open={!!selectedSaleId} onOpenChange={(open) => !open && closeViewingSale()}>
+                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader><DialogTitle>Invoice Details</DialogTitle></DialogHeader>
+                    {selectedSaleLoading && <div className="py-10 text-center text-muted-foreground text-sm">Loading…</div>}
+                    {selectedSale && !selectedSaleLoading && (() => {
+                        const sale = selectedSale;
+                        return (
+                            <div className="space-y-5 py-2">
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                    <Field label="Invoice Number" value={sale.invoice_number || "—"} />
+                                    <Field label="PO Number" value={sale.po_number || "—"} />
+                                    <Field label="Client Name" value={sale.client_name || "—"} />
+                                    <Field label="Project Name" value={sale.project || "—"} />
+                                </div>
+
+                                <div className="rounded-lg border border-border overflow-x-auto">
+                                    <table className="w-full text-xs text-left">
+                                        <thead className="bg-muted text-muted-foreground font-medium border-b border-border">
+                                            <tr>
+                                                <th className="p-2">Item</th>
+                                                <th className="p-2 text-center">Qty</th>
+                                                <th className="p-2 text-right">Rate</th>
+                                                <th className="p-2 text-right">GST</th>
+                                                <th className="p-2 text-right">Total</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {(sale.items || []).map((it, idx) => (
+                                                <tr key={idx} className="border-b border-border/50">
+                                                    <td className="p-2 font-medium">{it.item}</td>
+                                                    <td className="p-2 text-center">{it.quantity} {it.uom}</td>
+                                                    <td className="p-2 text-right">{inr(it.unit_price)}</td>
+                                                    <td className="p-2 text-right">{inr(it.gst_amount)} ({it.gst_rate}%)</td>
+                                                    <td className="p-2 text-right font-bold">{inr(it.total_amount)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                        <tfoot className="bg-muted/50 font-semibold">
+                                            <tr>
+                                                <td colSpan="4" className="p-2 text-right">Subtotal:</td>
+                                                <td className="p-2 text-right">{inr(sale.subtotal)}</td>
+                                            </tr>
+                                            <tr>
+                                                <td colSpan="4" className="p-2 text-right">Total GST:</td>
+                                                <td className="p-2 text-right">{inr(sale.gst_amount)}</td>
+                                            </tr>
+                                            <tr>
+                                                <td colSpan="4" className="p-2 text-right">Freight:</td>
+                                                <td className="p-2 text-right">{inr(sale.freight)}</td>
+                                            </tr>
+                                            <tr className="text-primary bg-primary/5 text-sm">
+                                                <td colSpan="4" className="p-2 text-right">Grand Total:</td>
+                                                <td className="p-2 text-right">{inr(sale.grand_total)}</td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+                                    <Field label="Payment Status" value={sale.payment_status || "—"} />
+                                    <Field label="Delivery Status" value={sale.delivery_status || "—"} />
+                                    <Field label="Dispatch From" value={sale.dispatch_from || "—"} />
+                                    <Field label="Ship To" value={sale.ship_to || "—"} />
+                                </div>
+                            </div>
+                        );
+                    })()}
+                    <DialogFooter>
+                        <Button variant="outline" onClick={closeViewingSale}>Close</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

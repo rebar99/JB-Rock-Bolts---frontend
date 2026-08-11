@@ -154,6 +154,7 @@ const SalesInvoice = () => {
     const [shipTo, setShipTo] = useState("");
     const [billTo, setBillTo] = useState("");
     const [manualInvoiceNumber, setManualInvoiceNumber] = useState("");
+    const [invoiceDate, setInvoiceDate] = useState(() => new Date().toISOString().split('T')[0]);
     const [invoiceSuffix, setInvoiceSuffix] = useState(() => localStorage.getItem("salesInvoiceSuffix") || "/26-27");
     const [dispatchedThrough, setDispatchedThrough] = useState("");
     const [eWayBillNo, setEWayBillNo] = useState("");
@@ -173,6 +174,7 @@ const SalesInvoice = () => {
     const [editOpen, setEditOpen] = useState(false);
     const [editingSale, setEditingSale] = useState(null);
     const [editInvoiceNumber, setEditInvoiceNumber] = useState("");
+    const [editInvoiceDate, setEditInvoiceDate] = useState("");
     const [editInvoiceSuffix, setEditInvoiceSuffix] = useState("");
     const [editDispatchedThrough, setEditDispatchedThrough] = useState("");
     const [editEWayBillNo, setEditEWayBillNo] = useState("");
@@ -318,6 +320,7 @@ const SalesInvoice = () => {
         setShipTo(po?.location || "");
         setBillTo(""); // Leave empty as requested (don't fill name here)
         setManualInvoiceNumber("");
+        setInvoiceDate(new Date().toISOString().split('T')[0]);
         setDispatchedThrough("");
         setEWayBillNo("");
         setBuyersOrderNo("");
@@ -593,6 +596,10 @@ const SalesInvoice = () => {
     const handleAddSale = async () => {
         if (!poData) { toast.error("Select a PO first"); return; }
         if (dispatchItems.length === 0) { toast.error("Add at least one item"); return; }
+        if (invoiceDate && new Date(invoiceDate) < new Date("2026-04-01")) {
+            toast.error("Invoice Date cannot be before 1 April 2026.");
+            return;
+        }
 
         const subtotal = dispatchItems.reduce((acc, item) => acc + item.subtotal, 0);
         let gst_amount = dispatchItems.reduce((acc, item) => acc + item.gst_amount, 0);
@@ -620,6 +627,7 @@ const SalesInvoice = () => {
                 invoice_url: invoiceUrl || null,
                 e_way_bill_url: eWayBillUrl || null,
                 invoice_number: buildInvoiceStr(manualInvoiceNumber, invoiceSuffix, "Jbengg-") || null,
+                invoice_date: invoiceDate || null,
                 dispatch_from: dispatchFrom || null,
                 ship_to: shipTo || null,
                 bill_to: billTo || null,
@@ -848,6 +856,7 @@ const SalesInvoice = () => {
         setEditingSale(sale);
         const parsed = parseInvoiceStr(sale.invoice_number, localStorage.getItem("salesInvoiceSuffix") || "/26-27", "Jbengg-");
         setEditInvoiceNumber(parsed.num);
+        setEditInvoiceDate(sale.invoice_date || "");
         setEditInvoiceSuffix(parsed.suffix);
         setEditEWayBillNo(sale.e_way_bill_no || "");
         setEditBuyersOrderNo(sale.buyers_order_no || "");
@@ -927,6 +936,10 @@ const SalesInvoice = () => {
 
     const handleUpdateSale = async () => {
         if (!editingSale) return;
+        if (editInvoiceDate && new Date(editInvoiceDate) < new Date("2026-04-01")) {
+            toast.error("Invoice Date cannot be before 1 April 2026.");
+            return;
+        }
         try {
             await updateMutation.mutateAsync({
                 id: Number(editingSale.id),
@@ -964,7 +977,9 @@ const SalesInvoice = () => {
                             };
                         });
                     })(),
+                    delivery_challan_url: editingSale.delivery_challan_url || null,
                     invoice_number: buildInvoiceStr(editInvoiceNumber, editInvoiceSuffix, "Jbengg-") || null,
+                    invoice_date: editInvoiceDate || null,
                     dispatched_through: editDispatchedThrough || null,
                     e_way_bill_no: editEWayBillNo || null,
                     buyers_order_no: editBuyersOrderNo || null,
@@ -1198,6 +1213,12 @@ const SalesInvoice = () => {
 
                                 {/* 1. Invoice Details */}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border">
+                                    <div className="space-y-1">
+                                        <Label>Invoice Date *</Label>
+                                        <Input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} min="2026-04-01" />
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
                                     <div className="space-y-1">
                                         <Label>Invoice Number (Manual)</Label>
                                         <InvoiceInput value={manualInvoiceNumber} onChange={setManualInvoiceNumber} prefix="Jbengg-" suffix={invoiceSuffix} setSuffix={setInvoiceSuffix} isAdmin={isAdmin} storageKey="salesInvoiceSuffix" />
@@ -1577,6 +1598,12 @@ const SalesInvoice = () => {
                                     </div>
                             {/* 1. Invoice Details */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border">
+                                <div className="space-y-1">
+                                    <Label>Invoice Date *</Label>
+                                    <Input type="date" value={editInvoiceDate} onChange={(e) => setEditInvoiceDate(e.target.value)} min="2026-04-01" />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
                                 <div className="space-y-1">
                                     <Label>Invoice Number</Label>
                                     <InvoiceInput value={editInvoiceNumber} onChange={setEditInvoiceNumber} prefix="Jbengg-" suffix={editInvoiceSuffix} setSuffix={setEditInvoiceSuffix} isAdmin={isAdmin} storageKey="salesInvoiceSuffix" />
