@@ -19,6 +19,7 @@ import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
 import NotFound from "./pages/NotFound";
 import CompanyAddresses from "./pages/CompanyAddresses";
+import SystemBackup from "./pages/SystemBackup";
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -73,6 +74,7 @@ const App = () => (
                             <Route path="/reports" element={<ProtectedRoute><AppLayout><Reports /></AppLayout></ProtectedRoute>} />
                             <Route path="/user-approvals" element={<AdminRoute><AppLayout><UserApprovals /></AppLayout></AdminRoute>} />
                             <Route path="/admin/addresses" element={<AdminRoute><AppLayout><CompanyAddresses /></AppLayout></AdminRoute>} />
+                            <Route path="/admin/system-backup" element={<AdminRoute><AppLayout><SystemBackup /></AppLayout></AdminRoute>} />
                             <Route path="*" element={<NotFound />} />
                         </Routes>
                     </AuthProvider>
