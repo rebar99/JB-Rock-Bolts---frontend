@@ -151,14 +151,14 @@ export default function SystemBackup() {
                 </Card>
                 
                 <Card className="p-6 flex flex-col items-center justify-center text-center space-y-4 border-2">
-                    <div className="p-4 bg-destructive/10 rounded-full">
-                        <Upload className="h-10 w-10 text-destructive" />
+                    <div className="p-4 bg-primary/10 rounded-full">
+                        <ShieldCheck className="h-10 w-10 text-primary" />
                     </div>
                     <div>
-                        <h3 className="text-xl font-bold">Import Database</h3>
+                        <h3 className="text-xl font-bold">Merge Database Backup</h3>
                         <p className="text-muted-foreground mt-2 max-w-[300px]">
                             Restore the system from a previous JSON backup file. <br/>
-                            <strong className="text-destructive">Warning: This will overwrite and replace all current data.</strong>
+                            <strong className="text-primary">This is a safe merge. Existing data will not be deleted.</strong>
                         </p>
                     </div>
                     
@@ -172,12 +172,11 @@ export default function SystemBackup() {
                     
                     <Button 
                         size="lg" 
-                        variant="destructive"
                         className="w-full max-w-[250px] mt-4" 
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isImporting}
                     >
-                        {isImporting ? "Importing..." : "Import Backup File"}
+                        {isImporting ? "Merging..." : "Merge Backup File"}
                     </Button>
                 </Card>
             </div>
@@ -186,17 +185,17 @@ export default function SystemBackup() {
             <Dialog open={showConfirm} onOpenChange={(open) => !open && cancelImport()}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle className="flex items-center text-destructive">
-                            <AlertTriangle className="mr-2 h-5 w-5" />
-                            CRITICAL WARNING: DATA REPLACEMENT
+                        <DialogTitle className="flex items-center text-primary">
+                            <ShieldCheck className="mr-2 h-5 w-5" />
+                            SAFE DATABASE MERGE
                         </DialogTitle>
                         <DialogDescription className="pt-4 text-base space-y-4">
                             <p>
-                                You are about to restore the database from the file: <br/>
+                                You are about to merge the database with the file: <br/>
                                 <strong className="text-foreground">{fileToImport?.name}</strong>
                             </p>
                             <p>
-                                This action will <strong>DELETE ALL CURRENT DATA</strong> in the system and replace it entirely with the contents of the backup file. Any changes made since this backup was taken will be permanently lost.
+                                This backup will be safely merged with your existing data. Existing data will not be deleted. Duplicate records will be skipped and new records will be added.
                             </p>
                             <div className="flex items-center space-x-2 mt-4 p-4 border rounded bg-muted/50">
                                 <Checkbox 
@@ -208,7 +207,7 @@ export default function SystemBackup() {
                                     htmlFor="understand"
                                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                                 >
-                                    I understand that all current data will be erased and replaced.
+                                    I understand this is a non-destructive merge operation.
                                 </label>
                             </div>
                         </DialogDescription>
@@ -216,11 +215,10 @@ export default function SystemBackup() {
                     <DialogFooter className="mt-4">
                         <Button variant="outline" onClick={cancelImport}>Cancel</Button>
                         <Button 
-                            variant="destructive" 
                             disabled={!understood || isImporting} 
                             onClick={handleConfirmImport}
                         >
-                            {isImporting ? "Restoring..." : "Proceed with Restore"}
+                            {isImporting ? "Merging..." : "Merge & Restore"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
