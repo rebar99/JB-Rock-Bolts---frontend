@@ -6,6 +6,8 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogD
 import { toast } from "sonner";
 import { Download, Upload, AlertTriangle, ShieldCheck } from "lucide-react";
 
+const BASE = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/+$/, "");
+
 export default function SystemBackup() {
     const [isExporting, setIsExporting] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
@@ -17,8 +19,8 @@ export default function SystemBackup() {
     const handleExport = async () => {
         try {
             setIsExporting(true);
-            const token = localStorage.getItem("token");
-            const res = await fetch("http://localhost:8000/api/system/backup/export", {
+            const token = localStorage.getItem("token") || localStorage.getItem("auth_token");
+            const res = await fetch(`${BASE}/api/system/backup/export`, {
                 headers: {
                     Authorization: `Bearer ${token}`
                 }
@@ -76,8 +78,8 @@ export default function SystemBackup() {
             const formData = new FormData();
             formData.append("file", fileToImport);
             
-            const token = localStorage.getItem("token");
-            const res = await fetch("http://localhost:8000/api/system/backup/import", {
+            const token = localStorage.getItem("token") || localStorage.getItem("auth_token");
+            const res = await fetch(`${BASE}/api/system/backup/import`, {
                 method: "POST",
                 headers: {
                     Authorization: `Bearer ${token}`
