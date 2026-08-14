@@ -93,14 +93,21 @@ export default function SystemBackup() {
                 throw new Error(data.detail || "Failed to import database");
             }
             
-            toast.success(data.detail || "Database imported successfully");
+            if (data.records_inserted !== undefined) {
+                toast.success(`Merge Complete! ${data.records_inserted} new records imported. ${data.records_skipped} existing records skipped.`, {
+                    duration: 5000,
+                });
+            } else {
+                toast.success(data.detail || "Database imported successfully");
+            }
+            
             setFileToImport(null);
             setUnderstood(false);
             
             // Reload page to reflect new state
             setTimeout(() => {
                 window.location.reload();
-            }, 1500);
+            }, 2500);
             
         } catch (error) {
             toast.error(error.message || "Import failed");
@@ -207,7 +214,7 @@ export default function SystemBackup() {
                                     htmlFor="understand"
                                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                                 >
-                                    I understand this is a non-destructive merge operation.
+                                    I understand that my existing data will be kept safe and not deleted.
                                 </label>
                             </div>
                         </DialogDescription>
