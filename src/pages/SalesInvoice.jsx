@@ -18,7 +18,7 @@ import { useAuth } from "@/context/AuthContext";
 import {
     fetchPurchaseOrders, fetchSales, fetchSale, createSale, updateSale,
     deleteSale as deleteSaleApi, bulkDeleteSales, addSaleActivity, addSaleDispatch, openInvoiceDocument, downloadInvoiceDocument,
-    uploadInvoiceFile, exportSales, importSales,
+    uploadInvoiceFile, exportSales, importSales, fetchCompanyAddresses,
 } from "@/lib/api";
 import { toast } from "sonner";
 import { Plus, Truck, Clock, CreditCard, Eye, Package, User, Trash2, Search, Download, UploadCloud, FileText, X, Pencil, Receipt, CheckCircle, Printer, FileDown, Upload, ChevronDown, ChevronUp } from "lucide-react";
@@ -96,8 +96,6 @@ const SalesInvoice = () => {
         qc.invalidateQueries({ queryKey: ["po-fulfillment-summary"] });
     };
 
-    
-
     const createMutation = useMutation({ mutationFn: createSale, onSuccess: invalidateSales });
     const updateMutation = useMutation({ mutationFn: ({ id, body }) => updateSale(id, body), onSuccess: invalidateSales });
     const deleteMutation = useMutation({
@@ -151,6 +149,18 @@ const SalesInvoice = () => {
     const [invoiceUrl, setInvoiceUrl] = useState("");
     const [eWayBillUrl, setEWayBillUrl] = useState("");
     const [dispatchFrom, setDispatchFrom] = useState("");
+
+    const { data: companyAddresses = [] } = useQuery({
+        queryKey: ["companyAddresses"],
+        queryFn: fetchCompanyAddresses
+    });
+
+    useEffect(() => {
+        if (!dispatchFrom && companyAddresses.length > 0) {
+            const defAddr = companyAddresses.find(a => a.is_default);
+            if (defAddr) setDispatchFrom(defAddr.address_text);
+        }
+    }, [dispatchFrom, companyAddresses]);
     const [shipTo, setShipTo] = useState("");
     const [billTo, setBillTo] = useState("");
     const [manualInvoiceNumber, setManualInvoiceNumber] = useState("");
@@ -1291,12 +1301,26 @@ const SalesInvoice = () => {
                                 <div className="space-y-4 pt-2 border-t border-border">
                                     <div className="space-y-1">
                                         <Label>Dispatch From (Source Address)</Label>
-                                        <Textarea
-                                            placeholder="Enter source address"
-                                            value={dispatchFrom}
-                                            onChange={(e) => setDispatchFrom(e.target.value)}
-                                            rows={2}
-                                        />
+                                        <Select
+                                            value={dispatchFrom || ""}
+                                            onValueChange={(val) => setDispatchFrom(val)}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select dispatch address" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {companyAddresses.map((addr) => (
+                                                    <SelectItem key={addr.id} value={addr.address_text}>
+                                                        {addr.title} {addr.is_default ? "(Default)" : ""}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        {dispatchFrom && (
+                                            <div className="mt-2 p-3 text-xs bg-muted/50 rounded-md border border-border/50 whitespace-pre-wrap font-sans text-muted-foreground leading-relaxed">
+                                                {dispatchFrom}
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <div className="space-y-1">
@@ -1664,7 +1688,26 @@ const SalesInvoice = () => {
                             <div className="space-y-4 pt-2 border-t border-border">
                                 <div className="space-y-1">
                                     <Label>Dispatch From (Source Address)</Label>
-                                    <Textarea value={editDispatchFrom} onChange={(e) => setEditDispatchFrom(e.target.value)} rows={2} />
+                                    <Select
+                                        value={editDispatchFrom || ""}
+                                        onValueChange={(val) => setEditDispatchFrom(val)}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select dispatch address" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {companyAddresses.map((addr) => (
+                                                <SelectItem key={addr.id} value={addr.address_text}>
+                                                    {addr.title} {addr.is_default ? "(Default)" : ""}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    {editDispatchFrom && (
+                                        <div className="mt-2 p-3 text-xs bg-muted/50 rounded-md border border-border/50 whitespace-pre-wrap font-sans text-muted-foreground leading-relaxed">
+                                            {editDispatchFrom}
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-1">
