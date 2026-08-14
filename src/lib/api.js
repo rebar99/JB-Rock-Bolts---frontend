@@ -17,6 +17,13 @@ async function request(path, options = {}) {
             ...options,
         });
         if (!res.ok) {
+            if (res.status === 401) {
+                localStorage.removeItem("auth_token");
+                localStorage.removeItem("auth_user");
+                localStorage.removeItem("app_current_user");
+                window.location.href = "/login";
+                return;
+            }
             const err = await res.json().catch(() => ({ detail: res.statusText }));
             throw new Error(err.detail || `Server error: ${res.status}`);
         }
@@ -512,4 +519,12 @@ export const fetchUomOptions = () => get("/api/uom");
 export const createUomOption = (body) => post("/api/uom", body);
 export const updateUomOption = (id, body) => put(`/api/uom/${id}`, body);
 export const deleteUomOption = (id) => del(`/api/uom/${id}`);
+
+// 🔹 Company Addresses 🔹
+export const fetchCompanyAddresses = () => get("/api/company-addresses");
+export const createCompanyAddress = (body) => post("/api/company-addresses", body);
+export const updateCompanyAddress = (id, body) => put(`/api/company-addresses/${id}`, body);
+export const deleteCompanyAddress = (id) => del(`/api/company-addresses/${id}`);
+export const setCompanyAddressDefault = (id) => post(`/api/company-addresses/${id}/set-default`);
+
 
