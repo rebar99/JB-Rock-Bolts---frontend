@@ -167,7 +167,7 @@ export const Topbar = ({ onMenu }) => {
         const alreadyIn = apiOnline.some((s) => s.user_id === user.id);
         if (alreadyIn) return apiOnline;
         return [
-            { user_id: user.id, user_name: user.name, user_email: user.email, connected_at: null },
+            { user_id: user.id, user_name: user.name, user_email: user.email, connected_at: null, is_active: true },
             ...apiOnline,
         ];
     }, [apiOnline, user]);
