@@ -488,6 +488,7 @@ export const fetchLogs = (limit = 100) => get("/api/logs", { limit });
 
 // Returns users who currently have the app open (SSE-based, instant)
 export const fetchOnlineUsers = () => get("/api/logs/online-users");
+export const fetchRecentLogins = () => get("/api/users/recent-logins");
 
 /**
  * Open a Server-Sent Events connection to receive new log entries in real time.
