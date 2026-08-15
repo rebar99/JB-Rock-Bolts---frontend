@@ -14,6 +14,7 @@ export default function SystemBackup() {
     const [fileToImport, setFileToImport] = useState(null);
     const [showConfirm, setShowConfirm] = useState(false);
     const [understood, setUnderstood] = useState(false);
+    const [importMode, setImportMode] = useState("merge");
     const fileInputRef = useRef(null);
 
     const handleExport = async () => {
@@ -77,6 +78,7 @@ export default function SystemBackup() {
         try {
             const formData = new FormData();
             formData.append("file", fileToImport);
+            formData.append("import_type", importMode);
             
             const token = localStorage.getItem("token") || localStorage.getItem("auth_token");
             const res = await fetch(`${BASE}/api/system/backup/import`, {
@@ -93,7 +95,9 @@ export default function SystemBackup() {
                 throw new Error(data.detail || "Failed to import database");
             }
             
-            if (data.records_inserted !== undefined) {
+            if (importMode === "replace") {
+                toast.success("Database replaced successfully!", { duration: 5000 });
+            } else if (data.records_inserted !== undefined) {
                 toast.success(`Merge Complete! ${data.records_inserted} new records imported. ${data.records_skipped} existing records skipped.`, {
                     duration: 5000,
                 });
@@ -177,14 +181,23 @@ export default function SystemBackup() {
                         onChange={handleFileChange}
                     />
                     
-                    <Button 
-                        size="lg" 
-                        className="w-full max-w-[250px] mt-4" 
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={isImporting}
-                    >
-                        {isImporting ? "Merging..." : "Merge Backup File"}
-                    </Button>
+                    <div className="flex w-full max-w-[250px] flex-col gap-3 mt-4">
+                        <Button 
+                            className="w-full" 
+                            onClick={() => { setImportMode("merge"); fileInputRef.current?.click(); }}
+                            disabled={isImporting}
+                        >
+                            {isImporting && importMode === "merge" ? "Merging..." : "Merge Backup File"}
+                        </Button>
+                        <Button 
+                            variant="destructive"
+                            className="w-full bg-red-600 hover:bg-red-700" 
+                            onClick={() => { setImportMode("replace"); fileInputRef.current?.click(); }}
+                            disabled={isImporting}
+                        >
+                            {isImporting && importMode === "replace" ? "Importing..." : "Import data"}
+                        </Button>
+                    </div>
                 </Card>
             </div>
             
@@ -192,17 +205,19 @@ export default function SystemBackup() {
             <Dialog open={showConfirm} onOpenChange={(open) => !open && cancelImport()}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle className="flex items-center text-primary">
-                            <ShieldCheck className="mr-2 h-5 w-5" />
-                            SAFE DATABASE MERGE
+                        <DialogTitle className={`flex items-center ${importMode === "replace" ? "text-destructive" : "text-primary"}`}>
+                            {importMode === "replace" ? <AlertTriangle className="mr-2 h-5 w-5" /> : <ShieldCheck className="mr-2 h-5 w-5" />}
+                            {importMode === "replace" ? "DANGER: REPLACE DATABASE" : "SAFE DATABASE MERGE"}
                         </DialogTitle>
                         <DialogDescription className="pt-4 text-base space-y-4">
                             <p>
-                                You are about to merge the database with the file: <br/>
+                                You are about to {importMode === "replace" ? "replace" : "merge"} the database with the file: <br/>
                                 <strong className="text-foreground">{fileToImport?.name}</strong>
                             </p>
                             <p>
-                                This backup will be safely merged with your existing data. Existing data will not be deleted. Duplicate records will be skipped and new records will be added.
+                                {importMode === "replace" 
+                                    ? <span className="text-destructive font-bold">WARNING: This will permanently DELETE all existing data in the system and replace it entirely with the backup file. This cannot be undone!</span>
+                                    : "This backup will be safely merged with your existing data. Existing data will not be deleted. Duplicate records will be skipped and new records will be added."}
                             </p>
                             <div className="flex items-center space-x-2 mt-4 p-4 border rounded bg-muted/50">
                                 <Checkbox 
@@ -214,7 +229,9 @@ export default function SystemBackup() {
                                     htmlFor="understand"
                                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                                 >
-                                    I understand that my existing data will be kept safe and not deleted.
+                                    {importMode === "replace"
+                                        ? "I understand that ALL CURRENT DATA WILL BE DELETED."
+                                        : "I understand that my existing data will be kept safe and not deleted."}
                                 </label>
                             </div>
                         </DialogDescription>
@@ -222,10 +239,11 @@ export default function SystemBackup() {
                     <DialogFooter className="mt-4">
                         <Button variant="outline" onClick={cancelImport}>Cancel</Button>
                         <Button 
+                            variant={importMode === "replace" ? "destructive" : "default"}
                             disabled={!understood || isImporting} 
                             onClick={handleConfirmImport}
                         >
-                            {isImporting ? "Merging..." : "Merge & Restore"}
+                            {isImporting ? (importMode === "replace" ? "Importing..." : "Merging...") : (importMode === "replace" ? "Import data" : "Merge & Restore")}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

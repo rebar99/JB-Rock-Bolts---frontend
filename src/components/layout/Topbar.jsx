@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo } from "react";
-import { Bell, LogOut, Menu, Moon, Search, Sun, Users, Activity, Circle } from "lucide-react";
+import { Bell, LogOut, Menu, Moon, Search, Sun, Users, Activity, Circle, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { fetchLogs, openLogStream, fetchOnlineUsers } from "@/lib/api";
+import { fetchLogs, openLogStream, fetchOnlineUsers, fetchRecentLogins } from "@/lib/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { relativeTimeIST, fmtDateTimeIST } from "@/lib/timezone";
 
@@ -84,7 +84,11 @@ function OnlineUserRow({ session, isCurrentUser }) {
                 }`}>
                     {initials}
                 </div>
-                <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-green-500 border-2 border-card" />
+                {session.is_active ? (
+                    <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-green-500 border-2 border-card" />
+                ) : (
+                    <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-slate-400 border-2 border-card" />
+                )}
             </div>
             <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold text-foreground truncate">
@@ -98,12 +102,18 @@ function OnlineUserRow({ session, isCurrentUser }) {
                 <p className="text-[10px] text-muted-foreground truncate">{session.user_email}</p>
             </div>
             <div className="text-right shrink-0">
-                <p className="text-[10px] text-green-600 dark:text-green-400 font-medium flex items-center gap-1 justify-end">
-                    <Circle className="h-1.5 w-1.5 fill-current" /> Online
-                </p>
+                {session.is_active ? (
+                    <p className="text-[10px] text-green-600 dark:text-green-400 font-medium flex items-center gap-1 justify-end">
+                        <Circle className="h-1.5 w-1.5 fill-current" /> Online
+                    </p>
+                ) : (
+                    <p className="text-[10px] text-muted-foreground font-medium flex items-center gap-1 justify-end">
+                        <Circle className="h-1.5 w-1.5 fill-current" /> Offline
+                    </p>
+                )}
                 <p className="text-[10px] text-muted-foreground"
-                    title={session.connected_at ? fmtDateTimeIST(session.connected_at) : ""}>
-                    {session.connected_at ? relativeTimeIST(session.connected_at) : "Just now"}
+                    title={session.login_at ? fmtDateTimeIST(session.login_at) : (session.connected_at ? fmtDateTimeIST(session.connected_at) : "")}>
+                    {session.login_at ? relativeTimeIST(session.login_at) : (session.connected_at ? relativeTimeIST(session.connected_at) : "Just now")}
                 </p>
             </div>
         </div>
@@ -138,6 +148,14 @@ export const Topbar = ({ onMenu }) => {
         refetchInterval: 10_000,
         staleTime: 0,
         refetchOnWindowFocus: true,
+    });
+
+    // ── Recent Logins (polled every 60s) ───────────────────────────────────────
+    const { data: recentLogins = [] } = useQuery({
+        queryKey: ["recent_logins"],
+        queryFn: fetchRecentLogins,
+        refetchInterval: 60_000,
+        staleTime: 30_000,
     });
 
     // ── Always show current user even before server confirms ──────────────────
@@ -300,6 +318,14 @@ export const Topbar = ({ onMenu }) => {
                                 <Users className="h-3.5 w-3.5" />
                                 Online{onlineCount > 0 && ` (${onlineCount})`}
                             </button>
+                            <button onClick={() => setActiveTab("logins")}
+                                className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors ${
+                                    activeTab === "logins"
+                                        ? "text-primary border-b-2 border-primary bg-background"
+                                        : "text-muted-foreground hover:text-foreground"
+                                }`}>
+                                <History className="h-3.5 w-3.5" /> History
+                            </button>
                         </div>
 
                         <div className="max-h-[420px] overflow-y-auto">
@@ -330,11 +356,50 @@ export const Topbar = ({ onMenu }) => {
                                     </div>
                                 </>
                             )}
+                            
+                            {activeTab === "logins" && (
+                                recentLogins.length === 0
+                                    ? <div className="p-6 text-center text-sm text-muted-foreground">No recent logins.</div>
+                                    : <div className="flex flex-col">
+                                        {recentLogins.map((s) => (
+                                            <OnlineUserRow key={s.id} session={s}
+                                                isCurrentUser={s.user_id === user?.id} />
+                                        ))}
+                                    </div>
+                            )}
                         </div>
                     </PopoverContent>
                 </Popover>
 
-                <div className="flex items-center gap-2 pl-3 border-l border-border">
+                <div className="flex items-center gap-2 pl-3 border-l border-border ml-2">
+                    {/* Inline Online Avatars */}
+                    {activeSessions.length > 0 && (
+                        <div className="hidden sm:flex items-center -space-x-2 mr-3 pr-3 border-r border-border">
+                            {activeSessions.slice(0, 5).map((session, i) => {
+                                const sInitials = (session.user_name || "?")
+                                    .split(" ").map((n) => n[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "?";
+                                const isCur = session.user_id === user?.id;
+                                return (
+                                    <div key={session.user_id} 
+                                         className={`relative h-8 w-8 rounded-full border-2 border-background grid place-items-center text-[10px] font-bold text-white shadow-sm hover:z-10 hover:scale-110 transition-transform cursor-default ${
+                                             isCur ? "bg-gradient-to-br from-primary to-primary/70" : "bg-gradient-to-br from-slate-500 to-slate-400"
+                                         }`}
+                                         title={`${session.user_name} (${isCur ? 'You' : 'Online'})`}
+                                         style={{ zIndex: 10 - i }}
+                                    >
+                                        {sInitials}
+                                        <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-green-500 border-2 border-background" />
+                                    </div>
+                                );
+                            })}
+                            {activeSessions.length > 5 && (
+                                <div className="relative h-8 w-8 rounded-full border-2 border-background bg-muted grid place-items-center text-[10px] font-bold text-muted-foreground shadow-sm z-0">
+                                    +{activeSessions.length - 5}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    
                     <div className="hidden sm:block text-right leading-tight">
                         <div className="text-sm font-semibold text-foreground">{displayName}</div>
                         <div className="text-[11px] text-muted-foreground">{user?.email || "Active User"}</div>
