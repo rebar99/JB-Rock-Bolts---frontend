@@ -374,6 +374,24 @@ export const fetchFulfillmentReport = (params) => get("/api/reports/fulfillment"
 export const fetchPendingPOs = () => get("/api/reports/pending-pos");
 export const fetchPOFulfillmentSummary = (poId) => get(`/api/reports/po-fulfillment-summary/${poId}`);
 export const fetchOverviewReport = () => get("/api/reports/overview");
+export const fetchProductPendingReport = (params) => get("/api/reports/product-pending", params);
+
+export const exportProductPendingReport = async (params = {}) => {
+    const token = getToken();
+    const qp = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => { if (v != null && v !== "") qp.set(k, v); });
+    const res = await fetch(`${BASE}/api/reports/product-pending/export?${qp.toString()}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error("Export failed");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `product-wise-pending-analysis-${params.po_status?.toLowerCase() || "pending"}-${Date.now()}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+};
 
 export const exportReport = async (reportType, params = {}) => {
     const token = getToken();
