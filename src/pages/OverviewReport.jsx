@@ -264,7 +264,7 @@ const OverviewReport = () => {
             {/* Summary Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard icon={Package} label="Total Pending Qty" value={fmtQty(summary.total_pending_qty)} subtext="Nos" accent="bg-blue-500/10 text-blue-600" />
-                <StatCard icon={IndianRupee} label="Total Pending Value" value={inr(summary.total_pending_value)} subtext="In INR" accent="bg-green-500/10 text-green-600" />
+                <StatCard icon={IndianRupee} label="Total pending payment ( without GST)" value={inr(summary.total_pending_value)} subtext="In INR" accent="bg-green-500/10 text-green-600" />
                 <StatCard icon={Boxes} label="Total Products" value={String(summary.total_products)} subtext="Different Diameters" accent="bg-purple-500/10 text-purple-600" />
                 <StatCard icon={Users} label="Total Clients" value={String(summary.total_clients)} subtext="With Pending Orders" accent="bg-amber-500/10 text-amber-600" />
             </div>
@@ -279,11 +279,12 @@ const OverviewReport = () => {
                     <table className="w-full text-sm">
                         <thead className="bg-slate-50/70 border-b border-border text-slate-600 font-semibold uppercase text-xs">
                             <tr>
+                                <th className="py-3 px-4 text-left w-14">S.No.</th>
                                 <th className="py-3 px-4 text-left">Product / Diameter</th>
                                 <th className="py-3 px-4 text-right">Total Ordered Qty</th>
                                 <th className="py-3 px-4 text-right">Total Dispatched Qty</th>
                                 <th className="py-3 px-4 text-right text-orange-600">Pending Qty</th>
-                                <th className="py-3 px-4 text-right text-green-600">Pending Value (₹)</th>
+                                <th className="py-3 px-4 text-right text-green-600">Pending Value (without GST) (₹)</th>
                                 <th className="py-3 px-4 text-center w-28">Clients</th>
                                 <th className="py-3 px-4 text-center w-36">Action</th>
                             </tr>
@@ -291,23 +292,24 @@ const OverviewReport = () => {
                         <tbody>
                             {isLoading && (
                                 <tr>
-                                    <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">
+                                    <td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">
                                         Loading product-wise pending details...
                                     </td>
                                 </tr>
                             )}
                             {!isLoading && products.length === 0 && (
                                 <tr>
-                                    <td colSpan={7} className="px-5 py-12 text-center text-muted-foreground">
+                                    <td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">
                                         No pending analysis data found.
                                     </td>
                                 </tr>
                             )}
-                            {!isLoading && products.map((p) => {
+                            {!isLoading && products.map((p, pIdx) => {
                                 const isProductExpanded = expandedProducts.has(p.product_label);
                                 return (
                                     <Fragment key={p.product_label}>
                                         <tr className={`border-b border-border transition-colors hover:bg-slate-50/50 ${isProductExpanded ? "bg-slate-50/30" : ""}`}>
+                                            <td className="py-3 px-4 text-slate-400 font-medium">{pIdx + 1}</td>
                                             <td className="py-3 px-4 font-semibold text-slate-800 cursor-pointer hover:underline" onClick={() => toggleProduct(p.product_label)}>
                                                 <div className="flex items-center gap-2">
                                                     <ChevronRight className={`h-4 w-4 text-slate-500 transition-transform shrink-0 ${isProductExpanded ? "rotate-90" : ""}`} />
@@ -332,7 +334,7 @@ const OverviewReport = () => {
                                         </tr>
                                         {isProductExpanded && (
                                             <tr className="bg-slate-50/20">
-                                                <td colSpan={7} className="py-3 px-4 border-b border-border/60">
+                                                <td colSpan={8} className="py-3 px-4 border-b border-border/60">
                                                     <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 space-y-4 max-w-7xl mx-auto animate-in fade-in duration-200">
                                                         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-2 bg-slate-50/50 p-2.5 rounded-t-lg">
                                                             <h4 className="text-sm font-bold text-slate-800 max-w-full md:max-w-3xl break-words flex items-center gap-1.5">
@@ -341,7 +343,7 @@ const OverviewReport = () => {
                                                             <div className="flex flex-wrap gap-4 text-xs font-semibold text-slate-600 shrink-0">
                                                                 <span>Pending Qty: <strong className="text-orange-600">{fmtQty(p.pending_qty)}</strong></span>
                                                                 <span className="text-slate-300">|</span>
-                                                                <span>Pending Value: <strong className="text-green-600">{inr(p.pending_value)}</strong></span>
+                                                                <span>Pending Value (without GST): <strong className="text-green-600">{inr(p.pending_value)}</strong></span>
                                                             </div>
                                                         </div>
                                                         <div className="overflow-x-auto">
@@ -353,7 +355,7 @@ const OverviewReport = () => {
                                                                         <th className="py-2.5 px-3 text-right">Total Ordered Qty</th>
                                                                         <th className="py-2.5 px-3 text-right">Total Dispatched Qty</th>
                                                                         <th className="py-2.5 px-3 text-right text-orange-600">Pending Qty</th>
-                                                                        <th className="py-2.5 px-3 text-right text-green-600">Pending Value (₹)</th>
+                                                                        <th className="py-2.5 px-3 text-right text-green-600">Pending Value (without GST) (₹)</th>
                                                                     </tr>
                                                                 </thead>
                                                                 <tbody>
@@ -443,7 +445,7 @@ const OverviewReport = () => {
                         {!isLoading && products.length > 0 && (
                             <tfoot>
                                 <tr className="bg-blue-50/80 font-bold border-t border-slate-300 text-slate-800">
-                                    <td className="py-3.5 px-4">TOTAL</td>
+                                    <td className="py-3.5 px-4" colSpan={2}>TOTAL</td>
                                     <td className="py-3.5 px-4 text-right">{fmtQty(overallTotals.ordered)}</td>
                                     <td className="py-3.5 px-4 text-right">{fmtQty(overallTotals.dispatched)}</td>
                                     <td className="py-3.5 px-4 text-right text-orange-600">{fmtQty(overallTotals.pending)}</td>
