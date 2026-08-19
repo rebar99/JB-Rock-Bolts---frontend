@@ -54,7 +54,7 @@ export const ItemMasterManageDialog = ({ open, onOpenChange, type = "PO" }) => {
     });
 
     const updateMutation = useMutation({
-        mutationFn: ({ id, name }) => updateItemMasterItem(id, { name, updated_by: getCurrentUser() }),
+        mutationFn: ({ id, name }) => updateItemMasterItem(id, { name, type, updated_by: getCurrentUser() }),
         onSuccess: () => {
             invalidate();
             setEditingId(null);
@@ -65,7 +65,7 @@ export const ItemMasterManageDialog = ({ open, onOpenChange, type = "PO" }) => {
     });
 
     const deleteMutation = useMutation({
-        mutationFn: (id) => deleteItemMasterItem(id, getCurrentUser()),
+        mutationFn: (id) => deleteItemMasterItem(id, getCurrentUser(), type),
         onSuccess: () => {
             invalidate();
             setItemToDelete(null);
@@ -75,7 +75,7 @@ export const ItemMasterManageDialog = ({ open, onOpenChange, type = "PO" }) => {
     });
 
     const addSizeMutation = useMutation({
-        mutationFn: ({ itemId, size }) => addItemMasterSize(itemId, { size, created_by: getCurrentUser() }),
+        mutationFn: ({ itemId, size }) => addItemMasterSize(itemId, { size, type, created_by: getCurrentUser() }),
         onSuccess: () => {
             invalidate();
             setNewSize("");
@@ -85,7 +85,7 @@ export const ItemMasterManageDialog = ({ open, onOpenChange, type = "PO" }) => {
     });
 
     const deleteSizeMutation = useMutation({
-        mutationFn: ({ itemId, sizeId }) => deleteItemMasterSize(itemId, sizeId, getCurrentUser()),
+        mutationFn: ({ itemId, sizeId }) => deleteItemMasterSize(itemId, sizeId, getCurrentUser(), type),
         onSuccess: () => {
             invalidate();
             toast.success("Size deleted");
