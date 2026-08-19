@@ -358,9 +358,9 @@ export const createProject = (body) => post("/api/projects", body);
 export const fetchItemMasterList = (type = "PO") => get(`/api/item-master?type=${type}`);
 export const createItemMasterItem = (body) => post("/api/item-master", body);
 export const updateItemMasterItem = (id, body) => put(`/api/item-master/${id}`, body);
-export const deleteItemMasterItem = (id, deletedBy) => del(`/api/item-master/${id}`, deletedBy ? { deleted_by: deletedBy } : undefined);
+export const deleteItemMasterItem = (id, deletedBy, type = "PO") => del(`/api/item-master/${id}`, { deleted_by: deletedBy, type });
 export const addItemMasterSize = (itemId, body) => post(`/api/item-master/${itemId}/sizes`, body);
-export const deleteItemMasterSize = (itemId, sizeId, deletedBy) => del(`/api/item-master/${itemId}/sizes/${sizeId}`, deletedBy ? { deleted_by: deletedBy } : undefined);
+export const deleteItemMasterSize = (itemId, sizeId, deletedBy, type = "PO") => del(`/api/item-master/${itemId}/sizes/${sizeId}`, { deleted_by: deletedBy, type });
 
 // ── Records ──────────────────────────────────────────────────────────────────
 export const fetchRecords = (params) => get("/api/records", { limit: 10000, ...params });
