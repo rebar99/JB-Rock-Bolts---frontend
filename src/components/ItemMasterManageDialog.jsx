@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
     fetchItemMasterList, createItemMasterItem, updateItemMasterItem, deleteItemMasterItem,
-    addItemMasterSize, deleteItemMasterSize,
+    addItemMasterSize, updateItemMasterSize, deleteItemMasterSize,
 } from "@/lib/api";
 import { getCurrentUser } from "@/lib/currentUser";
 import { compareSizes } from "./ItemCombobox";
@@ -30,6 +30,8 @@ export const ItemMasterManageDialog = ({ open, onOpenChange, type = "PO" }) => {
     const [itemToDelete, setItemToDelete] = useState(null);
     const [expandedId, setExpandedId] = useState(null);
     const [newSize, setNewSize] = useState("");
+    const [editingSizeId, setEditingSizeId] = useState(null);
+    const [editingSizeValue, setEditingSizeValue] = useState("");
 
     const { data: items = [], isLoading } = useQuery({
         queryKey: ["item-master", type],
@@ -84,6 +86,17 @@ export const ItemMasterManageDialog = ({ open, onOpenChange, type = "PO" }) => {
         onError: onMutationError,
     });
 
+    const updateSizeMutation = useMutation({
+        mutationFn: ({ itemId, sizeId, size }) => updateItemMasterSize(itemId, sizeId, { size, type, created_by: getCurrentUser() }),
+        onSuccess: () => {
+            invalidate();
+            setEditingSizeId(null);
+            setEditingSizeValue("");
+            toast.success("Size updated");
+        },
+        onError: onMutationError,
+    });
+
     const deleteSizeMutation = useMutation({
         mutationFn: ({ itemId, sizeId }) => deleteItemMasterSize(itemId, sizeId, getCurrentUser(), type),
         onSuccess: () => {
@@ -113,12 +126,20 @@ export const ItemMasterManageDialog = ({ open, onOpenChange, type = "PO" }) => {
     const toggleExpand = (itemId) => {
         setExpandedId((prev) => (prev === itemId ? null : itemId));
         setNewSize("");
+        setEditingSizeId(null);
+        setEditingSizeValue("");
     };
 
     const handleAddSize = (itemId) => {
         const size = newSize.trim();
         if (!size) return;
         addSizeMutation.mutate({ itemId, size });
+    };
+
+    const handleSaveSize = (itemId, sizeId) => {
+        const size = editingSizeValue.trim();
+        if (!size) return;
+        updateSizeMutation.mutate({ itemId, sizeId, size });
     };
 
     return (
@@ -210,19 +231,74 @@ export const ItemMasterManageDialog = ({ open, onOpenChange, type = "PO" }) => {
                                                 <div className="text-xs text-muted-foreground">No sizes yet — add one above.</div>
                                             ) : (
                                                 <div className="flex flex-wrap gap-1.5">
-                                                    {[...sizes].sort((a, b) => compareSizes(a.size, b.size)).map((s) => (
-                                                        <span key={s.id} className="inline-flex items-center gap-1 text-xs bg-card border border-border rounded-full pl-2.5 pr-1 py-1">
-                                                            {s.size}
-                                                            <button
-                                                                type="button"
-                                                                className="h-4 w-4 grid place-items-center rounded-full hover:bg-destructive/10 text-destructive"
-                                                                onClick={() => deleteSizeMutation.mutate({ itemId: item.id, sizeId: s.id })}
-                                                                title="Delete size"
-                                                            >
-                                                                <X className="h-3 w-3" />
-                                                            </button>
-                                                        </span>
-                                                    ))}
+                                                     {[...sizes].sort((a, b) => compareSizes(a.size, b.size)).map((s) => (
+                                                         <span
+                                                             key={s.id}
+                                                             className={`inline-flex items-center gap-1 text-xs bg-card border border-border rounded-full py-1 ${
+                                                                 editingSizeId === s.id ? "px-1.5" : "pl-2.5 pr-1"
+                                                             }`}
+                                                         >
+                                                             {editingSizeId === s.id ? (
+                                                                 <>
+                                                                     <input
+                                                                         type="text"
+                                                                         className="w-16 h-5 text-xs px-1 border border-border rounded focus:outline-none focus:ring-1 focus:ring-primary bg-background"
+                                                                         value={editingSizeValue}
+                                                                         onChange={(e) => setEditingSizeValue(e.target.value)}
+                                                                         onKeyDown={(e) => {
+                                                                             if (e.key === "Enter") {
+                                                                                 handleSaveSize(item.id, s.id);
+                                                                             } else if (e.key === "Escape") {
+                                                                                 setEditingSizeId(null);
+                                                                             }
+                                                                         }}
+                                                                         autoFocus
+                                                                     />
+                                                                     <button
+                                                                         type="button"
+                                                                         className="h-4 w-4 grid place-items-center rounded-full hover:bg-muted/10 text-success"
+                                                                         onClick={() => handleSaveSize(item.id, s.id)}
+                                                                         disabled={updateSizeMutation.isPending}
+                                                                         title="Save size"
+                                                                     >
+                                                                         <Check className="h-2.5 w-2.5" />
+                                                                     </button>
+                                                                     <button
+                                                                         type="button"
+                                                                         className="h-4 w-4 grid place-items-center rounded-full hover:bg-muted/10 text-muted-foreground"
+                                                                         onClick={() => setEditingSizeId(null)}
+                                                                         title="Cancel"
+                                                                     >
+                                                                         <X className="h-2.5 w-2.5" />
+                                                                     </button>
+                                                                 </>
+                                                             ) : (
+                                                                 <>
+                                                                     {s.size}
+                                                                     <button
+                                                                         type="button"
+                                                                         className="h-4 w-4 grid place-items-center rounded-full hover:bg-muted/10 text-muted-foreground ml-1"
+                                                                         onClick={() => {
+                                                                             setEditingSizeId(s.id);
+                                                                             setEditingSizeValue(s.size);
+                                                                         }}
+                                                                         title="Edit size"
+                                                                     >
+                                                                         <Pencil className="h-2.5 w-2.5" />
+                                                                     </button>
+                                                                     <button
+                                                                         type="button"
+                                                                         className="h-4 w-4 grid place-items-center rounded-full hover:bg-destructive/10 text-destructive"
+                                                                         onClick={() => deleteSizeMutation.mutate({ itemId: item.id, sizeId: s.id })}
+                                                                         disabled={deleteSizeMutation.isPending}
+                                                                         title="Delete size"
+                                                                     >
+                                                                         <X className="h-3 w-3" />
+                                                                     </button>
+                                                                 </>
+                                                             )}
+                                                         </span>
+                                                     ))}
                                                 </div>
                                             )}
                                         </div>

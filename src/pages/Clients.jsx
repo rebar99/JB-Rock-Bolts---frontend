@@ -6,12 +6,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { inr } from "@/lib/format";
-import { fetchClients, fetchClientStats, createClient, deleteClient } from "@/lib/api";
+import { fetchClients, fetchClientStats, createClient, deleteClient, mergeClients } from "@/lib/api";
 import { getCurrentUser } from "@/lib/currentUser";
 import { toast } from "sonner";
 import { MapPin, Building2, Trash2 } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 
 const Clients = () => {
+    const { user } = useAuth();
     const qc = useQueryClient();
 
     const { data: clients = [], isLoading } = useQuery({
@@ -35,8 +37,12 @@ const Clients = () => {
     const createMutation = useMutation({ mutationFn: (body) => createClient({ ...body, created_by: getCurrentUser() }), onSuccess: invalidate });
     const deleteMutation = useMutation({ mutationFn: (id) => deleteClient(id, getCurrentUser()), onSuccess: invalidate });
 
+    const mergeMutation = useMutation({ mutationFn: (body) => mergeClients({ ...body, merged_by: getCurrentUser() }), onSuccess: invalidate });
+
     const [open, setOpen] = useState(false);
+    const [mergeOpen, setMergeOpen] = useState(false);
     const [formData, setFormData] = useState({ name: "", location: "" });
+    const [mergeData, setMergeData] = useState({ masterId: "", duplicateId: "" });
 
     const groups = useMemo(() => {
         const byLocation = new Map();
@@ -69,6 +75,25 @@ const Clients = () => {
         }
     };
 
+    const handleMerge = async () => {
+        if (!mergeData.masterId || !mergeData.duplicateId) return;
+        if (mergeData.masterId === mergeData.duplicateId) {
+            toast.error("Master and duplicate cannot be the same");
+            return;
+        }
+        try {
+            await mergeMutation.mutateAsync({
+                master_id: parseInt(mergeData.masterId),
+                duplicate_ids: [parseInt(mergeData.duplicateId)],
+            });
+            toast.success("Clients merged successfully");
+            setMergeOpen(false);
+            setMergeData({ masterId: "", duplicateId: "" });
+        } catch (e) {
+            toast.error(e.message);
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex items-end justify-between">
@@ -81,6 +106,9 @@ const Clients = () => {
                         <div className="text-xs uppercase tracking-wider text-muted-foreground">Total Clients</div>
                         <div className="text-2xl font-bold text-foreground">{clientStats?.total_clients ?? clients.length}</div>
                     </div>
+                    {user?.is_admin && (
+                        <Button variant="outline" onClick={() => setMergeOpen(true)}>Merge Duplicates</Button>
+                    )}
                     <Button onClick={() => setOpen(true)}>+ Add Client</Button>
                 </div>
             </div>
@@ -145,6 +173,52 @@ const Clients = () => {
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
                         <Button onClick={handleAddClient} disabled={createMutation.isPending}>Save</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Merge Clients Dialog */}
+            <Dialog open={mergeOpen} onOpenChange={setMergeOpen}>
+                <DialogContent className="max-w-sm">
+                    <DialogHeader><DialogTitle>Merge Clients</DialogTitle></DialogHeader>
+                    <div className="space-y-4 py-2">
+                        <p className="text-sm text-muted-foreground">Select the correct client name to keep, and the duplicate one to merge and delete. All records of the duplicate will be transferred to the master client.</p>
+                        <div className="space-y-1">
+                            <Label>Master Client (Keep)</Label>
+                            <select 
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
+                                value={mergeData.masterId}
+                                onChange={(e) => setMergeData({ ...mergeData, masterId: e.target.value })}
+                            >
+                                <option value="">Select master client...</option>
+                                {clients.map(c => <option key={c.id} value={c.id}>{c.name} ({c.location})</option>)}
+                            </select>
+                        </div>
+                        <div className="space-y-1">
+                            <Label>Duplicate Client (Merge & Delete)</Label>
+                            <select 
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
+                                value={mergeData.duplicateId}
+                                onChange={(e) => setMergeData({ ...mergeData, duplicateId: e.target.value })}
+                            >
+                                <option value="">Select duplicate client...</option>
+                                {clients.map(c => <option key={c.id} value={c.id}>{c.name} ({c.location})</option>)}
+                            </select>
+                        </div>
+                    </div>
+                    <DialogFooter className="flex items-center sm:justify-between w-full">
+                        <Button variant="destructive" onClick={() => {
+                            if (!mergeData.duplicateId) {
+                                toast.error("Please select a client to delete in the 'Duplicate Client' dropdown.");
+                                return;
+                            }
+                            handleDelete(parseInt(mergeData.duplicateId));
+                            setMergeOpen(false);
+                        }} className="mr-auto">Delete Only</Button>
+                        <div className="flex gap-2">
+                            <Button variant="outline" onClick={() => setMergeOpen(false)}>Cancel</Button>
+                            <Button onClick={handleMerge} disabled={mergeMutation.isPending}>Merge</Button>
+                        </div>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

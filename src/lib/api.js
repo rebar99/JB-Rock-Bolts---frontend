@@ -350,6 +350,7 @@ export const deleteProduct = (id) => del(`/api/inventory/${id}`);
 export const fetchClients = (params) => get("/api/clients", { limit: 10000, ...params });
 export const fetchClientStats = () => get("/api/clients/stats");
 export const createClient = (body) => post("/api/clients", body);
+export const mergeClients = (body) => post("/api/clients/merge", body);
 export const deleteClient = (id, deletedBy) => del(`/api/clients/${id}`, deletedBy ? { deleted_by: deletedBy } : undefined);
 export const fetchProjects = (params) => get("/api/projects", { limit: 10000, ...params });
 export const createProject = (body) => post("/api/projects", body);
@@ -360,6 +361,7 @@ export const createItemMasterItem = (body) => post("/api/item-master", body);
 export const updateItemMasterItem = (id, body) => put(`/api/item-master/${id}`, body);
 export const deleteItemMasterItem = (id, deletedBy, type = "PO") => del(`/api/item-master/${id}`, { deleted_by: deletedBy, type });
 export const addItemMasterSize = (itemId, body) => post(`/api/item-master/${itemId}/sizes`, body);
+export const updateItemMasterSize = (itemId, sizeId, body) => put(`/api/item-master/${itemId}/sizes/${sizeId}`, body);
 export const deleteItemMasterSize = (itemId, sizeId, deletedBy, type = "PO") => del(`/api/item-master/${itemId}/sizes/${sizeId}`, { deleted_by: deletedBy, type });
 
 // ── Records ──────────────────────────────────────────────────────────────────
