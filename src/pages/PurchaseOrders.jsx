@@ -1,6 +1,6 @@
-import { useMemo, useState, useRef } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -203,7 +203,15 @@ const PurchaseOrders = () => {
     });
     const projectMutation = useMutation({ mutationFn: (body) => createProject({ ...body, created_by: getCurrentUser() }), onSuccess: () => qc.invalidateQueries({ queryKey: ["constants"] }) });
 
-    const [search, setSearch] = useState("");
+    const [searchParams] = useSearchParams();
+    const querySearch = searchParams.get("search") || "";
+    const [search, setSearch] = useState(querySearch);
+
+    useEffect(() => {
+        if (querySearch) {
+            setSearch(querySearch);
+        }
+    }, [querySearch]);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editingId, setEditingId] = useState(null);
     const [form, setForm] = useState(empty());

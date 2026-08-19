@@ -16,6 +16,26 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 // There is deliberately no way to submit free text at either step —
 // CommandInput only filters the existing CommandItems, so a name/size that
 // isn't in the master list can never be entered here.
+export const parseSizeValues = (sizeStr) => {
+    const matches = (sizeStr || "").match(/\d+(?:\.\d+)?/g);
+    if (!matches) return [0];
+    return matches.map(Number);
+};
+
+export const compareSizes = (aSizeStr, bSizeStr) => {
+    const aVals = parseSizeValues(aSizeStr);
+    const bVals = parseSizeValues(bSizeStr);
+    const len = Math.max(aVals.length, bVals.length);
+    for (let i = 0; i < len; i++) {
+        const aVal = aVals[i] !== undefined ? aVals[i] : -1;
+        const bVal = bVals[i] !== undefined ? bVals[i] : -1;
+        if (aVal !== bVal) {
+            return aVal - bVal;
+        }
+    }
+    return (aSizeStr || "").localeCompare(bSizeStr || "", undefined, { numeric: true, sensitivity: 'base' });
+};
+
 export const ItemCombobox = ({ value, onChange, items = [], placeholder = "Select item..." }) => {
     const [open, setOpen] = useState(false);
     const [activeItem, setActiveItem] = useState(null); // item object while picking its size
@@ -90,7 +110,7 @@ export const ItemCombobox = ({ value, onChange, items = [], placeholder = "Selec
                         <CommandList>
                             <CommandEmpty>No size found.</CommandEmpty>
                             <CommandGroup>
-                                {activeItem.sizes.map((s) => (
+                                {[...activeItem.sizes].sort((a, b) => compareSizes(a.size, b.size)).map((s) => (
                                     <CommandItem
                                         key={s.id}
                                         value={s.size}
