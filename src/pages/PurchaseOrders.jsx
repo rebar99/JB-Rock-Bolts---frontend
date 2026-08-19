@@ -21,7 +21,8 @@ import {
     fetchPurchaseOrders, createPurchaseOrder, updatePurchaseOrder,
     deletePurchaseOrder, bulkDeletePurchaseOrders, fetchPurchaseOrder, openPODocument,
     createClient, createProject, fetchProjects, uploadPOFile, fetchItemMasterList,
-    exportPurchaseOrders, importPurchaseOrders, shortClosePurchaseOrder, fetchPOFulfillmentSummary
+    exportPurchaseOrders, importPurchaseOrders, shortClosePurchaseOrder, fetchPOFulfillmentSummary,
+    fetchClients, mergeClients, deleteClient
 } from "@/lib/api";
 import { Pencil, Plus, Search, Trash2, Eye, FileText, Package, Truck, Clock, Printer, X, UploadCloud, Download, Upload, Settings } from "lucide-react";
 import { toast } from "sonner";
@@ -33,7 +34,7 @@ import { SortableHeader } from "@/components/SortableHeader";
 import { FilterableHeader } from "@/components/FilterableHeader";
 import { StickyScrollArea } from "@/components/StickyScrollArea";
 
-const emptyLineItem = () => ({ item: "", quantity: "", uom: "Nos", unit_price: "", gst: "0", freight: "" });
+const emptyLineItem = () => ({ item: "", quantity: "", uom: "Nos", unit_price: "", gst: "0", freight: 0 });
 
 const PO_TABLE_WIDTHS = {
     sno: 56, client_name: 140, project: 120, item: 150, po_number: 130,
@@ -46,7 +47,7 @@ const empty = () => ({
     poNumber: "",
     poDate: new Date().toISOString().slice(0, 10),
     validityDate: new Date().toISOString().slice(0, 10),
-    gst: "", freight: 0,
+    gst: "18", freight: 0,
     project: "",
     paymentTerms: "",
     fileUrl: "",
@@ -229,6 +230,62 @@ const PurchaseOrders = () => {
         queryFn: () => fetchPOFulfillmentSummary(viewing.id),
         enabled: !!viewing?.id,
     });
+
+    const { data: fullClients = [] } = useQuery({
+        queryKey: ["clients"],
+        queryFn: fetchClients,
+        enabled: isAdmin,
+    });
+
+    const [mergeOpen, setMergeOpen] = useState(false);
+    const [mergeData, setMergeData] = useState({ masterId: "", duplicateId: "" });
+    const mergeMutation = useMutation({ 
+        mutationFn: (body) => mergeClients({ ...body, merged_by: getCurrentUser() }), 
+        onSuccess: () => {
+            invalidate();
+            qc.invalidateQueries({ queryKey: ["constants"] });
+            qc.invalidateQueries({ queryKey: ["clients"] });
+            qc.invalidateQueries({ queryKey: ["client-stats"] });
+        }
+    });
+
+    const handleMerge = async () => {
+        if (!mergeData.masterId || !mergeData.duplicateId) return;
+        if (mergeData.masterId === mergeData.duplicateId) {
+            toast.error("Master and duplicate cannot be the same");
+            return;
+        }
+        try {
+            await mergeMutation.mutateAsync({
+                master_id: parseInt(mergeData.masterId),
+                duplicate_ids: [parseInt(mergeData.duplicateId)],
+            });
+            toast.success("Clients merged successfully");
+            setMergeOpen(false);
+            setMergeData({ masterId: "", duplicateId: "" });
+        } catch (e) {
+            toast.error(e.message);
+        }
+    };
+
+    const handleClientDelete = async () => {
+        if (!mergeData.duplicateId) {
+            toast.error("Please select a client to delete in the 'Duplicate Client' dropdown.");
+            return;
+        }
+        try {
+            await deleteClient(parseInt(mergeData.duplicateId), getCurrentUser());
+            toast.success("Client deleted successfully");
+            invalidate();
+            qc.invalidateQueries({ queryKey: ["constants"] });
+            qc.invalidateQueries({ queryKey: ["clients"] });
+            qc.invalidateQueries({ queryKey: ["client-stats"] });
+            setMergeOpen(false);
+            setMergeData({ masterId: "", duplicateId: "" });
+        } catch (e) {
+            toast.error(e.message || "Cannot delete client. It might have existing records.");
+        }
+    };
 
     const poDeliveryStatusBadge = (status) =>
         status === "Completed" ? "Delivered" : status === "Short Closed" ? "Short Closed" : status;
@@ -596,43 +653,48 @@ const PurchaseOrders = () => {
 
                             <div className="space-y-2 sm:col-span-2">
                                 <Label>Name of Client *</Label>
-                                <div className="grid grid-cols-2 gap-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                     <Select value={form.clientDropdown} onValueChange={(v) => { set("clientDropdown", v); set("clientName", ""); }}>
                                         <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
                                         <SelectContent>
                                             {clients.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
-                                    <Dialog open={addClientOpen} onOpenChange={setAddClientOpen}>
-                                        <DialogTrigger asChild>
-                                            <Button variant="outline">Add New Client</Button>
-                                        </DialogTrigger>
-                                        <DialogContent className="sm:max-w-[425px]">
-                                            <DialogHeader><DialogTitle>Add New Client</DialogTitle></DialogHeader>
-                                            <div className="space-y-4 py-4">
-                                                <div className="space-y-2">
-                                                    <Label>Client Name</Label>
-                                                    <div className="flex gap-2">
-                                                        <Select value={newClientSalutation} onValueChange={setNewClientSalutation}>
-                                                            <SelectTrigger className="w-[80px]"><SelectValue /></SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectItem value="Mr.">Mr.</SelectItem>
-                                                                <SelectItem value="Mrs.">Mrs.</SelectItem>
-                                                                <SelectItem value="Ms.">Ms.</SelectItem>
-                                                                <SelectItem value="M/s.">M/s.</SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                        <Input className="flex-1" placeholder="Enter name" value={newClientName} onChange={e => setNewClientName(e.target.value)} />
+                                    <div className="flex gap-2">
+                                        <Dialog open={addClientOpen} onOpenChange={setAddClientOpen}>
+                                            <DialogTrigger asChild>
+                                                <Button variant="outline" className="flex-1">Add New Client</Button>
+                                            </DialogTrigger>
+                                            <DialogContent className="sm:max-w-[425px]">
+                                                <DialogHeader><DialogTitle>Add New Client</DialogTitle></DialogHeader>
+                                                <div className="space-y-4 py-4">
+                                                    <div className="space-y-2">
+                                                        <Label>Client Name</Label>
+                                                        <div className="flex gap-2">
+                                                            <Select value={newClientSalutation} onValueChange={setNewClientSalutation}>
+                                                                <SelectTrigger className="w-[80px]"><SelectValue /></SelectTrigger>
+                                                                <SelectContent>
+                                                                    <SelectItem value="Mr.">Mr.</SelectItem>
+                                                                    <SelectItem value="Mrs.">Mrs.</SelectItem>
+                                                                    <SelectItem value="Ms.">Ms.</SelectItem>
+                                                                    <SelectItem value="M/s.">M/s.</SelectItem>
+                                                                </SelectContent>
+                                                            </Select>
+                                                            <Input className="flex-1" placeholder="Enter name" value={newClientName} onChange={e => setNewClientName(e.target.value)} />
+                                                        </div>
                                                     </div>
+                                                    <div className="space-y-2"><Label>Location</Label><Input value={newClientLocation} onChange={e => setNewClientLocation(e.target.value)} /></div>
                                                 </div>
-                                                <div className="space-y-2"><Label>Location</Label><Input value={newClientLocation} onChange={e => setNewClientLocation(e.target.value)} /></div>
-                                            </div>
-                                            <DialogFooter>
-                                                <Button variant="outline" onClick={() => setAddClientOpen(false)}>Cancel</Button>
-                                                <Button onClick={handleCreateClient} disabled={clientMutation.isPending}>Add Client</Button>
-                                            </DialogFooter>
-                                        </DialogContent>
-                                    </Dialog>
+                                                <DialogFooter>
+                                                    <Button variant="outline" onClick={() => setAddClientOpen(false)}>Cancel</Button>
+                                                    <Button onClick={handleCreateClient} disabled={clientMutation.isPending}>Add Client</Button>
+                                                </DialogFooter>
+                                            </DialogContent>
+                                        </Dialog>
+                                        {isAdmin && (
+                                            <Button variant="outline" className="flex-1" onClick={() => setMergeOpen(true)}>Merge Duplicates</Button>
+                                        )}
+                                    </div>
                                 </div>
                                 {effectiveClient && <p className="text-xs text-muted-foreground">Using: <span className="font-medium text-foreground">{effectiveClient}</span></p>}
                             </div>
@@ -757,68 +819,12 @@ const PurchaseOrders = () => {
                                                     />
                                                 </div>
                                             </div>
-                                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mt-4 pt-4 border-t border-slate-200">
-                                                <div className="space-y-1.5">
-                                                    <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">GST</Label>
-                                                    <div className="flex gap-1">
-                                                        <Input 
-                                                            placeholder="18" 
-                                                            value={(li.gst || "").replace("₹", "")} 
-                                                            onChange={(e) => {
-                                                                const val = e.target.value;
-                                                                if ((li.gst || "").toString().startsWith("₹")) {
-                                                                    if (/^\d*\.?\d*$/.test(val)) setLineItem(idx, "gst", `₹${val}`);
-                                                                } else {
-                                                                    if (/^\d{0,2}%?$/.test(val)) setLineItem(idx, "gst", val);
-                                                                }
-                                                            }} 
-                                                        />
-                                                        <Select value={(li.gst || "").toString().startsWith("₹") ? "amount" : "percent"} onValueChange={(v) => {
-                                                            if (v === "amount") {
-                                                                setLineItem(idx, "gst", `₹${(li.gst || "18").replace("₹", "").replace("%", "")}`);
-                                                            } else {
-                                                                setLineItem(idx, "gst", (li.gst || "18").replace("₹", "").replace("%", ""));
-                                                            }
-                                                        }}>
-                                                            <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectItem value="percent">%</SelectItem>
-                                                                <SelectItem value="amount">₹</SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                </div>
-                                                <div className="space-y-1.5">
-                                                    <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Freight</Label>
-                                                    <Input
-                                                        type="number"
-                                                        min="0"
-                                                        step="0.01"
-                                                        placeholder="0.00"
-                                                        value={li.freight || ""}
-                                                        onChange={(e) => setLineItem(idx, "freight", e.target.value)}
-                                                    />
-                                                </div>
-                                                <div className="sm:col-span-2 flex items-end justify-end space-x-6">
-                                                    <div className="text-right">
-                                                        <div className="text-[10px] uppercase text-muted-foreground font-semibold">Subtotal</div>
-                                                        <div className="font-medium text-sm">{inr((li.quantity || 0) * (li.unit_price || 0))}</div>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <div className="text-[10px] uppercase text-muted-foreground font-semibold">Row Total</div>
-                                                        <div className="font-bold text-base text-green-700">
-                                                            {inr(
-                                                                ((li.quantity || 0) * (li.unit_price || 0)) + 
-                                                                Number(li.freight || 0) + 
-                                                                ((li.gst || "").toString().startsWith("₹") 
-                                                                    ? Number((li.gst || "").toString().replace("₹", "") || 0) 
-                                                                    : ((li.quantity || 0) * (li.unit_price || 0) * Number(li.gst || 18) / 100))
-                                                            )}
-                                                        </div>
-                                                    </div>
+                                            <div className="flex items-center justify-end mt-4 pt-4 border-t border-slate-200">
+                                                <div className="text-right">
+                                                    <div className="text-[10px] uppercase text-muted-foreground font-semibold">Subtotal</div>
+                                                    <div className="font-bold text-sm text-slate-800">{inr((li.quantity || 0) * (li.unit_price || 0))}</div>
                                                 </div>
                                             </div>
-
 
                                         </div>
                                     ))}
@@ -835,35 +841,18 @@ const PurchaseOrders = () => {
                                     <div className="flex items-center gap-1.5">
                                         <span className="text-sm font-medium text-slate-600">GST:</span>
                                         <div className="flex items-center rounded-md border border-slate-300 bg-white h-8 overflow-hidden shadow-sm">
-                                            <select 
-                                                className="bg-slate-100 border-r border-slate-300 px-1.5 py-1 h-full text-xs font-bold text-slate-700 outline-none cursor-pointer"
-                                                value={isGlobalGstAmount ? "amount" : "percent"}
-                                                onChange={(e) => {
-                                                    if (e.target.value === "amount") {
-                                                        set("gst", `₹${globalGstAmount || 0}`);
-                                                    } else {
-                                                        set("gst", "18");
-                                                    }
-                                                }}
-                                            >
-                                                <option value="percent">%</option>
-                                                <option value="amount">₹</option>
-                                            </select>
                                             <input 
                                                 type="text" 
-                                                className="w-16 h-full px-2 text-right font-bold text-slate-900 outline-none"
-                                                value={isGlobalGstAmount ? (form.gst?.toString().replace("₹", "") || "") : (form.gst || "")}
+                                                className="w-12 h-full px-2 text-right font-bold text-slate-900 outline-none border-r border-slate-200"
+                                                value={(form.gst?.toString().replace("%", "") || "")}
                                                 onChange={(e) => {
                                                     const val = e.target.value;
-                                                    if (isGlobalGstAmount) {
-                                                        if (/^\d*\.?\d*$/.test(val)) set("gst", `₹${val}`);
-                                                    } else {
-                                                        if (/^\d{0,2}%?$/.test(val)) set("gst", val);
-                                                    }
+                                                    if (/^\d{0,2}%?$/.test(val)) set("gst", val);
                                                 }}
                                             />
+                                            <span className="bg-slate-100 px-1.5 py-1 h-full text-xs font-bold text-slate-700 select-none flex items-center justify-center">%</span>
                                         </div>
-                                        {!isGlobalGstAmount && <span className="text-sm font-bold text-slate-900 ml-1">({inr(globalGstAmount)})</span>}
+                                        <span className="text-sm font-bold text-slate-900 ml-1">({inr(globalGstAmount)})</span>
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <span className="text-sm font-medium text-slate-600">Freight:</span>
@@ -1187,32 +1176,10 @@ const PurchaseOrders = () => {
                                                     <Input value={li.unit_price ? Number(li.unit_price).toFixed(2) : "0.00"} disabled className="opacity-100" />
                                                 </div>
                                             </div>
-                                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mt-4 pt-4 border-t border-slate-200">
-                                                <div className="space-y-1.5">
-                                                    <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">GST</Label>
-                                                    <Input value={li.gst || "0"} disabled className="opacity-100" />
-                                                </div>
-                                                <div className="space-y-1.5">
-                                                    <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Freight</Label>
-                                                    <Input value={li.freight ?? "0"} disabled className="opacity-100" />
-                                                </div>
-                                                <div className="sm:col-span-2 flex items-end justify-end space-x-6">
-                                                    <div className="text-right">
-                                                        <div className="text-[10px] uppercase text-muted-foreground font-semibold">Subtotal</div>
-                                                        <div className="font-medium text-sm">{inr((li.quantity || 0) * (li.unit_price || 0))}</div>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <div className="text-[10px] uppercase text-muted-foreground font-semibold">Row Total</div>
-                                                        <div className="font-bold text-base text-green-700">
-                                                            {inr(
-                                                                ((li.quantity || 0) * (li.unit_price || 0)) +
-                                                                Number(li.freight || 0) +
-                                                                ((li.gst || "").toString().startsWith("₹")
-                                                                    ? Number((li.gst || "").toString().replace("₹", "") || 0)
-                                                                    : ((li.quantity || 0) * (li.unit_price || 0) * Number(li.gst || 0) / 100))
-                                                            )}
-                                                        </div>
-                                                    </div>
+                                            <div className="flex items-center justify-end mt-4 pt-4 border-t border-slate-200">
+                                                <div className="text-right">
+                                                    <div className="text-[10px] uppercase text-muted-foreground font-semibold">Subtotal</div>
+                                                    <div className="font-bold text-sm text-slate-800">{inr((li.quantity || 0) * (li.unit_price || 0))}</div>
                                                 </div>
                                             </div>
                                         </div>
@@ -1549,6 +1516,40 @@ const PurchaseOrders = () => {
                         >
                             {importing ? "Importing…" : "Import"}
                         </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={mergeOpen} onOpenChange={setMergeOpen}>
+                <DialogContent className="max-w-sm">
+                    <DialogHeader><DialogTitle>Merge Clients</DialogTitle></DialogHeader>
+                    <div className="space-y-4 py-2">
+                        <p className="text-sm text-muted-foreground">Select the correct client name to keep, and the duplicate one to merge and delete.</p>
+                        <div className="space-y-1">
+                            <Label>Master Client (Keep)</Label>
+                            <Select value={mergeData.masterId} onValueChange={(v) => setMergeData({ ...mergeData, masterId: v })}>
+                                <SelectTrigger><SelectValue placeholder="Select master client..." /></SelectTrigger>
+                                <SelectContent>
+                                    {fullClients.map(c => <SelectItem key={c.id} value={c.id.toString()}>{c.name} ({c.location})</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-1">
+                            <Label>Duplicate Client (Merge & Delete)</Label>
+                            <Select value={mergeData.duplicateId} onValueChange={(v) => setMergeData({ ...mergeData, duplicateId: v })}>
+                                <SelectTrigger><SelectValue placeholder="Select duplicate client..." /></SelectTrigger>
+                                <SelectContent>
+                                    {fullClients.map(c => <SelectItem key={c.id} value={c.id.toString()}>{c.name} ({c.location})</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <DialogFooter className="flex items-center sm:justify-between w-full">
+                        <Button variant="destructive" onClick={handleClientDelete} className="mr-auto">Delete Only</Button>
+                        <div className="flex gap-2">
+                            <Button variant="outline" onClick={() => setMergeOpen(false)}>Cancel</Button>
+                            <Button onClick={handleMerge} disabled={mergeMutation.isPending}>Merge</Button>
+                        </div>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

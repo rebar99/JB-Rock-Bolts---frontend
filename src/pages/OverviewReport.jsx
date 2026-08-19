@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { fetchProductPendingReport, exportProductPendingReport, openLogStream } from "@/lib/api";
+import { fetchProductPendingReport, exportProductPendingReport, openLogStream, fetchItemMasterList } from "@/lib/api";
 import { round2, inr } from "@/lib/format";
 import { toast } from "sonner";
 import {
@@ -44,16 +44,25 @@ const fmtQty = (val) => {
 const OverviewReport = () => {
     const navigate = useNavigate();
     const qc = useQueryClient();
+
+    // Left sidebar selection
+    const [selectedCategory, setSelectedCategory] = useState(null);
+
+    const { data: itemMasterList = [] } = useQuery({
+        queryKey: ["item-master", "PO"],
+        queryFn: () => fetchItemMasterList("PO"),
+    });
+
     
     // Dropdown filters state
     const [filterProduct, setFilterProduct] = useState("all");
     const [filterClient, setFilterClient] = useState("all");
-    const [filterPOStatus, setFilterPOStatus] = useState("Pending");
+    const [filterPOStatus, setFilterPOStatus] = useState("All");
 
     // Applied filters state (only used for fetch)
     const [appliedProduct, setAppliedProduct] = useState("all");
     const [appliedClient, setAppliedClient] = useState("all");
-    const [appliedPOStatus, setAppliedPOStatus] = useState("Pending");
+    const [appliedPOStatus, setAppliedPOStatus] = useState("All");
 
     const [expandedProducts, setExpandedProducts] = useState(new Set());
     const [expandedClients, setExpandedClients] = useState(new Set());
@@ -95,10 +104,10 @@ const OverviewReport = () => {
     const handleResetFilter = () => {
         setFilterProduct("all");
         setFilterClient("all");
-        setFilterPOStatus("Pending");
+        setFilterPOStatus("All");
         setAppliedProduct("all");
         setAppliedClient("all");
-        setAppliedPOStatus("Pending");
+        setAppliedPOStatus("All");
         setExpandedProducts(new Set());
         setExpandedClients(new Set());
     };
@@ -174,13 +183,45 @@ const OverviewReport = () => {
 
     const products = data?.products ?? [];
 
+    const filteredProducts = useMemo(() => {
+        if (!selectedCategory) return [];
+        return products.filter(p => p.product_label === selectedCategory || p.product_label.startsWith(`${selectedCategory} `));
+    }, [products, selectedCategory]);
+
+    const activeSummary = useMemo(() => {
+        if (!selectedCategory) return null;
+        
+        const totOrdered = filteredProducts.reduce((sum, p) => sum + p.total_ordered_qty, 0);
+        const totDispatched = filteredProducts.reduce((sum, p) => sum + p.total_dispatched_qty, 0);
+        const totPending = filteredProducts.reduce((sum, p) => sum + p.pending_qty, 0);
+        const totValue = filteredProducts.reduce((sum, p) => sum + p.pending_value, 0);
+        
+        const clientSet = new Set();
+        filteredProducts.forEach(p => {
+            p.clients.forEach(c => clientSet.add(c.client_key));
+        });
+
+        return {
+            total_pending_qty: totPending,
+            total_pending_value: totValue,
+            total_products: filteredProducts.length,
+            total_clients: clientSet.size,
+            total_ordered: totOrdered,
+            total_dispatched: totDispatched
+        };
+    }, [filteredProducts, selectedCategory]);
+
+    const displayProducts = selectedCategory ? filteredProducts : [];
+    const displaySummary = selectedCategory ? activeSummary : summary;
+
+
     const activeProductNames = useMemo(() => {
-        return products.map((p) => p.product_label).sort((a, b) => a.localeCompare(b));
-    }, [products]);
+        return displayProducts.map((p) => p.product_label).sort((a, b) => a.localeCompare(b));
+    }, [displayProducts]);
 
     const activeClientNames = useMemo(() => {
         const names = new Set();
-        products.forEach((p) => {
+        displayProducts.forEach((p) => {
             p.clients.forEach((c) => {
                 if (c.client_name) {
                     names.add(c.client_name);
@@ -188,7 +229,7 @@ const OverviewReport = () => {
             });
         });
         return Array.from(names).sort((a, b) => a.localeCompare(b));
-    }, [products]);
+    }, [displayProducts]);
 
     const filteredProductNames = useMemo(() => {
         const s = productSearch.trim().toLowerCase();
@@ -201,7 +242,7 @@ const OverviewReport = () => {
     }, [activeClientNames, clientSearch]);
 
     // Calculate totals for table footer
-    const overallTotals = products.reduce((acc, p) => {
+    const overallTotals = displayProducts.reduce((acc, p) => {
         acc.ordered += p.total_ordered_qty;
         acc.dispatched += p.total_dispatched_qty;
         acc.pending += p.pending_qty;
@@ -210,7 +251,47 @@ const OverviewReport = () => {
     }, { ordered: 0, dispatched: 0, pending: 0, value: 0 });
 
     return (
-        <div className="space-y-6">
+        <div className="flex flex-col md:flex-row gap-6 items-start h-[calc(100vh-6rem)]">
+            {/* Left Sidebar */}
+            <Card className="w-full md:w-80 shrink-0 shadow-card border-border/60 bg-white overflow-hidden flex flex-col h-full sticky top-24">
+                <div className="bg-[#8B0000] text-white px-4 py-3 font-bold flex items-center gap-2 shrink-0">
+                    <Boxes className="h-5 w-5" />
+                    ITEM CATEGORIES
+                </div>
+                <div className="overflow-y-auto flex-1 p-2 space-y-1">
+                    {itemMasterList.map((item) => {
+                        const isSelected = selectedCategory === item.name;
+                        return (
+                            <button
+                                key={item.id}
+                                onClick={() => {
+                                    setSelectedCategory(item.name);
+                                    // Reset active product expansion when switching categories
+                                    setExpandedProducts(new Set());
+                                    setExpandedClients(new Set());
+                                }}
+                                className={`w-full text-left px-3 py-2.5 rounded-md text-sm font-semibold flex items-center justify-between transition-colors ${isSelected ? "bg-[#8B0000] text-white" : "text-slate-700 hover:bg-slate-100"}`}
+                            >
+                                <span className="truncate pr-2">{item.name}</span>
+                                <span className={`text-[10px] whitespace-nowrap ${isSelected ? "text-red-200" : "text-slate-400"}`}>
+                                    {item.sizes?.length || 0} sizes
+                                </span>
+                            </button>
+                        );
+                    })}
+                </div>
+            </Card>
+
+            {/* Main Content */}
+            <div className="flex-1 min-w-0 h-full overflow-y-auto pr-2 pb-12">
+                {!selectedCategory ? (
+                    <Card className="p-12 shadow-card border-border/60 bg-white flex flex-col items-center justify-center text-center text-muted-foreground h-full min-h-[400px]">
+                        <Boxes className="h-16 w-16 mb-4 text-slate-200" />
+                        <h3 className="text-xl font-bold text-slate-700 mb-2">Select an Item Category</h3>
+                        <p className="text-sm">Please select an item from the left navigation to view its product-wise pending details.</p>
+                    </Card>
+                ) : (
+                    <div className="space-y-6">
             {/* Header / Export Row */}
             <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-xl border border-border shadow-sm">
                 <div>
@@ -300,10 +381,10 @@ const OverviewReport = () => {
 
             {/* Summary Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard icon={Package} label="Total Pending Qty" value={fmtQty(summary.total_pending_qty)} subtext="Nos" accent="bg-blue-500/10 text-blue-600" />
-                <StatCard icon={IndianRupee} label="Total pending payment ( without GST)" value={inr(summary.total_pending_value)} subtext="In INR" accent="bg-green-500/10 text-green-600" />
-                <StatCard icon={Boxes} label="Total Products" value={String(summary.total_products)} subtext="Different Diameters" accent="bg-purple-500/10 text-purple-600" onClick={() => { setProductSearch(""); setProductsDialogOpen(true); }} />
-                <StatCard icon={Users} label="Total Clients" value={String(summary.total_clients)} subtext="With Pending Orders" accent="bg-amber-500/10 text-amber-600" onClick={() => { setClientSearch(""); setClientsDialogOpen(true); }} />
+                <StatCard icon={Package} label="Total Pending Qty" value={fmtQty(displaySummary.total_pending_qty)} subtext="Nos" accent="bg-blue-500/10 text-blue-600" />
+                <StatCard icon={IndianRupee} label="Total pending payment ( without GST)" value={inr(displaySummary.total_pending_value)} subtext="In INR" accent="bg-green-500/10 text-green-600" />
+                <StatCard icon={Boxes} label="Total Products" value={String(displaySummary.total_products)} subtext="Different Diameters" accent="bg-purple-500/10 text-purple-600" onClick={() => { setProductSearch(""); setProductsDialogOpen(true); }} />
+                <StatCard icon={Users} label="Total Clients" value={String(displaySummary.total_clients)} subtext="With Pending Orders" accent="bg-amber-500/10 text-amber-600" onClick={() => { setClientSearch(""); setClientsDialogOpen(true); }} />
             </div>
 
             {/* Main Table */}
@@ -334,14 +415,14 @@ const OverviewReport = () => {
                                     </td>
                                 </tr>
                             )}
-                            {!isLoading && products.length === 0 && (
+                            {!isLoading && displayProducts.length === 0 && (
                                 <tr>
                                     <td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">
                                         No pending analysis data found.
                                     </td>
                                 </tr>
                             )}
-                            {!isLoading && products.map((p, pIdx) => {
+                            {!isLoading && displayProducts.map((p, pIdx) => {
                                 const isProductExpanded = expandedProducts.has(p.product_label);
                                 return (
                                     <Fragment key={p.product_label}>
@@ -484,7 +565,7 @@ const OverviewReport = () => {
                                 );
                             })}
                         </tbody>
-                        {!isLoading && products.length > 0 && (
+                        {!isLoading && displayProducts.length > 0 && (
                             <tfoot>
                                 <tr className="bg-blue-50/80 font-bold border-t border-slate-300 text-slate-800">
                                     <td className="py-3.5 px-4" colSpan={2}>TOTAL</td>
@@ -492,7 +573,7 @@ const OverviewReport = () => {
                                     <td className="py-3.5 px-4 text-right">{fmtQty(overallTotals.dispatched)}</td>
                                     <td className="py-3.5 px-4 text-right text-orange-600">{fmtQty(overallTotals.pending)}</td>
                                     <td className="py-3.5 px-4 text-right text-green-600">{inr(overallTotals.value)}</td>
-                                    <td className="py-3.5 px-4 text-center text-slate-600">{summary.total_clients}</td>
+                                    <td className="py-3.5 px-4 text-center text-slate-600">{displaySummary.total_clients}</td>
                                     <td className="py-3.5 px-4"></td>
                                 </tr>
                             </tfoot>
@@ -548,6 +629,9 @@ const OverviewReport = () => {
                     </div>
                 </DialogContent>
             </Dialog>
+                    </div>
+                )}
+            </div>
         </div>
     );
 };
