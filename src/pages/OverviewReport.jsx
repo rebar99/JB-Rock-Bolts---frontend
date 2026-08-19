@@ -1,20 +1,26 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { fetchProductPendingReport, exportProductPendingReport, openLogStream } from "@/lib/api";
 import { round2, inr } from "@/lib/format";
 import { toast } from "sonner";
 import {
-    Boxes, ChevronRight, ClipboardList, Download, IndianRupee, Package, RefreshCw, Users,
+    Boxes, ChevronRight, ClipboardList, Download, IndianRupee, Package, RefreshCw, Users, Search,
 } from "lucide-react";
 
 const POLL_INTERVAL_MS = 45_000;
 const RELEVANT_ENTITY_TYPES = new Set(["PurchaseOrder", "Sale"]);
 
-const StatCard = ({ icon: Icon, label, value, subtext, accent }) => (
-    <Card className="p-5 shadow-card hover:shadow-elegant transition-shadow border-border/60 bg-white">
+const StatCard = ({ icon: Icon, label, value, subtext, accent, onClick }) => (
+    <Card 
+        className={`p-5 shadow-card hover:shadow-elegant transition-shadow border-border/60 bg-white ${onClick ? "cursor-pointer" : ""}`}
+        onClick={onClick}
+    >
         <div className="flex items-start justify-between">
             <div className="space-y-1">
                 <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</div>
@@ -36,6 +42,7 @@ const fmtQty = (val) => {
 };
 
 const OverviewReport = () => {
+    const navigate = useNavigate();
     const qc = useQueryClient();
     
     // Dropdown filters state
@@ -51,7 +58,11 @@ const OverviewReport = () => {
     const [expandedProducts, setExpandedProducts] = useState(new Set());
     const [expandedClients, setExpandedClients] = useState(new Set());
     const [exporting, setExporting] = useState(false);
+    const [productsDialogOpen, setProductsDialogOpen] = useState(false);
+    const [productSearch, setProductSearch] = useState("");
 
+    const [clientsDialogOpen, setClientsDialogOpen] = useState(false);
+    const [clientSearch, setClientSearch] = useState("");
     const { data, isLoading, refetch, isFetching } = useQuery({
         queryKey: ["productPendingReport", appliedProduct, appliedClient, appliedPOStatus],
         queryFn: () => fetchProductPendingReport({
@@ -163,6 +174,32 @@ const OverviewReport = () => {
 
     const products = data?.products ?? [];
 
+    const activeProductNames = useMemo(() => {
+        return products.map((p) => p.product_label).sort((a, b) => a.localeCompare(b));
+    }, [products]);
+
+    const activeClientNames = useMemo(() => {
+        const names = new Set();
+        products.forEach((p) => {
+            p.clients.forEach((c) => {
+                if (c.client_name) {
+                    names.add(c.client_name);
+                }
+            });
+        });
+        return Array.from(names).sort((a, b) => a.localeCompare(b));
+    }, [products]);
+
+    const filteredProductNames = useMemo(() => {
+        const s = productSearch.trim().toLowerCase();
+        return s ? activeProductNames.filter((name) => name.toLowerCase().includes(s)) : activeProductNames;
+    }, [activeProductNames, productSearch]);
+
+    const filteredClientNames = useMemo(() => {
+        const s = clientSearch.trim().toLowerCase();
+        return s ? activeClientNames.filter((name) => name.toLowerCase().includes(s)) : activeClientNames;
+    }, [activeClientNames, clientSearch]);
+
     // Calculate totals for table footer
     const overallTotals = products.reduce((acc, p) => {
         acc.ordered += p.total_ordered_qty;
@@ -265,8 +302,8 @@ const OverviewReport = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard icon={Package} label="Total Pending Qty" value={fmtQty(summary.total_pending_qty)} subtext="Nos" accent="bg-blue-500/10 text-blue-600" />
                 <StatCard icon={IndianRupee} label="Total pending payment ( without GST)" value={inr(summary.total_pending_value)} subtext="In INR" accent="bg-green-500/10 text-green-600" />
-                <StatCard icon={Boxes} label="Total Products" value={String(summary.total_products)} subtext="Different Diameters" accent="bg-purple-500/10 text-purple-600" />
-                <StatCard icon={Users} label="Total Clients" value={String(summary.total_clients)} subtext="With Pending Orders" accent="bg-amber-500/10 text-amber-600" />
+                <StatCard icon={Boxes} label="Total Products" value={String(summary.total_products)} subtext="Different Diameters" accent="bg-purple-500/10 text-purple-600" onClick={() => { setProductSearch(""); setProductsDialogOpen(true); }} />
+                <StatCard icon={Users} label="Total Clients" value={String(summary.total_clients)} subtext="With Pending Orders" accent="bg-amber-500/10 text-amber-600" onClick={() => { setClientSearch(""); setClientsDialogOpen(true); }} />
             </div>
 
             {/* Main Table */}
@@ -396,7 +433,12 @@ const OverviewReport = () => {
                                                                                                     <tbody>
                                                                                                         {c.pos.map((po, poIdx) => (
                                                                                                             <tr key={poIdx} className="border-b border-slate-100 hover:bg-slate-50/30">
-                                                                                                                <td className="py-2 px-2 font-medium text-slate-700">{po.po_number}</td>
+                                                                                                                <td
+                                                                                                                    className="py-2 px-2 font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                                                                                                                    onClick={() => navigate(`/purchase-orders?search=${encodeURIComponent(po.po_number)}`)}
+                                                                                                                >
+                                                                                                                    {po.po_number}
+                                                                                                                </td>
                                                                                                                 <td className="py-2 px-2 text-slate-400 font-medium">{po.po_date || "—"}</td>
                                                                                                                 <td className="py-2 px-2 text-right text-slate-600">{fmtQty(po.ordered_qty)}</td>
                                                                                                                 <td className="py-2 px-2 text-right text-slate-600">{fmtQty(po.dispatched_qty)}</td>
@@ -458,6 +500,54 @@ const OverviewReport = () => {
                     </table>
                 </div>
             </Card>
+
+            {/* Products List Dialog */}
+            <Dialog open={productsDialogOpen} onOpenChange={setProductsDialogOpen}>
+                <DialogContent className="sm:max-w-md max-h-[80vh] flex flex-col">
+                    <DialogHeader>
+                        <DialogTitle>Products ({(activeProductNames || []).length})</DialogTitle>
+                    </DialogHeader>
+                    <div className="relative my-2">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input className="pl-9" placeholder="Search products..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} />
+                    </div>
+                    <div className="overflow-y-auto -mx-1 px-1 space-y-1 flex-1 min-h-[200px]">
+                        {filteredProductNames.map((name, idx) => (
+                            <div key={name} className="px-3 py-2 rounded-md text-sm text-foreground bg-muted/40 hover:bg-muted/60 transition-colors flex items-center">
+                                <span className="text-slate-400 font-semibold mr-3 text-xs w-6 shrink-0">{idx + 1}.</span>
+                                <span className="truncate">{name}</span>
+                            </div>
+                        ))}
+                        {filteredProductNames.length === 0 && (
+                            <div className="text-center text-sm text-muted-foreground py-8">No products found.</div>
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Clients List Dialog */}
+            <Dialog open={clientsDialogOpen} onOpenChange={setClientsDialogOpen}>
+                <DialogContent className="sm:max-w-md max-h-[80vh] flex flex-col">
+                    <DialogHeader>
+                        <DialogTitle>Clients ({(activeClientNames || []).length})</DialogTitle>
+                    </DialogHeader>
+                    <div className="relative my-2">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input className="pl-9" placeholder="Search clients..." value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} />
+                    </div>
+                    <div className="overflow-y-auto -mx-1 px-1 space-y-1 flex-1 min-h-[200px]">
+                        {filteredClientNames.map((name, idx) => (
+                            <div key={name} className="px-3 py-2 rounded-md text-sm text-foreground bg-muted/40 hover:bg-muted/60 transition-colors flex items-center">
+                                <span className="text-slate-400 font-semibold mr-3 text-xs w-6 shrink-0">{idx + 1}.</span>
+                                <span className="truncate">{name}</span>
+                            </div>
+                        ))}
+                        {filteredClientNames.length === 0 && (
+                            <div className="text-center text-sm text-muted-foreground py-8">No clients found.</div>
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 };

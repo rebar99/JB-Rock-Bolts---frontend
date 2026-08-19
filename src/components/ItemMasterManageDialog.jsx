@@ -10,6 +10,7 @@ import {
     addItemMasterSize, deleteItemMasterSize,
 } from "@/lib/api";
 import { getCurrentUser } from "@/lib/currentUser";
+import { compareSizes } from "./ItemCombobox";
 
 // Admin-only Add/Edit/Delete for the Item Master list backing the PO Item
 // field's dropdown everywhere. The trigger for this dialog is itself
@@ -209,7 +210,7 @@ export const ItemMasterManageDialog = ({ open, onOpenChange, type = "PO" }) => {
                                                 <div className="text-xs text-muted-foreground">No sizes yet — add one above.</div>
                                             ) : (
                                                 <div className="flex flex-wrap gap-1.5">
-                                                    {sizes.map((s) => (
+                                                    {[...sizes].sort((a, b) => compareSizes(a.size, b.size)).map((s) => (
                                                         <span key={s.id} className="inline-flex items-center gap-1 text-xs bg-card border border-border rounded-full pl-2.5 pr-1 py-1">
                                                             {s.size}
                                                             <button
