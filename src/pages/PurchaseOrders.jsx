@@ -22,7 +22,7 @@ import {
     deletePurchaseOrder, bulkDeletePurchaseOrders, fetchPurchaseOrder, openPODocument,
     createClient, createProject, fetchProjects, uploadPOFile, fetchItemMasterList,
     exportPurchaseOrders, importPurchaseOrders, shortClosePurchaseOrder, fetchPOFulfillmentSummary,
-    fetchClients, mergeClients, deleteClient
+    fetchClients, mergeClients, deleteClient, deleteProject, mergeProjects
 } from "@/lib/api";
 import { Pencil, Plus, Search, Trash2, Eye, FileText, Package, Truck, Clock, Printer, X, UploadCloud, Download, Upload, Settings } from "lucide-react";
 import { toast } from "sonner";
@@ -237,15 +237,32 @@ const PurchaseOrders = () => {
         enabled: isAdmin,
     });
 
+    const [mergeType, setMergeType] = useState("client"); // "client" | "project"
     const [mergeOpen, setMergeOpen] = useState(false);
     const [mergeData, setMergeData] = useState({ masterId: "", duplicateId: "" });
-    const mergeMutation = useMutation({ 
+    
+    const { data: fullProjects = [] } = useQuery({
+        queryKey: ["all-projects-for-merge"],
+        queryFn: () => fetchProjects({ limit: 10000 }),
+        enabled: isAdmin && mergeOpen && mergeType === "project",
+    });
+
+    const mergeClientMutation = useMutation({ 
         mutationFn: (body) => mergeClients({ ...body, merged_by: getCurrentUser() }), 
         onSuccess: () => {
             invalidate();
             qc.invalidateQueries({ queryKey: ["constants"] });
             qc.invalidateQueries({ queryKey: ["clients"] });
             qc.invalidateQueries({ queryKey: ["client-stats"] });
+        }
+    });
+
+    const mergeProjectMutation = useMutation({ 
+        mutationFn: (body) => mergeProjects({ ...body, merged_by: getCurrentUser() }), 
+        onSuccess: () => {
+            invalidate();
+            qc.invalidateQueries({ queryKey: ["constants"] });
+            qc.invalidateQueries({ queryKey: ["projects"] });
         }
     });
 
@@ -256,11 +273,19 @@ const PurchaseOrders = () => {
             return;
         }
         try {
-            await mergeMutation.mutateAsync({
-                master_id: parseInt(mergeData.masterId),
-                duplicate_ids: [parseInt(mergeData.duplicateId)],
-            });
-            toast.success("Clients merged successfully");
+            if (mergeType === "client") {
+                await mergeClientMutation.mutateAsync({
+                    master_id: parseInt(mergeData.masterId),
+                    duplicate_ids: [parseInt(mergeData.duplicateId)],
+                });
+                toast.success("Clients merged successfully");
+            } else {
+                await mergeProjectMutation.mutateAsync({
+                    master_id: parseInt(mergeData.masterId),
+                    duplicate_ids: [parseInt(mergeData.duplicateId)],
+                });
+                toast.success("Projects merged successfully");
+            }
             setMergeOpen(false);
             setMergeData({ masterId: "", duplicateId: "" });
         } catch (e) {
@@ -268,22 +293,30 @@ const PurchaseOrders = () => {
         }
     };
 
-    const handleClientDelete = async () => {
+    const handleDelete = async () => {
         if (!mergeData.duplicateId) {
-            toast.error("Please select a client to delete in the 'Duplicate Client' dropdown.");
+            toast.error(`Please select a ${mergeType} to delete in the 'Duplicate' dropdown.`);
             return;
         }
         try {
-            await deleteClient(parseInt(mergeData.duplicateId), getCurrentUser());
-            toast.success("Client deleted successfully");
-            invalidate();
-            qc.invalidateQueries({ queryKey: ["constants"] });
-            qc.invalidateQueries({ queryKey: ["clients"] });
-            qc.invalidateQueries({ queryKey: ["client-stats"] });
+            if (mergeType === "client") {
+                await deleteClient(parseInt(mergeData.duplicateId), getCurrentUser());
+                toast.success("Client deleted successfully");
+                invalidate();
+                qc.invalidateQueries({ queryKey: ["constants"] });
+                qc.invalidateQueries({ queryKey: ["clients"] });
+                qc.invalidateQueries({ queryKey: ["client-stats"] });
+            } else {
+                await deleteProject(parseInt(mergeData.duplicateId), getCurrentUser());
+                toast.success("Project deleted successfully");
+                invalidate();
+                qc.invalidateQueries({ queryKey: ["constants"] });
+                qc.invalidateQueries({ queryKey: ["projects"] });
+            }
             setMergeOpen(false);
             setMergeData({ masterId: "", duplicateId: "" });
         } catch (e) {
-            toast.error(e.message || "Cannot delete client. It might have existing records.");
+            toast.error(e.message || `Cannot delete ${mergeType}. It might have existing records.`);
         }
     };
 
@@ -1522,33 +1555,49 @@ const PurchaseOrders = () => {
 
             <Dialog open={mergeOpen} onOpenChange={setMergeOpen}>
                 <DialogContent className="max-w-sm">
-                    <DialogHeader><DialogTitle>Merge Clients</DialogTitle></DialogHeader>
+                    <DialogHeader><DialogTitle>Merge Duplicates</DialogTitle></DialogHeader>
                     <div className="space-y-4 py-2">
-                        <p className="text-sm text-muted-foreground">Select the correct client name to keep, and the duplicate one to merge and delete.</p>
                         <div className="space-y-1">
-                            <Label>Master Client (Keep)</Label>
-                            <Select value={mergeData.masterId} onValueChange={(v) => setMergeData({ ...mergeData, masterId: v })}>
-                                <SelectTrigger><SelectValue placeholder="Select master client..." /></SelectTrigger>
+                            <Label>Merge Type</Label>
+                            <Select value={mergeType} onValueChange={(v) => { setMergeType(v); setMergeData({ masterId: "", duplicateId: "" }); }}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
                                 <SelectContent>
-                                    {fullClients.map(c => <SelectItem key={c.id} value={c.id.toString()}>{c.name} ({c.location})</SelectItem>)}
+                                    <SelectItem value="client">Clients</SelectItem>
+                                    <SelectItem value="project">Projects</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <p className="text-sm text-muted-foreground">Select the correct {mergeType} to keep, and the duplicate one to merge and delete.</p>
+                        <div className="space-y-1">
+                            <Label>Master {mergeType === 'client' ? 'Client' : 'Project'} (Keep)</Label>
+                            <Select value={mergeData.masterId} onValueChange={(v) => setMergeData({ ...mergeData, masterId: v })}>
+                                <SelectTrigger><SelectValue placeholder={`Select master ${mergeType}...`} /></SelectTrigger>
+                                <SelectContent>
+                                    {mergeType === 'client' 
+                                        ? fullClients.map(c => <SelectItem key={c.id} value={c.id.toString()}>{c.name} ({c.location})</SelectItem>)
+                                        : fullProjects.map(p => <SelectItem key={p.id} value={p.id.toString()}>{p.name}</SelectItem>)
+                                    }
                                 </SelectContent>
                             </Select>
                         </div>
                         <div className="space-y-1">
-                            <Label>Duplicate Client (Merge & Delete)</Label>
+                            <Label>Duplicate {mergeType === 'client' ? 'Client' : 'Project'} (Merge & Delete)</Label>
                             <Select value={mergeData.duplicateId} onValueChange={(v) => setMergeData({ ...mergeData, duplicateId: v })}>
-                                <SelectTrigger><SelectValue placeholder="Select duplicate client..." /></SelectTrigger>
+                                <SelectTrigger><SelectValue placeholder={`Select duplicate ${mergeType}...`} /></SelectTrigger>
                                 <SelectContent>
-                                    {fullClients.map(c => <SelectItem key={c.id} value={c.id.toString()}>{c.name} ({c.location})</SelectItem>)}
+                                    {mergeType === 'client' 
+                                        ? fullClients.map(c => <SelectItem key={c.id} value={c.id.toString()}>{c.name} ({c.location})</SelectItem>)
+                                        : fullProjects.map(p => <SelectItem key={p.id} value={p.id.toString()}>{p.name}</SelectItem>)
+                                    }
                                 </SelectContent>
                             </Select>
                         </div>
                     </div>
                     <DialogFooter className="flex items-center sm:justify-between w-full">
-                        <Button variant="destructive" onClick={handleClientDelete} className="mr-auto">Delete Only</Button>
+                        <Button variant="destructive" onClick={handleDelete} className="mr-auto">Delete Only</Button>
                         <div className="flex gap-2">
                             <Button variant="outline" onClick={() => setMergeOpen(false)}>Cancel</Button>
-                            <Button onClick={handleMerge} disabled={mergeMutation.isPending}>Merge</Button>
+                            <Button onClick={handleMerge} disabled={mergeClientMutation.isPending || mergeProjectMutation.isPending}>Merge</Button>
                         </div>
                     </DialogFooter>
                 </DialogContent>
