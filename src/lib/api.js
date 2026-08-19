@@ -548,4 +548,7 @@ export const updateCompanyAddress = (id, body) => put(`/api/company-addresses/${
 export const deleteCompanyAddress = (id) => del(`/api/company-addresses/${id}`);
 export const setCompanyAddressDefault = (id) => post(`/api/company-addresses/${id}/set-default`);
 
+export const deleteProject = (id, deletedBy) => del(`/api/projects/${id}`, deletedBy ? { deleted_by: deletedBy } : undefined);
+export const mergeProjects = (body) => post("/api/projects/merge", body);
+
 
