@@ -32,7 +32,7 @@ import { SortableHeader } from "@/components/SortableHeader";
 import { FilterableHeader } from "@/components/FilterableHeader";
 import { StickyScrollArea } from "@/components/StickyScrollArea";
 
-const emptyLineItem = () => ({ item: "", quantity: "", completed_quantity: "", uom: "Nos", unit_price: "", gst: "0", freight: "" });
+const emptyLineItem = () => ({ item: "", quantity: "", completed_quantity: "", uom: "Nos", unit_price: "", gst: "0", freight: 0 });
 
 const WO_TABLE_WIDTHS = {
     sno: 56, client_name: 140, project: 120, item: 150, wo_number: 130,
@@ -46,7 +46,7 @@ const empty = () => ({
     clientName: "", clientDropdown: "",
     woNumber: "",
     woDate: new Date().toISOString().slice(0, 10),
-    gst: "", freight: 0,
+    gst: "18", freight: 0,
     project: "",
     workDescription: "",
     siteLocation: "",
@@ -649,65 +649,10 @@ const WorkOrders = () => {
                                                     />
                                                 </div>
                                             </div>
-                                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mt-4 pt-4 border-t border-slate-200">
-                                                <div className="space-y-1.5">
-                                                    <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">GST</Label>
-                                                    <div className="flex gap-1">
-                                                        <Input
-                                                            placeholder="18"
-                                                            value={(li.gst || "").replace("₹", "")}
-                                                            onChange={(e) => {
-                                                                const val = e.target.value;
-                                                                if ((li.gst || "").toString().startsWith("₹")) {
-                                                                    if (/^\d*\.?\d*$/.test(val)) setLineItem(idx, "gst", `₹${val}`);
-                                                                } else {
-                                                                    if (/^\d{0,2}%?$/.test(val)) setLineItem(idx, "gst", val);
-                                                                }
-                                                            }}
-                                                        />
-                                                        <Select value={(li.gst || "").toString().startsWith("₹") ? "amount" : "percent"} onValueChange={(v) => {
-                                                            if (v === "amount") {
-                                                                setLineItem(idx, "gst", `₹${(li.gst || "18").replace("₹", "").replace("%", "")}`);
-                                                            } else {
-                                                                setLineItem(idx, "gst", (li.gst || "18").replace("₹", "").replace("%", ""));
-                                                            }
-                                                        }}>
-                                                            <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectItem value="percent">%</SelectItem>
-                                                                <SelectItem value="amount">₹</SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                </div>
-                                                <div className="space-y-1.5">
-                                                    <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Freight</Label>
-                                                    <Input
-                                                        type="number"
-                                                        min="0"
-                                                        step="0.01"
-                                                        placeholder="0.00"
-                                                        value={li.freight || ""}
-                                                        onChange={(e) => setLineItem(idx, "freight", e.target.value)}
-                                                    />
-                                                </div>
-                                                <div className="sm:col-span-2 flex items-end justify-end space-x-6">
-                                                    <div className="text-right">
-                                                        <div className="text-[10px] uppercase text-muted-foreground font-semibold">Subtotal</div>
-                                                        <div className="font-medium text-sm">{inr((li.quantity || 0) * (li.unit_price || 0))}</div>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <div className="text-[10px] uppercase text-muted-foreground font-semibold">Row Total</div>
-                                                        <div className="font-bold text-base text-green-700">
-                                                            {inr(
-                                                                ((li.quantity || 0) * (li.unit_price || 0)) +
-                                                                Number(li.freight || 0) +
-                                                                ((li.gst || "").toString().startsWith("₹")
-                                                                    ? Number((li.gst || "").toString().replace("₹", "") || 0)
-                                                                    : ((li.quantity || 0) * (li.unit_price || 0) * Number(li.gst || 18) / 100))
-                                                            )}
-                                                        </div>
-                                                    </div>
+                                            <div className="flex items-center justify-end mt-4 pt-4 border-t border-slate-200">
+                                                <div className="text-right">
+                                                    <div className="text-[10px] uppercase text-muted-foreground font-semibold">Subtotal</div>
+                                                    <div className="font-bold text-sm text-slate-800">{inr((li.quantity || 0) * (li.unit_price || 0))}</div>
                                                 </div>
                                             </div>
                                         </div>
@@ -725,35 +670,18 @@ const WorkOrders = () => {
                                     <div className="flex items-center gap-1.5">
                                         <span className="text-sm font-medium text-slate-600">GST:</span>
                                         <div className="flex items-center rounded-md border border-slate-300 bg-white h-8 overflow-hidden shadow-sm">
-                                            <select
-                                                className="bg-slate-100 border-r border-slate-300 px-1.5 py-1 h-full text-xs font-bold text-slate-700 outline-none cursor-pointer"
-                                                value={isGlobalGstAmount ? "amount" : "percent"}
-                                                onChange={(e) => {
-                                                    if (e.target.value === "amount") {
-                                                        set("gst", `₹${globalGstAmount || 0}`);
-                                                    } else {
-                                                        set("gst", "18");
-                                                    }
-                                                }}
-                                            >
-                                                <option value="percent">%</option>
-                                                <option value="amount">₹</option>
-                                            </select>
                                             <input
                                                 type="text"
-                                                className="w-16 h-full px-2 text-right font-bold text-slate-900 outline-none"
-                                                value={isGlobalGstAmount ? (form.gst?.toString().replace("₹", "") || "") : (form.gst || "")}
+                                                className="w-12 h-full px-2 text-right font-bold text-slate-900 outline-none border-r border-slate-200"
+                                                value={form.gst?.toString().replace("%", "") || ""}
                                                 onChange={(e) => {
                                                     const val = e.target.value;
-                                                    if (isGlobalGstAmount) {
-                                                        if (/^\d*\.?\d*$/.test(val)) set("gst", `₹${val}`);
-                                                    } else {
-                                                        if (/^\d{0,2}%?$/.test(val)) set("gst", val);
-                                                    }
+                                                    if (/^\d{0,2}%?$/.test(val)) set("gst", val);
                                                 }}
                                             />
+                                            <span className="bg-slate-100 px-1.5 py-1 h-full text-xs font-bold text-slate-700 select-none flex items-center justify-center">%</span>
                                         </div>
-                                        {!isGlobalGstAmount && <span className="text-sm font-bold text-slate-900 ml-1">({inr(globalGstAmount)})</span>}
+                                        <span className="text-sm font-bold text-slate-900 ml-1">({inr(globalGstAmount)})</span>
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <span className="text-sm font-medium text-slate-600">Freight:</span>
@@ -1056,37 +984,17 @@ const WorkOrders = () => {
                                                     <Input value={li.unit_price ? Number(li.unit_price).toFixed(2) : "0.00"} disabled className="opacity-100" />
                                                 </div>
                                             </div>
-                                            <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 mt-4 pt-4 border-t border-slate-200">
-                                                <div className="space-y-1.5">
-                                                    <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">GST</Label>
-                                                    <Input value={li.gst || "0"} disabled className="opacity-100" />
-                                                </div>
-                                                <div className="space-y-1.5">
-                                                    <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Freight</Label>
-                                                    <Input value={li.freight ?? "0"} disabled className="opacity-100" />
-                                                </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mt-4 pt-4 border-t border-slate-200">
                                                 <div className="space-y-1.5">
                                                     <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Completed</Label>
                                                     <Input value={li.completed_quantity ?? "0"} disabled className="opacity-100" />
                                                 </div>
-                                                <div className="sm:col-span-2 flex items-end justify-end space-x-6">
-                                                    <div className="text-right">
-                                                        <div className="text-[10px] uppercase text-muted-foreground font-semibold">Subtotal</div>
-                                                        <div className="font-medium text-sm">{inr((li.quantity || 0) * (li.unit_price || 0))}</div>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <div className="text-[10px] uppercase text-muted-foreground font-semibold">Row Total</div>
-                                                        <div className="font-bold text-base text-green-700">
-                                                            {inr(
-                                                                ((li.quantity || 0) * (li.unit_price || 0)) +
-                                                                Number(li.freight || 0) +
-                                                                ((li.gst || "").toString().startsWith("₹")
-                                                                    ? Number((li.gst || "").toString().replace("₹", "") || 0)
-                                                                    : ((li.quantity || 0) * (li.unit_price || 0) * Number(li.gst || 0) / 100))
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </div>
+                                                <div className="sm:col-span-3 flex items-end justify-end mt-4 pt-4">
+                                                     <div className="text-right">
+                                                         <div className="text-[10px] uppercase text-muted-foreground font-semibold">Subtotal</div>
+                                                         <div className="font-bold text-sm text-slate-800">{inr((li.quantity || 0) * (li.unit_price || 0))}</div>
+                                                     </div>
+                                                 </div>
                                             </div>
                                         </div>
                                     ))}
