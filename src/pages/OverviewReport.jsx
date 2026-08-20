@@ -57,11 +57,13 @@ const OverviewReport = () => {
     // Dropdown filters state
     const [filterProduct, setFilterProduct] = useState("all");
     const [filterClient, setFilterClient] = useState("all");
+    const [filterProject, setFilterProject] = useState("all");
     const [filterPOStatus, setFilterPOStatus] = useState("All");
 
     // Applied filters state (only used for fetch)
     const [appliedProduct, setAppliedProduct] = useState("all");
     const [appliedClient, setAppliedClient] = useState("all");
+    const [appliedProject, setAppliedProject] = useState("all");
     const [appliedPOStatus, setAppliedPOStatus] = useState("All");
 
     const [expandedProducts, setExpandedProducts] = useState(new Set());
@@ -73,10 +75,11 @@ const OverviewReport = () => {
     const [clientsDialogOpen, setClientsDialogOpen] = useState(false);
     const [clientSearch, setClientSearch] = useState("");
     const { data, isLoading, refetch, isFetching } = useQuery({
-        queryKey: ["productPendingReport", appliedProduct, appliedClient, appliedPOStatus],
+        queryKey: ["productPendingReport", appliedProduct, appliedClient, appliedProject, appliedPOStatus],
         queryFn: () => fetchProductPendingReport({
             product: appliedProduct,
             client: appliedClient,
+            project: appliedProject,
             po_status: appliedPOStatus,
         }),
         refetchInterval: POLL_INTERVAL_MS,
@@ -96,6 +99,7 @@ const OverviewReport = () => {
     const handleApplyFilter = () => {
         setAppliedProduct(filterProduct);
         setAppliedClient(filterClient);
+        setAppliedProject(filterProject);
         setAppliedPOStatus(filterPOStatus);
         setExpandedProducts(new Set());
         setExpandedClients(new Set());
@@ -104,9 +108,11 @@ const OverviewReport = () => {
     const handleResetFilter = () => {
         setFilterProduct("all");
         setFilterClient("all");
+        setFilterProject("all");
         setFilterPOStatus("All");
         setAppliedProduct("all");
         setAppliedClient("all");
+        setAppliedProject("all");
         setAppliedPOStatus("All");
         setExpandedProducts(new Set());
         setExpandedClients(new Set());
@@ -119,6 +125,7 @@ const OverviewReport = () => {
             await exportProductPendingReport({
                 product: appliedProduct,
                 client: appliedClient,
+                project: appliedProject,
                 po_status: appliedPOStatus,
             });
             toast.success("Excel report exported successfully!", { id: tid });
@@ -250,6 +257,17 @@ const OverviewReport = () => {
         return acc;
     }, { ordered: 0, dispatched: 0, pending: 0, value: 0 });
 
+    const globalTotals = useMemo(() => {
+        const pList = products || [];
+        const ordered = pList.reduce((sum, p) => sum + (Number(p.total_ordered_qty) || 0), 0);
+        const dispatched = pList.reduce((sum, p) => sum + (Number(p.total_dispatched_qty) || 0), 0);
+        const pending = ordered - dispatched;
+        const value = pList.reduce((sum, p) => sum + (Number(p.pending_value) || 0), 0);
+        const gstAmount = value * 0.18;
+        const totalWithGst = value + gstAmount;
+        return { ordered, dispatched, pending, value, gstAmount, totalWithGst };
+    }, [products]);
+
     return (
         <div className="flex flex-col md:flex-row gap-6 items-start h-[calc(100vh-6rem)]">
             {/* Left Sidebar */}
@@ -279,6 +297,42 @@ const OverviewReport = () => {
                             </button>
                         );
                     })}
+                </div>
+
+                {/* Categories Summary Section */}
+                <div className="bg-slate-50 border-t border-border/80 p-4 shrink-0">
+                    <h4 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+                        <ClipboardList className="h-4 w-4 text-[#8B0000]" />
+                        {itemMasterList.length} Categories Summary
+                    </h4>
+                    <div className="space-y-2.5 text-xs">
+                        <div className="flex justify-between items-center">
+                            <span className="text-slate-500 font-medium">Total Quantity:</span>
+                            <span className="font-bold text-slate-800">{fmtQty(globalTotals.ordered)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-slate-500 font-medium">Delivered Quantity:</span>
+                            <span className="font-bold text-slate-800">{fmtQty(globalTotals.dispatched)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-slate-500 font-medium">Pending Quantity:</span>
+                            <span className="font-bold text-orange-600">{fmtQty(globalTotals.pending)}</span>
+                        </div>
+                        <div className="h-px bg-slate-200 my-2"></div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-slate-500 font-medium">Amount Without GST:</span>
+                            <span className="font-bold text-slate-800">{inr(globalTotals.value)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-slate-500 font-medium">GST Amount:</span>
+                            <span className="font-bold text-slate-800">{inr(globalTotals.gstAmount)}</span>
+                        </div>
+                        <div className="h-px bg-slate-200 my-2"></div>
+                        <div className="flex justify-between items-center text-sm">
+                            <span className="text-slate-700 font-bold">Total Amount With GST:</span>
+                            <span className="font-bold text-green-600">{inr(globalTotals.totalWithGst)}</span>
+                        </div>
+                    </div>
                 </div>
             </Card>
 
@@ -322,26 +376,11 @@ const OverviewReport = () => {
 
             {/* Filters */}
             <Card className="p-5 shadow-card border-border/60 bg-white">
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 items-end">
-                    <div className="space-y-2">
-                        <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Product / Diameter</label>
-                        <Select value={filterProduct} onValueChange={setFilterProduct}>
-                            <SelectTrigger className="w-full bg-white border-slate-200 text-slate-700 h-10">
-                                <SelectValue placeholder="All" />
-                            </SelectTrigger>
-                            <SelectContent className="max-h-[300px] bg-white">
-                                <SelectItem value="all">All</SelectItem>
-                                {data?.product_labels?.filter(lbl => lbl !== "All").map((lbl) => (
-                                    <SelectItem key={lbl} value={lbl.toLowerCase()}>
-                                        {lbl}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
+                <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 items-end ${filterClient !== 'all' ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}>
+
                     <div className="space-y-2">
                         <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Client Name</label>
-                        <Select value={filterClient} onValueChange={setFilterClient}>
+                        <Select value={filterClient} onValueChange={(val) => { setFilterClient(val); setFilterProject("all"); }}>
                             <SelectTrigger className="w-full bg-white border-slate-200 text-slate-700 h-10">
                                 <SelectValue placeholder="All" />
                             </SelectTrigger>
@@ -355,6 +394,30 @@ const OverviewReport = () => {
                             </SelectContent>
                         </Select>
                     </div>
+                    {filterClient !== "all" && (
+                        <div className="space-y-2 animate-in fade-in zoom-in-95 duration-200">
+                            <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Project</label>
+                            <Select value={filterProject} onValueChange={setFilterProject}>
+                                <SelectTrigger className="w-full bg-white border-slate-200 text-slate-700 h-10">
+                                    <SelectValue placeholder="All" />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-[300px] bg-white">
+                                    <SelectItem value="all">All</SelectItem>
+                                    {(data?.client_projects?.[filterClient] || []).length > 0 ? (
+                                        data.client_projects[filterClient].map((proj) => (
+                                            <SelectItem key={proj} value={proj}>
+                                                {proj}
+                                            </SelectItem>
+                                        ))
+                                    ) : (
+                                        <div className="px-2 py-4 text-sm text-muted-foreground text-center">
+                                            No projects available for this client
+                                        </div>
+                                    )}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
                     <div className="space-y-2">
                         <label className="text-xs font-bold uppercase tracking-wider text-slate-500">PO Status</label>
                         <Select value={filterPOStatus} onValueChange={setFilterPOStatus}>
@@ -368,7 +431,7 @@ const OverviewReport = () => {
                             </SelectContent>
                         </Select>
                     </div>
-                    <div className="flex gap-2 sm:col-span-2 md:col-span-2 h-10 self-end">
+                    <div className="flex gap-2 sm:col-span-2 lg:col-span-2 h-10 self-end">
                         <Button onClick={handleApplyFilter} className="flex-1 bg-[#0F172A] text-white hover:bg-slate-800 h-10">
                             Apply Filter
                         </Button>
@@ -503,6 +566,7 @@ const OverviewReport = () => {
                                                                                                     <thead className="bg-slate-100/70 text-slate-500 font-semibold uppercase tracking-wider text-[9px] border-b border-slate-200">
                                                                                                         <tr>
                                                                                                             <th className="py-2 px-2 text-left">PO No.</th>
+                                                                                                            <th className="py-2 px-2 text-left">Project</th>
                                                                                                             <th className="py-2 px-2 text-left">PO Date</th>
                                                                                                             <th className="py-2 px-2 text-right">Total Ordered Qty</th>
                                                                                                             <th className="py-2 px-2 text-right">Dispatched Qty</th>
@@ -520,6 +584,11 @@ const OverviewReport = () => {
                                                                                                                 >
                                                                                                                     {po.po_number}
                                                                                                                 </td>
+                                                                                                                <td className="py-2 px-2 text-slate-500 font-medium">
+                                                                                                                    <div className="min-w-[150px] max-w-[250px] whitespace-normal break-words leading-relaxed" title={po.project_name || "—"}>
+                                                                                                                        {po.project_name || "—"}
+                                                                                                                    </div>
+                                                                                                                </td>
                                                                                                                 <td className="py-2 px-2 text-slate-400 font-medium">{po.po_date || "—"}</td>
                                                                                                                 <td className="py-2 px-2 text-right text-slate-600">{fmtQty(po.ordered_qty)}</td>
                                                                                                                 <td className="py-2 px-2 text-right text-slate-600">{fmtQty(po.dispatched_qty)}</td>
@@ -529,7 +598,7 @@ const OverviewReport = () => {
                                                                                                             </tr>
                                                                                                         ))}
                                                                                                         <tr className="bg-slate-50 font-bold border-t border-slate-200 text-slate-700">
-                                                                                                            <td className="py-2 px-2 text-slate-800" colSpan={2}>Client Total</td>
+                                                                                                            <td className="py-2 px-2 text-slate-800" colSpan={3}>Client Total</td>
                                                                                                             <td className="py-2 px-2 text-right">{fmtQty(c.total_ordered_qty)}</td>
                                                                                                             <td className="py-2 px-2 text-right">{fmtQty(c.total_dispatched_qty)}</td>
                                                                                                             <td className="py-2 px-2 text-right text-orange-600">{fmtQty(c.pending_qty)}</td>
