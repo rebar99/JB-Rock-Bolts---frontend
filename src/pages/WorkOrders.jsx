@@ -83,7 +83,7 @@ const WOColumnAccessors = {
 
 const WorkOrders = () => {
     const qc = useQueryClient();
-    const { wo_clients: clients, projects, uom_options, wo_statuses, wo_priorities } = useConstants();
+    const { wo_clients, projects, uom_options, wo_statuses, wo_priorities } = useConstants();
     const { user } = useAuth();
     const isAdmin = !!user?.is_admin;
 
@@ -321,8 +321,8 @@ const WorkOrders = () => {
 
     const handleCreateClient = async () => {
         if (!newClientName || !newClientLocation) return toast.error("Name and Location are required");
+        const fullName = `${newClientSalutation} ${newClientName}`.trim();
         try {
-            const fullName = `${newClientSalutation} ${newClientName}`.trim();
             await clientMutation.mutateAsync({
                 name: fullName,
                 location: newClientLocation,
@@ -333,8 +333,30 @@ const WorkOrders = () => {
             setNewClientSalutation("M/s.");
             setNewClientLocation("");
             toast.success("Client added successfully");
-        } catch (e) { toast.error(e.message); }
+        } catch (e) {
+            const msg = e.response?.data?.detail || e.message;
+            if (msg.toLowerCase().includes("already exists")) {
+                const match = msg.match(/\((.*?)\)/);
+                const existingName = match ? match[1] : fullName;
+                set("clientDropdown", existingName);
+                setAddClientOpen(false);
+                setNewClientName("");
+                setNewClientSalutation("M/s.");
+                setNewClientLocation("");
+                toast.success(`Using existing client: ${existingName}`);
+            } else {
+                toast.error(msg);
+            }
+        }
     };
+
+    const dropdownClients = useMemo(() => {
+        const list = [...(wo_clients || [])];
+        if (form.clientDropdown && !list.includes(form.clientDropdown)) {
+            list.push(form.clientDropdown);
+        }
+        return list.sort((a, b) => a.localeCompare(b));
+    }, [wo_clients, form.clientDropdown]);
 
     const handleCreateProject = async () => {
         if (!effectiveClient) return toast.error("Select a client first");
@@ -490,7 +512,7 @@ const WorkOrders = () => {
                                     <Select value={form.clientDropdown} onValueChange={(v) => { set("clientDropdown", v); set("clientName", ""); }}>
                                         <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
                                         <SelectContent>
-                                            {clients.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                                            {dropdownClients.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                     <Dialog open={addClientOpen} onOpenChange={setAddClientOpen}>

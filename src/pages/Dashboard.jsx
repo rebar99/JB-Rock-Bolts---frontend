@@ -8,7 +8,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { inr, fmtDate } from "@/lib/format";
 import { fetchDashboardStats, fetchDashboardCharts, fetchRecentSales, fetchDashboardClients, fetchMonthlyProductSales, fetchPurchaseOrders } from "@/lib/api";
 import {
-    Bar, BarChart, CartesianGrid, Cell, LabelList,
+    Line, LineChart, CartesianGrid, Cell, LabelList,
     Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { ArrowUpRight, IndianRupee, Package, Users, Search, FileText, CheckCircle2, Clock } from "lucide-react";
@@ -53,13 +53,11 @@ const MONTHLY_PRODUCT_COLORS = [
 ];
 const colorForProduct = (index) => MONTHLY_PRODUCT_COLORS[index % MONTHLY_PRODUCT_COLORS.length];
 
-// Recharts' default stacked-bar tooltip shows every product in that month's
-// stack at once — this renders just the one segment currently under the
-// mouse (tracked via each <Bar>'s onMouseEnter/onMouseLeave below).
-const HoveredSegmentTooltip = ({ active, payload, label, hoveredProduct }) => {
+// Simple tooltip for the Total Sales line chart
+const TotalSalesTooltip = ({ active, payload, label }) => {
     if (!active || !payload || payload.length === 0) return null;
-    const entry = payload.find((p) => p.dataKey === hoveredProduct);
-    if (!entry || !entry.value) return null;
+    const entry = payload[0];
+    if (entry.value == null) return null;
     return (
         <div className="rounded-lg border border-border bg-card px-3 py-2 shadow-md">
             <div className="text-xs text-muted-foreground mb-1">{label}</div>
@@ -68,28 +66,6 @@ const HoveredSegmentTooltip = ({ active, payload, label, hoveredProduct }) => {
                 {entry.name}: {inr(entry.value)}
             </div>
         </div>
-    );
-};
-
-// Prints each segment's own ₹ value directly on the bar (not just on hover),
-// so a small segment sitting high up in the stack never reads as "worth as
-// much as its position" — only segments tall enough to actually hold the
-// text get a label; thin slivers stay hover-only via the tooltip above.
-const SegmentValueLabel = (props) => {
-    const { x, y, width, height, value } = props;
-    if (!value || height < 14) return null;
-    return (
-        <text
-            x={x + width / 2}
-            y={y + height / 2}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fill="#fff"
-            fontSize={10}
-            fontWeight={600}
-        >
-            {`₹${(value / 100000).toFixed(1)}L`}
-        </text>
     );
 };
 
@@ -132,19 +108,22 @@ const Dashboard = () => {
     const { data: monthlySales } = useQuery({ queryKey: ["monthly-product-sales"], queryFn: () => fetchMonthlyProductSales() });
     const monthlyProducts = monthlySales?.products ?? [];
     const monthlyData = monthlySales?.data ?? [];
-    const [hoveredProduct, setHoveredProduct] = useState(null);
+    
+    const transformedMonthlyData = useMemo(() => {
+        return monthlyData.map(row => {
+            const total = monthlyProducts.reduce((sum, p) => sum + (row[p] || 0), 0);
+            return { month: row.month, "Total Sales": total };
+        });
+    }, [monthlyData, monthlyProducts]);
 
     // Y-axis step is derived from the actual sales data, not a fixed number —
     // picks a "nice" round step (1/2/5 x a power of 10) that lands around 8
     // ticks for whatever the tallest stacked bar currently is, so the axis
     // stays readable whether monthly revenue is in lakhs or crores.
     const monthlyMax = useMemo(() => {
-        const highest = monthlyData.reduce((max, row) => {
-            const total = monthlyProducts.reduce((sum, p) => sum + (row[p] || 0), 0);
-            return Math.max(max, total);
-        }, 0);
+        const highest = transformedMonthlyData.reduce((max, row) => Math.max(max, row["Total Sales"]), 0);
         return highest || 100000;
-    }, [monthlyData, monthlyProducts]);
+    }, [transformedMonthlyData]);
     const monthlyStep = useMemo(() => {
         const roughStep = monthlyMax / 8;
         const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
@@ -237,12 +216,12 @@ const Dashboard = () => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <Card className="lg:col-span-2 p-5 shadow-card">
                     <div className="flex items-center justify-between mb-4">
-                        <h3 className="font-semibold text-foreground">Monthly Sales (All Products)</h3>
+                        <h3 className="font-semibold text-foreground">Monthly Sales (Total)</h3>
                         <span className="text-xs text-muted-foreground">Revenue (₹) · {monthlySales?.year ?? new Date().getFullYear()}</span>
                     </div>
                     <div className="h-72">
                         <ResponsiveContainer>
-                            <BarChart data={monthlyData} margin={{ left: -10 }}>
+                            <LineChart data={transformedMonthlyData} margin={{ left: -10 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                                 <XAxis dataKey="month" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
                                 <YAxis
@@ -252,48 +231,26 @@ const Dashboard = () => {
                                     tickFormatter={(v) => `₹${(v / 100000).toFixed(0)}L`}
                                 />
                                 <Tooltip
-                                    cursor={{ fill: "hsl(var(--muted))", opacity: 0.3 }}
-                                    content={<HoveredSegmentTooltip hoveredProduct={hoveredProduct} />}
+                                    cursor={{ stroke: "hsl(var(--muted))", strokeWidth: 1, strokeDasharray: "3 3" }}
+                                    content={<TotalSalesTooltip />}
                                 />
-                                {/* Rendered smallest-first so the smallest revenue sits at the BASE
-                                    of the stack (near 0, where its size actually belongs) and the
-                                    largest ends up at the top — colors/legend order stay tied to
-                                    revenue rank (i), only the stacking position is reversed. */}
-                                {monthlyProducts.map((p, i) => ({ p, i })).slice().reverse().map(({ p, i }) => (
-                                    <Bar
-                                        key={p}
-                                        dataKey={p}
-                                        name={p}
-                                        stackId="products"
-                                        fill={colorForProduct(i)}
-                                        fillOpacity={hoveredProduct && hoveredProduct !== p ? 0.25 : 1}
-                                        radius={i === 0 ? [4, 4, 0, 0] : 0}
-                                        onMouseEnter={() => setHoveredProduct(p)}
-                                        onMouseLeave={() => setHoveredProduct(null)}
-                                    >
-                                        <LabelList dataKey={p} content={SegmentValueLabel} />
-                                    </Bar>
-                                ))}
-                            </BarChart>
+                                <Line
+                                    type="monotone"
+                                    dataKey="Total Sales"
+                                    stroke="hsl(var(--primary))"
+                                    strokeWidth={3}
+                                    dot={{ r: 4, fill: "hsl(var(--primary))", strokeWidth: 0 }}
+                                    activeDot={{ r: 6, strokeWidth: 0 }}
+                                />
+                            </LineChart>
                         </ResponsiveContainer>
                     </div>
-                    {/* Custom compact legend, same reasoning as the donut's below —
-                        recharts' built-in Legend doesn't truncate long product
-                        names, so it wraps onto its own row per product/color. */}
                     <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
-                        {monthlyProducts.map((p, i) => (
-                            <div
-                                key={p}
-                                className={`flex items-center gap-1.5 text-xs max-w-[220px] cursor-default rounded px-1 -mx-1 transition-colors ${hoveredProduct === p ? "bg-muted" : ""}`}
-                                title={p}
-                                onMouseEnter={() => setHoveredProduct(p)}
-                                onMouseLeave={() => setHoveredProduct(null)}
-                            >
-                                <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: colorForProduct(i) }} />
-                                <span className={`truncate ${hoveredProduct === p ? "text-foreground font-medium" : "text-muted-foreground"}`}>{p}</span>
-                            </div>
-                        ))}
-                        {monthlyProducts.length === 0 && (
+                        <div className="flex items-center gap-1.5 text-xs">
+                            <span className="h-2.5 w-2.5 rounded-full shrink-0 bg-primary" />
+                            <span className="text-foreground font-medium">Total Sales</span>
+                        </div>
+                        {transformedMonthlyData.length === 0 && (
                             <span className="text-xs text-muted-foreground">No sales invoices yet.</span>
                         )}
                     </div>
