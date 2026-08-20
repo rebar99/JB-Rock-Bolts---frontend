@@ -287,6 +287,15 @@ const SalesInvoice = () => {
         return gst_amount;
     };
 
+    useEffect(() => {
+        if (selectedPO && orders) {
+            const po = orders.find((o) => o.po_number === selectedPO);
+            if (po) {
+                setPoData(po);
+            }
+        }
+    }, [orders, selectedPO]);
+
     const handlePOChange = (poNumber) => {
         setSelectedPO(poNumber);
         const po = orders.find((o) => o.po_number === poNumber);

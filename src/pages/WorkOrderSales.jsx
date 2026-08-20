@@ -275,6 +275,15 @@ const WorkOrderSales = () => {
         return gst_amount;
     };
 
+    useEffect(() => {
+        if (selectedWO && orders) {
+            const wo = orders.find((o) => o.wo_number === selectedWO);
+            if (wo) {
+                setWoData(wo);
+            }
+        }
+    }, [orders, selectedWO]);
+
     const handleWOChange = (woNumber) => {
         setSelectedWO(woNumber);
         const wo = orders.find((o) => o.wo_number === woNumber);
