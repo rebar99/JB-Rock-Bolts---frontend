@@ -1598,18 +1598,6 @@ const SalesInvoice = () => {
                                         </div>
                                         <div className="bg-primary/5 p-3 flex flex-wrap justify-between items-center text-[11px] border-t border-border">
                                             <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-                                                <span className="text-muted-foreground">Subtotal: <b className="text-foreground">{inr(editSubtotal)}</b></span>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-muted-foreground whitespace-nowrap">GST (%):</span>
-                                                    <Input
-                                                        type="number"
-                                                        className="h-7 w-14 text-[11px] py-0 px-2 text-center bg-background"
-                                                        placeholder="Rate"
-                                                        value={editManualTotalGstRate}
-                                                        onChange={(e) => setEditManualTotalGstRate(e.target.value)}
-                                                    />
-                                                    <span className="text-muted-foreground">({inr(editGstAmount)})</span>
-                                                </div>
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-muted-foreground whitespace-nowrap">Freight:</span>
                                                     <Input
@@ -1619,9 +1607,14 @@ const SalesInvoice = () => {
                                                         onChange={(e) => setEditManualFreight(e.target.value)}
                                                     />
                                                 </div>
+                                                <span className="text-muted-foreground">Without GST Amount: <b className="text-foreground">{inr(editSubtotal)}</b></span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-muted-foreground whitespace-nowrap">GST:</span>
+                                                    <span className="text-foreground font-bold">{inr(editGstAmount)}</span>
+                                                </div>
                                             </div>
                                             <div className="text-sm font-bold text-primary">
-                                                Grand Total: {inr(editGrandTotal)}
+                                                Total Amount (with GST): {inr(editGrandTotal)}
                                             </div>
                                         </div>
                                     </div>

@@ -192,7 +192,7 @@ const OverviewReport = () => {
 
     const filteredProducts = useMemo(() => {
         if (!selectedCategory) return [];
-        return products.filter(p => p.product_label === selectedCategory || p.product_label.startsWith(`${selectedCategory} `));
+        return products.filter(p => p.category === selectedCategory);
     }, [products, selectedCategory]);
 
     const activeSummary = useMemo(() => {
