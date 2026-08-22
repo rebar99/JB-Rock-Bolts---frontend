@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { fetchProductPendingReport, exportProductPendingReport, openLogStream, fetchItemMasterList } from "@/lib/api";
+import { fetchProductPendingReport, exportProductPendingReport, openLogStream, fetchItemMasterList, fetchPendingPOs } from "@/lib/api";
 import { round2, inr } from "@/lib/format";
 import { toast } from "sonner";
 import {
@@ -51,6 +51,11 @@ const OverviewReport = () => {
     const { data: itemMasterList = [] } = useQuery({
         queryKey: ["item-master", "PO"],
         queryFn: () => fetchItemMasterList("PO"),
+    });
+
+    const { data: pendingPOsData } = useQuery({
+        queryKey: ["pendingPOsReport"],
+        queryFn: fetchPendingPOs
     });
 
     
@@ -262,11 +267,20 @@ const OverviewReport = () => {
         const ordered = pList.reduce((sum, p) => sum + (Number(p.total_ordered_qty) || 0), 0);
         const dispatched = pList.reduce((sum, p) => sum + (Number(p.total_dispatched_qty) || 0), 0);
         const pending = ordered - dispatched;
-        const value = pList.reduce((sum, p) => sum + (Number(p.pending_value) || 0), 0);
-        const gstAmount = value * 0.18;
-        const totalWithGst = value + gstAmount;
+        
+        let value = pList.reduce((sum, p) => sum + (Number(p.pending_value) || 0), 0);
+        let totalWithGst = value * 1.18;
+        let gstAmount = value * 0.18;
+
+        if (pendingPOsData) {
+            // Using true pending payment which includes exact GST rates & freight
+            totalWithGst = pendingPOsData.total_pending_value;
+            // Back-calculate a proxy GST amount to make the sidebar math look sound
+            gstAmount = totalWithGst - value;
+        }
+        
         return { ordered, dispatched, pending, value, gstAmount, totalWithGst };
-    }, [products]);
+    }, [products, pendingPOsData]);
 
     return (
         <div className="flex flex-col md:flex-row gap-6 items-start h-[calc(100vh-6rem)]">
@@ -319,6 +333,7 @@ const OverviewReport = () => {
                             <span className="font-bold text-orange-600">{fmtQty(globalTotals.pending)}</span>
                         </div>
                         <div className="h-px bg-slate-200 my-2"></div>
+                        <div className="text-sm font-extrabold text-slate-900 mt-3 mb-2">Pending Amount Status :</div>
                         <div className="flex justify-between items-center">
                             <span className="text-slate-500 font-medium">Amount Without GST:</span>
                             <span className="font-bold text-slate-800">{inr(globalTotals.value)}</span>
