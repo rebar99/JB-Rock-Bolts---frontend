@@ -90,8 +90,13 @@ const ProductDonutTooltip = ({ active, payload }) => {
 
 const Dashboard = () => {
     const navigate = useNavigate();
-    const { data: stats } = useQuery({ queryKey: ["dashboard-stats"], queryFn: fetchDashboardStats });
-    const { data: charts } = useQuery({ queryKey: ["dashboard-charts"], queryFn: fetchDashboardCharts });
+    const [selectedMonth, setSelectedMonth] = useState("all");
+    const [includeGst, setIncludeGst] = useState(true);
+    const { data: stats } = useQuery({ queryKey: ["dashboard-stats", includeGst], queryFn: () => fetchDashboardStats(includeGst) });
+    const { data: charts } = useQuery({ 
+        queryKey: ["dashboard-charts", selectedMonth, includeGst], 
+        queryFn: () => fetchDashboardCharts(undefined, selectedMonth !== "all" ? Number(selectedMonth) : undefined, includeGst) 
+    });
     // Shares the same queryKey/queryFn as the Purchase Orders page's own
     // full-list fetch, so react-query serves this from cache instead of a
     // second network round-trip whenever both are visited in a session.
@@ -101,11 +106,14 @@ const Dashboard = () => {
     // that report's "Pending POs" tab lists.
     const completedPOCount = useMemo(() => purchaseOrders.filter((o) => o.delivery_status === "Delivered").length, [purchaseOrders]);
     const pendingPOCount = purchaseOrders.length - completedPOCount;
-    const { data: recent = [] } = useQuery({ queryKey: ["recent-sales"], queryFn: () => fetchRecentSales(100) });
+    const { data: recent = [] } = useQuery({ queryKey: ["recent-sales", includeGst], queryFn: () => fetchRecentSales(100, includeGst) });
     // Grouped-bar Monthly Sales data — real Sale Invoice records only (no
     // dummy data), all 12 months always present, revenue broken down per
     // Product Type (derived server-side from each SaleItem's item name).
-    const { data: monthlySales } = useQuery({ queryKey: ["monthly-product-sales"], queryFn: () => fetchMonthlyProductSales() });
+    const { data: monthlySales } = useQuery({ 
+        queryKey: ["monthly-product-sales", selectedMonth, includeGst], 
+        queryFn: () => fetchMonthlyProductSales(undefined, selectedMonth !== "all" ? Number(selectedMonth) : undefined, includeGst) 
+    });
     const monthlyProducts = monthlySales?.products ?? [];
     const monthlyData = monthlySales?.data ?? [];
     
@@ -115,6 +123,11 @@ const Dashboard = () => {
             return { month: row.month, "Total Sales": total };
         });
     }, [monthlyData, monthlyProducts]);
+
+    const selectedMonthTotal = useMemo(() => {
+        if (selectedMonth === "all") return null;
+        return transformedMonthlyData.reduce((sum, row) => sum + (row["Total Sales"] || 0), 0);
+    }, [transformedMonthlyData, selectedMonth]);
 
     // Y-axis step is derived from the actual sales data, not a fixed number —
     // picks a "nice" round step (1/2/5 x a power of 10) that lands around 8
@@ -165,9 +178,25 @@ const Dashboard = () => {
 
     return (
         <div className="space-y-6">
-            <div>
-                <h2 className="text-2xl font-bold tracking-tight text-foreground">Dashboard Overview</h2>
-                <p className="text-sm text-muted-foreground mt-1">Track sales performance, orders and client insights.</p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h2 className="text-2xl font-bold tracking-tight text-foreground">Dashboard Overview</h2>
+                    <p className="text-sm text-muted-foreground mt-1">Track sales performance, orders and client insights.</p>
+                </div>
+                <div className="flex items-center bg-muted/50 p-1 rounded-lg">
+                    <button 
+                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${includeGst ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                        onClick={() => setIncludeGst(true)}
+                    >
+                        With GST
+                    </button>
+                    <button 
+                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${!includeGst ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                        onClick={() => setIncludeGst(false)}
+                    >
+                        Without GST
+                    </button>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -215,9 +244,28 @@ const Dashboard = () => {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <Card className="lg:col-span-2 p-5 shadow-card">
-                    <div className="flex items-center justify-between mb-4">
-                        <h3 className="font-semibold text-foreground">Monthly Sales (Total)</h3>
-                        <span className="text-xs text-muted-foreground">Revenue (₹) · {monthlySales?.year ?? new Date().getFullYear()}</span>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
+                        <div className="flex items-center gap-3">
+                            <h3 className="font-semibold text-foreground">Monthly Sales (Total)</h3>
+                            <select 
+                                className="h-8 rounded-md border border-input bg-background px-2 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                value={selectedMonth}
+                                onChange={(e) => setSelectedMonth(e.target.value)}
+                            >
+                                <option value="all">All Months</option>
+                                {["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((m, i) => (
+                                    <option key={m} value={i + 1}>{m}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <span className="text-xs text-muted-foreground flex items-center gap-2">
+                            {selectedMonth !== "all" && (
+                                <span className="font-semibold text-foreground bg-primary/10 text-primary px-2 py-1 rounded-md">
+                                    Total: {inr(selectedMonthTotal)}
+                                </span>
+                            )}
+                            <span>Revenue (₹) · {monthlySales?.year ?? new Date().getFullYear()}</span>
+                        </span>
                     </div>
                     <div className="h-72">
                         <ResponsiveContainer>

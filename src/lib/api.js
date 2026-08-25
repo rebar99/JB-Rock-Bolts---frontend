@@ -57,11 +57,21 @@ const del = (path, params) => {
 export const fetchConstants = () => get("/api/constants");
 
 // ── Dashboard ────────────────────────────────────────────────────────────────
-export const fetchDashboardStats = () => get("/api/dashboard/stats");
-export const fetchDashboardCharts = () => get("/api/dashboard/charts");
-export const fetchRecentSales = (limit = 6) => get("/api/dashboard/recent-sales", { limit });
+export const fetchDashboardStats = (includeGst = true) => get("/api/dashboard/stats", { gst: includeGst ? 1 : 0 });
+export const fetchDashboardCharts = (year, month, includeGst = true) => {
+    const params = { gst: includeGst ? 1 : 0 };
+    if (year) params.year = year;
+    if (month) params.month = month;
+    return get("/api/dashboard/charts", params);
+};
+export const fetchRecentSales = (limit = 6, includeGst = true) => get("/api/dashboard/recent-sales", { limit, gst: includeGst ? 1 : 0 });
 export const fetchDashboardClients = () => get("/api/dashboard/clients");
-export const fetchMonthlyProductSales = (year) => get("/api/dashboard/monthly-product-sales", year ? { year } : undefined);
+export const fetchMonthlyProductSales = (year, month, includeGst = true) => {
+    const params = { gst: includeGst ? 1 : 0 };
+    if (year) params.year = year;
+    if (month) params.month = month;
+    return get("/api/dashboard/monthly-product-sales", params);
+};
 
 // ── Purchase Orders ───────────────────────────────────────────────────────────
 export const fetchPurchaseOrders = (params) => get("/api/purchase-orders", { limit: 10000, ...params });
