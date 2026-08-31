@@ -46,7 +46,7 @@ const OverviewReport = () => {
     const qc = useQueryClient();
 
     // Left sidebar selection
-    const [selectedCategory, setSelectedCategory] = useState(null);
+    const [selectedCategory, setSelectedCategory] = useState(() => sessionStorage.getItem('or_selectedCategory') || null);
 
     const { data: itemMasterList = [] } = useQuery({
         queryKey: ["item-master", "PO"],
@@ -58,21 +58,44 @@ const OverviewReport = () => {
         queryFn: fetchPendingPOs
     });
 
-    
     // Dropdown filters state
-    const [filterProduct, setFilterProduct] = useState("all");
-    const [filterClient, setFilterClient] = useState("all");
-    const [filterProject, setFilterProject] = useState("all");
-    const [filterPOStatus, setFilterPOStatus] = useState("All");
+    const [filterProduct, setFilterProduct] = useState(() => sessionStorage.getItem('or_filterProduct') || "all");
+    const [filterClient, setFilterClient] = useState(() => sessionStorage.getItem('or_filterClient') || "all");
+    const [filterProject, setFilterProject] = useState(() => sessionStorage.getItem('or_filterProject') || "all");
+    const [filterPOStatus, setFilterPOStatus] = useState(() => sessionStorage.getItem('or_filterPOStatus') || "All");
 
     // Applied filters state (only used for fetch)
-    const [appliedProduct, setAppliedProduct] = useState("all");
-    const [appliedClient, setAppliedClient] = useState("all");
-    const [appliedProject, setAppliedProject] = useState("all");
-    const [appliedPOStatus, setAppliedPOStatus] = useState("All");
+    const [appliedProduct, setAppliedProduct] = useState(() => sessionStorage.getItem('or_appliedProduct') || "all");
+    const [appliedClient, setAppliedClient] = useState(() => sessionStorage.getItem('or_appliedClient') || "all");
+    const [appliedProject, setAppliedProject] = useState(() => sessionStorage.getItem('or_appliedProject') || "all");
+    const [appliedPOStatus, setAppliedPOStatus] = useState(() => sessionStorage.getItem('or_appliedPOStatus') || "All");
 
-    const [expandedProducts, setExpandedProducts] = useState(new Set());
-    const [expandedClients, setExpandedClients] = useState(new Set());
+    const [expandedProducts, setExpandedProducts] = useState(() => {
+        try { return new Set(JSON.parse(sessionStorage.getItem('or_expandedProducts')) || []); }
+        catch { return new Set(); }
+    });
+    const [expandedClients, setExpandedClients] = useState(() => {
+        try { return new Set(JSON.parse(sessionStorage.getItem('or_expandedClients')) || []); }
+        catch { return new Set(); }
+    });
+
+    useEffect(() => {
+        sessionStorage.setItem('or_selectedCategory', selectedCategory || "");
+        sessionStorage.setItem('or_filterProduct', filterProduct);
+        sessionStorage.setItem('or_filterClient', filterClient);
+        sessionStorage.setItem('or_filterProject', filterProject);
+        sessionStorage.setItem('or_filterPOStatus', filterPOStatus);
+        sessionStorage.setItem('or_appliedProduct', appliedProduct);
+        sessionStorage.setItem('or_appliedClient', appliedClient);
+        sessionStorage.setItem('or_appliedProject', appliedProject);
+        sessionStorage.setItem('or_appliedPOStatus', appliedPOStatus);
+        sessionStorage.setItem('or_expandedProducts', JSON.stringify(Array.from(expandedProducts)));
+        sessionStorage.setItem('or_expandedClients', JSON.stringify(Array.from(expandedClients)));
+    }, [
+        selectedCategory, filterProduct, filterClient, filterProject, filterPOStatus,
+        appliedProduct, appliedClient, appliedProject, appliedPOStatus,
+        expandedProducts, expandedClients
+    ]);
     const [exporting, setExporting] = useState(false);
     const [productsDialogOpen, setProductsDialogOpen] = useState(false);
     const [productSearch, setProductSearch] = useState("");
@@ -595,7 +618,7 @@ const OverviewReport = () => {
                                                                                                             <tr key={poIdx} className="border-b border-slate-100 hover:bg-slate-50/30">
                                                                                                                 <td
                                                                                                                     className="py-2 px-2 font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
-                                                                                                                    onClick={() => navigate(`/purchase-orders?search=${encodeURIComponent(po.po_number)}`)}
+                                                                                                                    onClick={() => navigate(`/purchase-orders?search=${encodeURIComponent(po.po_number)}`, { state: { fromOverview: true } })}
                                                                                                                 >
                                                                                                                     {po.po_number}
                                                                                                                 </td>

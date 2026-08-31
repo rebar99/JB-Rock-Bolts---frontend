@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
@@ -101,11 +101,17 @@ const Reports = () => {
     const qc = useQueryClient();
     const { products } = useConstants();
     const [searchParams] = useSearchParams();
-    const [reportSection, setReportSection] = useState("po");
+    const [reportSection, setReportSection] = useState(() => sessionStorage.getItem('reports_section') || "po");
     const initialTab = searchParams.get("tab");
-    const [tab, setTab] = useState(
-        ["completed", "sales", "pending"].includes(initialTab) ? initialTab : "sales"
-    );
+    const [tab, setTab] = useState(() => {
+        if (["completed", "sales", "pending"].includes(initialTab)) return initialTab;
+        return sessionStorage.getItem('reports_tab') || "sales";
+    });
+
+    useEffect(() => {
+        sessionStorage.setItem('reports_section', reportSection);
+        sessionStorage.setItem('reports_tab', tab);
+    }, [reportSection, tab]);
     const [from, setFrom] = useState("");
     const [to, setTo] = useState("");
     const [product, setProduct] = useState("all");
