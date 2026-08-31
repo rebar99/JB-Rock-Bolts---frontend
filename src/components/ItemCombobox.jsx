@@ -36,7 +36,7 @@ export const compareSizes = (aSizeStr, bSizeStr) => {
     return (aSizeStr || "").localeCompare(bSizeStr || "", undefined, { numeric: true, sensitivity: 'base' });
 };
 
-export const ItemCombobox = ({ value, onChange, items = [], placeholder = "Select item..." }) => {
+export const ItemCombobox = ({ value, onChange, items = [], placeholder = "Select item...", disabled }) => {
     const [open, setOpen] = useState(false);
     const [activeItem, setActiveItem] = useState(null); // item object while picking its size
 
@@ -60,14 +60,15 @@ export const ItemCombobox = ({ value, onChange, items = [], placeholder = "Selec
     };
 
     return (
-        <Popover open={open} onOpenChange={setOpen}>
+        <Popover open={open && !disabled} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
                 <Button
                     type="button"
                     variant="outline"
                     role="combobox"
                     aria-expanded={open}
-                    className="w-full justify-between font-normal"
+                    disabled={disabled}
+                    className={cn("w-full justify-between font-normal", disabled && "bg-muted text-muted-foreground opacity-100 cursor-not-allowed")}
                 >
                     <span className={cn("truncate text-left", !value && "text-muted-foreground")}>
                         {value || placeholder}
