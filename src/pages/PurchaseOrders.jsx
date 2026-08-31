@@ -24,7 +24,7 @@ import {
     exportPurchaseOrders, importPurchaseOrders, shortClosePurchaseOrder, fetchPOFulfillmentSummary,
     fetchClients, mergeClients, deleteClient, deleteProject, mergeProjects
 } from "@/lib/api";
-import { Pencil, Plus, Search, Trash2, Eye, FileText, Package, Truck, Clock, Printer, X, UploadCloud, Download, Upload, Settings } from "lucide-react";
+import { ArrowLeft, Pencil, Plus, Search, Trash2, Eye, FileText, Package, Truck, Clock, Printer, X, UploadCloud, Download, Upload, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { useSortableRows } from "@/hooks/useSortableRows";
 import { useResizableColumns } from "@/hooks/useResizableColumns";
@@ -671,7 +671,7 @@ const PurchaseOrders = () => {
 
     return (
         <div className="space-y-6">
-            <div className="text-center space-y-1">
+            <div className="text-center space-y-2 relative">
                 <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight text-foreground">Purchase Orders</h2>
                 <p className="text-sm text-muted-foreground">Track POs with quantities, delivery progress and activity log.</p>
             </div>
@@ -1036,6 +1036,14 @@ const PurchaseOrders = () => {
                     <Input placeholder="Search by client, PO number, item, project..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
                 </div>
             </Card>
+
+            {location.state?.fromOverview && (
+                <div className="flex justify-start">
+                    <Button variant="ghost" size="sm" onClick={() => navigate(-1)} className="font-bold border hover:bg-muted">
+                        <ArrowLeft className="h-4 w-4 mr-2" /> Back
+                    </Button>
+                </div>
+            )}
 
             <Card className="shadow-card">
                 <StickyScrollArea>

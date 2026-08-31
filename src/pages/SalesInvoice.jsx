@@ -135,6 +135,7 @@ const SalesInvoice = () => {
 
     // Add Sale dialog
     const [addOpen, setAddOpen] = useState(false);
+    const [selectedClientForAdd, setSelectedClientForAdd] = useState("");
     const [selectedPO, setSelectedPO] = useState("");
     const [poData, setPoData] = useState(null);
     const [selectedLineItemId, setSelectedLineItemId] = useState("");
@@ -659,6 +660,7 @@ const SalesInvoice = () => {
             });
             toast.success("Sales Invoice created");
             setAddOpen(false);
+            setSelectedClientForAdd("");
             setSelectedPO("");
             setPoData(null);
             setDispatchItems([]);
@@ -1114,6 +1116,11 @@ const SalesInvoice = () => {
 
 
 
+    const uniqueClientsForAdd = useMemo(() => {
+        const clients = new Set(orders.map(o => o.client_name).filter(Boolean));
+        return Array.from(clients).sort();
+    }, [orders]);
+
     const filteredSales = useMemo(() => {
         if (!search.trim()) return sales;
         const q = search.toLowerCase();
@@ -1137,6 +1144,19 @@ const SalesInvoice = () => {
             return next;
         });
     };
+
+    const uniqueSaleItems = useMemo(() => {
+        if (!editingSale || !editingSale.items) return [];
+        const unique = [];
+        const seen = new Set();
+        editingSale.items.forEach(it => {
+            if (it.item && !seen.has(it.item)) {
+                seen.add(it.item);
+                unique.push(it);
+            }
+        });
+        return unique;
+    }, [editingSale]);
 
     return (
         <TooltipProvider>
@@ -1176,31 +1196,47 @@ const SalesInvoice = () => {
                     <DialogHeader><DialogTitle>Add New Sales Invoice</DialogTitle></DialogHeader>
                     <div className="space-y-4 py-2">
                         <div className="space-y-1">
-                            <Label>Purchase Order No. *</Label>
-                            <Select value={selectedPO} onValueChange={handlePOChange}>
-                                <SelectTrigger><SelectValue placeholder="Select PO Number" /></SelectTrigger>
+                            <Label>Client *</Label>
+                            <Select value={selectedClientForAdd} onValueChange={(val) => { setSelectedClientForAdd(val); setSelectedPO(""); setPoData(null); setDispatchItems([]); }}>
+                                <SelectTrigger><SelectValue placeholder="Select Client" /></SelectTrigger>
                                 <SelectContent>
-                                    {orders.length > 0
-                                        ? (
-                                            // Fixed-height, independently scrollable list — only this
-                                            // inner div scrolls (overscroll-contain stops the scroll
-                                            // from "leaking" into the page/dialog behind it once the
-                                            // user hits the top/bottom of the list).
-                                            <div className="max-h-[280px] overflow-y-auto overscroll-contain scroll-smooth">
-                                                {orders.map((o) => (
-                                                    <SelectItem key={o.id} value={o.po_number}>
-                                                        {o.po_number} — {o.client_name}
-                                                    </SelectItem>
-                                                ))}
+                                    <div className="max-h-[280px] overflow-y-auto overscroll-contain scroll-smooth">
+                                        {uniqueClientsForAdd.map((c) => (
+                                            <SelectItem key={c} value={c}>{c}</SelectItem>
+                                        ))}
+                                        {uniqueClientsForAdd.length === 0 && (
+                                            <div className="p-2 text-sm text-muted-foreground">
+                                                {qc.isFetching({ queryKey: ["purchase-orders"] }) ? "Loading Clients..." : "No Clients available"}
                                             </div>
-                                        )
-                                        : <div className="p-2 text-sm text-muted-foreground">
-                                            {qc.isFetching({ queryKey: ["purchase-orders"] }) ? "Loading Purchase Orders..." : "No POs available"}
-                                          </div>
-                                    }
+                                        )}
+                                    </div>
                                 </SelectContent>
                             </Select>
                         </div>
+                        {selectedClientForAdd && (
+                            <div className="space-y-1">
+                                <Label>Purchase Order No. *</Label>
+                                <Select value={selectedPO} onValueChange={handlePOChange}>
+                                    <SelectTrigger><SelectValue placeholder="Select PO Number" /></SelectTrigger>
+                                    <SelectContent>
+                                        {orders.filter(o => o.client_name === selectedClientForAdd).length > 0
+                                            ? (
+                                                <div className="max-h-[280px] overflow-y-auto overscroll-contain scroll-smooth">
+                                                    {orders.filter(o => o.client_name === selectedClientForAdd).map((o) => (
+                                                        <SelectItem key={o.id} value={o.po_number}>
+                                                            {o.po_number}
+                                                        </SelectItem>
+                                                    ))}
+                                                </div>
+                                            )
+                                            : <div className="p-2 text-sm text-muted-foreground">
+                                                No POs available for this client
+                                              </div>
+                                        }
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
 
                         {poData && (
                             <div className="space-y-6">
@@ -1522,7 +1558,7 @@ const SalesInvoice = () => {
                         )}
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
+                        <Button variant="outline" onClick={() => { setAddOpen(false); setSelectedClientForAdd(""); setSelectedPO(""); }}>Cancel</Button>
                         <Button onClick={handleAddSale} className="bg-gradient-primary" disabled={createMutation.isPending}>Add Sales Invoice</Button>
                     </DialogFooter>
                 </DialogContent>
@@ -1557,17 +1593,46 @@ const SalesInvoice = () => {
                                                     {editItems.map((item, idx) => (
                                                         <tr key={idx} className="border-t border-border/50">
                                                             <td className="p-2">
-                                                                <Input className="h-8 text-xs bg-background" value={item.item} onChange={e => updateEditItem(idx, "item", e.target.value)} />
-                                                            </td>
-                                                            <td className="p-2 text-center">
-                                                                <Select value={item.uom} onValueChange={v => updateEditItem(idx, "uom", v)}>
-                                                                    <SelectTrigger className="h-8 text-[10px] px-1 bg-background">
-                                                                        <SelectValue />
+                                                                <Select 
+                                                                    value={item.item || ""} 
+                                                                    onValueChange={(val) => {
+                                                                        const found = uniqueSaleItems.find(li => li.item === val);
+                                                                        if (found) {
+                                                                            const newItems = [...editItems];
+                                                                            const q = Number(item.quantity) || 0;
+                                                                            const p = Number(found.unit_price) || 0;
+                                                                            const gstVal = Number(found.gst_rate) || 0;
+                                                                            const sub = round2(q * p);
+                                                                            const gstAmt = round2(sub * gstVal / 100);
+                                                                            newItems[idx] = {
+                                                                                ...newItems[idx],
+                                                                                item: val,
+                                                                                uom: found.uom || "Nos",
+                                                                                unit_price: p,
+                                                                                gst_rate: gstVal,
+                                                                                subtotal: sub,
+                                                                                gst_amount: gstAmt,
+                                                                                total_amount: sub + gstAmt,
+                                                                                line_item_id: found.line_item_id
+                                                                            };
+                                                                            setEditItems(newItems);
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    <SelectTrigger className="h-8 text-xs bg-background">
+                                                                        <SelectValue placeholder="Select Item" />
                                                                     </SelectTrigger>
                                                                     <SelectContent>
-                                                                        {uom_options.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                                                                        {uniqueSaleItems.map((li) => (
+                                                                            <SelectItem key={li.item} value={li.item}>
+                                                                                {li.item}
+                                                                            </SelectItem>
+                                                                        ))}
                                                                     </SelectContent>
                                                                 </Select>
+                                                            </td>
+                                                            <td className="p-2 text-center">
+                                                                <Input disabled className="h-8 text-xs text-center bg-muted" value={item.uom || "Nos"} />
                                                             </td>
                                                             <td className="p-2 text-center">
                                                                 <Input type="number" className="h-8 text-xs text-center bg-background px-1 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" value={item.quantity} onChange={e => updateEditItem(idx, "quantity", e.target.value)} />
