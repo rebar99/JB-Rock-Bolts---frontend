@@ -44,7 +44,7 @@ const get = (path, params) => {
         : path;
     return request(url);
 };
-const post = (path, body) => request(path, { method: "POST", body: JSON.stringify(body) });
+export const post = (path, body) => request(path, { method: "POST", body: JSON.stringify(body) });
 const put = (path, body) => request(path, { method: "PUT", body: JSON.stringify(body) });
 const del = (path, params) => {
     const url = params
