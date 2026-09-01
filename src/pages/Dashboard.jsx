@@ -292,7 +292,7 @@ const Dashboard = () => {
                                     content={<TotalSalesTooltip />}
                                 />
                                 <Line
-                                    type="monotone"
+                                    type="linear"
                                     dataKey="Total Sales"
                                     stroke="hsl(var(--primary))"
                                     strokeWidth={3}

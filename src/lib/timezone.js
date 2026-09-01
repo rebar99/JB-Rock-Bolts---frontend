@@ -20,8 +20,15 @@ const IST = "Asia/Kolkata";
 function parseUTC(str) {
     if (!str) return null;
     const hasOffset = str.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(str);
+    
     // Fallback: treat naive strings as UTC (Railway server timezone)
-    const d = new Date(hasOffset ? str : str + "+00:00");
+    let s = str;
+    if (!hasOffset) {
+        // If it's a date-only string (no 'T'), append T00:00:00 to avoid Invalid Date
+        if (!s.includes("T")) s += "T00:00:00";
+        s += "+00:00";
+    }
+    const d = new Date(s);
     return isNaN(d.getTime()) ? null : d;
 }
 
