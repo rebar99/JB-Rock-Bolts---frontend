@@ -33,7 +33,7 @@ import { SortableHeader } from "@/components/SortableHeader";
 import { FilterableHeader } from "@/components/FilterableHeader";
 import { StickyScrollArea } from "@/components/StickyScrollArea";
 
-const emptyLineItem = () => ({ item: "", quantity: "", completed_quantity: "", uom: "Nos", unit_price: "", gst: "0", freight: 0 });
+const emptyLineItem = () => ({ item: "", quantity: "", completed_quantity: "", uom: "Nos", unit_price: "", gst: "18", freight: 0 });
 
 const WO_TABLE_WIDTHS = {
     sno: 56, client_name: 140, project: 120, item: 150, wo_number: 130,
@@ -360,7 +360,11 @@ const WorkOrders = () => {
         if (form.clientDropdown && !list.includes(form.clientDropdown)) {
             list.push(form.clientDropdown);
         }
-        return list.sort((a, b) => a.localeCompare(b));
+        return list.sort((a, b) => {
+            const cleanA = a.replace(/^M\/s\.?\s*/i, "").trim().toLowerCase();
+            const cleanB = b.replace(/^M\/s\.?\s*/i, "").trim().toLowerCase();
+            return cleanA.localeCompare(cleanB);
+        });
     }, [wo_clients, form.clientDropdown]);
 
     const handleCreateProject = async () => {
@@ -687,7 +691,7 @@ const WorkOrders = () => {
                                                 </Button>
                                             )}
 
-                                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                                            <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
                                                 <div className="sm:col-span-2 space-y-1.5">
                                                     <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Item Name</Label>
                                                     <ItemCombobox
@@ -696,7 +700,7 @@ const WorkOrders = () => {
                                                         items={itemMasterList}
                                                     />
                                                 </div>
-                                                <div className="space-y-1.5">
+                                                <div className="sm:col-span-2 space-y-1.5">
                                                     <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Quantity</Label>
                                                     <div className="flex gap-1">
                                                         <Input
@@ -1047,12 +1051,12 @@ const WorkOrders = () => {
                                         : [{ item: viewing.item, quantity: viewing.total_quantity, completed_quantity: viewing.completed_quantity, uom: viewing.uom || "Nos", unit_price: viewing.unit_price, gst: viewing.gst || "0", freight: viewing.freight || 0 }]
                                     ).map((li, idx) => (
                                         <div key={idx} className="rounded-lg border border-border bg-muted/20 p-4">
-                                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                                            <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
                                                 <div className="sm:col-span-2 space-y-1.5">
                                                     <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Item Name</Label>
                                                     <Input value={li.item} disabled className="opacity-100" />
                                                 </div>
-                                                <div className="space-y-1.5">
+                                                <div className="sm:col-span-2 space-y-1.5">
                                                     <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Quantity</Label>
                                                     <div className="flex gap-1">
                                                         <Input value={li.quantity ?? ""} disabled className="flex-1 opacity-100" />

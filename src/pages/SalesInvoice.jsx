@@ -141,7 +141,7 @@ const SalesInvoice = () => {
     const [selectedLineItemId, setSelectedLineItemId] = useState("");
     const [manualItem, setManualItem] = useState("");
     const [manualUnitPrice, setManualUnitPrice] = useState("");
-    const [manualGstRate, setManualGstRate] = useState("");
+    const [manualGstRate, setManualGstRate] = useState("18");
     const [manualFreight, setManualFreight] = useState("");
     const [dispatchQty, setDispatchQty] = useState("");
     const [manualUom, setManualUom] = useState("Nos");
@@ -328,7 +328,7 @@ const SalesInvoice = () => {
             parsedGst = 0; // Fixed amount, so % is 0
         } else {
             const gstVal = parseFloat((po?.gst ?? "18").toString().replace("%", ""));
-            parsedGst = isNaN(gstVal) ? 18 : gstVal;
+            parsedGst = (isNaN(gstVal) || gstVal === 0) ? 18 : gstVal;
         }
         setManualGstRate(parsedGst);
         setManualFreight(po?.freight?.toString() || "0");
@@ -355,6 +355,15 @@ const SalesInvoice = () => {
             setManualItem(li.item);
             setManualUnitPrice(Number(li.unit_price).toFixed(2));
             setManualUom(li.uom || "Nos");
+            
+            let parsedGst = 18;
+            if (li?.gst?.toString().startsWith("₹")) {
+                parsedGst = 0;
+            } else {
+                const gstVal = parseFloat((li?.gst ?? "18").toString().replace("%", ""));
+                parsedGst = (isNaN(gstVal) || gstVal === 0) ? 18 : gstVal;
+            }
+            setManualGstRate(parsedGst);
         }
     };
 
@@ -1118,7 +1127,11 @@ const SalesInvoice = () => {
 
     const uniqueClientsForAdd = useMemo(() => {
         const clients = new Set(orders.map(o => o.client_name).filter(Boolean));
-        return Array.from(clients).sort();
+        return Array.from(clients).sort((a, b) => {
+            const cleanA = a.replace(/^M\/s\.?\s*/i, "").trim().toLowerCase();
+            const cleanB = b.replace(/^M\/s\.?\s*/i, "").trim().toLowerCase();
+            return cleanA.localeCompare(cleanB);
+        });
     }, [orders]);
 
     const filteredSales = useMemo(() => {
@@ -1322,16 +1335,8 @@ const SalesInvoice = () => {
                                     </div>
                                 </div>
 
-                                {/* 3. Buyer's Order & 4. Dispatched Through */}
+                                {/* 4. Dispatched Through */}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border">
-                                    <div className="space-y-1">
-                                        <Label>Buyer's Order No. (Manual)</Label>
-                                        <Input
-                                            placeholder="Enter buyer's order number"
-                                            value={buyersOrderNo}
-                                            onChange={(e) => setBuyersOrderNo(e.target.value)}
-                                        />
-                                    </div>
                                     <div className="space-y-1">
                                         <Label>Dispatched Through (Manual)</Label>
                                         <Input
@@ -1739,12 +1744,8 @@ const SalesInvoice = () => {
                                 </div>
                                 </div>
 
-                            {/* 3. Buyer's Order & 4. Dispatched Through */}
+                            {/* 4. Dispatched Through */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border">
-                                <div className="space-y-1">
-                                    <Label>Buyer's Order No.</Label>
-                                    <Input value={editBuyersOrderNo} onChange={(e) => setEditBuyersOrderNo(e.target.value)} />
-                                </div>
                                 <div className="space-y-1">
                                     <Label>Dispatched Through</Label>
                                     <Input value={editDispatchedThrough} onChange={(e) => setEditDispatchedThrough(e.target.value)} />
@@ -2079,7 +2080,7 @@ const SalesInvoice = () => {
                                         </div>
                                     ) : <span className="text-xs text-muted-foreground">—</span>}
                                 </div>
-                                <Field label="Buyer's Order No." value={viewSale.buyers_order_no} full />
+
                                 <Field label="HSN/SAC" value={viewSale.hsn_code} />
                                 <Field label="Payment Terms" value={viewSale.payment_terms} full />
                             </div>
@@ -2157,9 +2158,12 @@ const SalesInvoice = () => {
                                         <Checkbox checked={selectedIds.has(sale.id)} onCheckedChange={() => toggleSelectOne(sale.id)} aria-label={`Select sale ${sale.invoice_number || sale.po_number}`} />
                                         <div>
                                         <span className="font-semibold text-foreground">{sale.po_number}</span>
-                                        <span className="ml-2 text-sm text-muted-foreground">— {sale.client_name}</span>
+                                        <span className="ml-2 text-base font-bold text-foreground">— {sale.client_name}</span>
                                         {sale.invoice_number && (
-                                            <span className="ml-2 text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">{sale.invoice_number}</span>
+                                            <span className="ml-2 text-sm bg-muted px-2.5 py-1 rounded inline-flex items-center gap-3">
+                                                <span className="text-base font-bold text-foreground">{sale.invoice_number}</span>
+                                                {sale.invoice_date && <span className="text-muted-foreground">{fmtDate(sale.invoice_date)}</span>}
+                                            </span>
                                         )}
                                         </div>
                                     </div>
@@ -2288,7 +2292,7 @@ const SalesInvoice = () => {
                                     <Field label="Freight" value={inr(sale.freight)} />
                                     <Field label="Dispatched Through" value={sale.dispatched_through} />
                                     <Field label="HSN/SAC" value={sale.hsn_code} />
-                                    <Field label="Buyer's Order No." value={sale.buyers_order_no} />
+
                                 </div>
 
                                 <div className="flex flex-wrap gap-6 text-xs border-t border-border pt-3">
