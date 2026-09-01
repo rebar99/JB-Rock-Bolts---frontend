@@ -22,7 +22,7 @@ import {
     deletePurchaseOrder, bulkDeletePurchaseOrders, fetchPurchaseOrder, openPODocument,
     createClient, createProject, fetchProjects, uploadPOFile, fetchItemMasterList,
     exportPurchaseOrders, importPurchaseOrders, shortClosePurchaseOrder, fetchPOFulfillmentSummary,
-    fetchClients, mergeClients, deleteClient, deleteProject, mergeProjects
+    fetchClients, mergeClients, deleteClient, deleteProject, mergeProjects, increasePOQuantity
 } from "@/lib/api";
 import { ArrowLeft, Pencil, Plus, Search, Trash2, Eye, FileText, Package, Truck, Clock, Printer, X, UploadCloud, Download, Upload, Settings } from "lucide-react";
 import { toast } from "sonner";
@@ -214,6 +214,10 @@ const PurchaseOrders = () => {
         }
     }, [querySearch]);
     const [dialogOpen, setDialogOpen] = useState(false);
+    const [increaseQtyItem, setIncreaseQtyItem] = useState(null);
+    const [increaseQtyItems, setIncreaseQtyItems] = useState([]);
+    const [increaseQtyReason, setIncreaseQtyReason] = useState('');
+
     const [editingId, setEditingId] = useState(null);
     const [form, setForm] = useState(empty());
     const [viewing, setViewing] = useState(null);
@@ -665,10 +669,63 @@ const PurchaseOrders = () => {
             invalidate();
             setDialogOpen(false);
         } catch (e) {
-            toast.error(e.message);
+            const isQtyError = e.message?.includes("dispatched amount");
+            const isAdminError = e.message?.includes("Only Admin can");
+            const isSpecialError = isQtyError || isAdminError;
+            
+            toast.error(e.message, {
+                position: isSpecialError ? "top-center" : undefined,
+                duration: isSpecialError ? 10000 : 4000,
+                className: isSpecialError ? "text-base p-5 pointer-events-auto" : undefined,
+                action: isQtyError ? {
+                    label: "View Sales",
+                    onClick: (event) => {
+                        if (event && event.preventDefault) event.preventDefault();
+                        setDialogOpen(false);
+                        setTimeout(() => {
+                            const poObj = orders.find(o => o.id === editingId);
+                            if (poObj) openView(poObj);
+                        }, 400);
+                    }
+                } : undefined
+            });
         }
     };
 
+
+    const increaseQtyMutation = useMutation({
+        mutationFn: ({ id, data }) => increasePOQuantity(id, data),
+        onSuccess: () => {
+            invalidate();
+            setIncreaseQtyItem(null);
+            toast.success("PO Quantity Updated successfully!");
+        },
+        onError: (e) => toast.error(e.message || "Failed to update quantity")
+    });
+
+    const openIncreaseQty = (o) => {
+        setIncreaseQtyItem(o);
+        setIncreaseQtyReason("");
+        setIncreaseQtyItems((o.line_items?.length > 0 ? o.line_items : [{ id: null, item: o.item, quantity: o.total_quantity, uom: o.uom }]).map(li => ({
+            line_item_id: li.id,
+            item_name: li.item,
+            current_qty: Number(li.quantity) || 0,
+            add_qty: 0,
+            uom: li.uom || "Nos"
+        })));
+    };
+
+    const handleIncreaseQtySubmit = () => {
+        if (!increaseQtyReason.trim()) return toast.error("Please provide a reason/note.");
+        const payloadItems = increaseQtyItems.filter(li => Number(li.add_qty) > 0).map(li => ({
+            line_item_id: li.line_item_id,
+            additional_quantity: Number(li.add_qty),
+            reason: increaseQtyReason.trim()
+        }));
+        if (payloadItems.length === 0) return toast.error("Please enter additional quantity for at least one item.");
+        
+        increaseQtyMutation.mutate({ id: increaseQtyItem.id, data: { items: payloadItems } });
+    };
     return (
         <div className="space-y-6">
             <div className="text-center space-y-2 relative">
@@ -1412,6 +1469,11 @@ const PurchaseOrders = () => {
                                 <Button variant="outline" onClick={() => openPODocument(viewing.id)}>
                                     <Printer className="h-4 w-4 mr-2" /> Print PO
                                 </Button>
+                                {isAdmin && (
+                                    <Button variant="outline" className="border-primary text-primary hover:bg-primary/10" disabled={viewing.short_closed} onClick={() => { const o = viewing; setViewing(null); openIncreaseQty(o); }}>
+                                        <Plus className="h-4 w-4 mr-2" /> Update PO Quantity
+                                    </Button>
+                                )}
                                 <Button className="bg-gradient-primary" disabled={viewing.short_closed} onClick={() => { const o = viewing; setViewing(null); openEdit(o); }}>
                                     <Pencil className="h-4 w-4 mr-2" /> Edit
                                 </Button>
@@ -1635,6 +1697,54 @@ const PurchaseOrders = () => {
 
             <ItemMasterManageDialog open={manageItemsOpen} onOpenChange={setManageItemsOpen} type="PO" />
             <UomManageDialog open={manageUomOpen} onOpenChange={setManageUomOpen} />
+
+            <Dialog open={!!increaseQtyItem} onOpenChange={(open) => !open && setIncreaseQtyItem(null)}>
+                <DialogContent className="max-w-2xl">
+                    <DialogHeader><DialogTitle>Update PO Quantity (Admin Only)</DialogTitle></DialogHeader>
+                    {increaseQtyItem && (
+                        <div className="py-4 space-y-4">
+                            <div className="p-3 bg-primary/10 text-primary border border-primary/20 rounded-lg text-sm font-semibold">
+                                PO Number: {increaseQtyItem.po_number}
+                            </div>
+                            <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-2">
+                                {increaseQtyItems.map((li, idx) => (
+                                    <div key={idx} className="border rounded-md p-3 space-y-2">
+                                        <div className="font-bold text-sm">{li.item_name}</div>
+                                        <div className="grid grid-cols-3 gap-4">
+                                            <div>
+                                                <Label className="text-xs text-muted-foreground">Current Qty</Label>
+                                                <Input value={li.current_qty} disabled className="h-8 opacity-100" />
+                                            </div>
+                                            <div>
+                                                <Label className="text-xs text-primary font-bold">Add Qty</Label>
+                                                <Input type="number" value={li.add_qty || ""} onChange={e => {
+                                                    const newArr = [...increaseQtyItems];
+                                                    newArr[idx].add_qty = Number(e.target.value);
+                                                    setIncreaseQtyItems(newArr);
+                                                }} className="h-8 border-primary/50 focus-visible:ring-primary" placeholder="0" />
+                                            </div>
+                                            <div>
+                                                <Label className="text-xs text-muted-foreground">New Qty</Label>
+                                                <Input value={Number(li.current_qty) + Number(li.add_qty || 0)} disabled className="h-8 opacity-100 font-bold" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label>Reason / Note <span className="text-destructive">*</span></Label>
+                                <Input value={increaseQtyReason} onChange={e => setIncreaseQtyReason(e.target.value)} placeholder="Enter reason for quantity increase..." />
+                            </div>
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIncreaseQtyItem(null)}>Cancel</Button>
+                        <Button onClick={handleIncreaseQtySubmit} disabled={increaseQtyMutation.isPending}>
+                            {increaseQtyMutation.isPending ? "Saving..." : "Update Quantity"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 };

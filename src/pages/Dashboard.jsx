@@ -8,7 +8,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { inr, fmtDate } from "@/lib/format";
 import { fetchDashboardStats, fetchDashboardCharts, fetchRecentSales, fetchDashboardClients, fetchMonthlyProductSales, fetchPurchaseOrders } from "@/lib/api";
 import {
-    Line, LineChart, CartesianGrid, Cell, LabelList,
+    Line, LineChart, CartesianGrid, Cell, LabelList, Legend,
     Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { ArrowUpRight, IndianRupee, Package, Users, Search, FileText, CheckCircle2, Clock } from "lucide-react";
@@ -118,11 +118,20 @@ const Dashboard = () => {
     const monthlyData = monthlySales?.data ?? [];
     
     const transformedMonthlyData = useMemo(() => {
-        return monthlyData.map(row => {
+        const currentMonthIndex = new Date().getMonth();
+        return monthlyData.map((row, i) => {
             const total = monthlyProducts.reduce((sum, p) => sum + (row[p] || 0), 0);
-            return { month: row.month, "Total Sales": total };
+            
+            let isHidden = false;
+            // Only apply month-based clipping if we are viewing "All Months"
+            if (selectedMonth === "all") {
+                // Hide Jan/Feb/Mar (indices 0, 1, 2) and future months
+                isHidden = i < 3 || i > currentMonthIndex;
+            }
+            
+            return { month: row.month, "Total Sales": isHidden ? null : total };
         });
-    }, [monthlyData, monthlyProducts]);
+    }, [monthlyData, monthlyProducts, selectedMonth]);
 
     const selectedMonthTotal = useMemo(() => {
         if (selectedMonth === "all") return null;

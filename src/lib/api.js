@@ -561,4 +561,36 @@ export const setCompanyAddressDefault = (id) => post(`/api/company-addresses/${i
 export const deleteProject = (id, deletedBy) => del(`/api/projects/${id}`, deletedBy ? { deleted_by: deletedBy } : undefined);
 export const mergeProjects = (body) => post("/api/projects/merge", body);
 
+export const increasePOQuantity = async (id, data) => {
+    const token = localStorage.getItem("token");
+    const response = await fetch(`${API_URL}/api/purchase-orders/${id}/increase-quantity`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || "Failed to increase PO quantity");
+    }
+    return response.json();
+};
 
+export const increaseWOQuantity = async (id, data) => {
+    const token = localStorage.getItem("token");
+    const response = await fetch(`${API_URL}/api/work-orders/${id}/increase-quantity`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || "Failed to increase Work Order quantity");
+    }
+    return response.json();
+};
