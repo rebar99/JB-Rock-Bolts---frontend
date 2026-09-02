@@ -447,17 +447,16 @@ const WorkOrderSales = () => {
         }
 
         const urlList = urls.split(";").filter(Boolean);
-        const isChallan = label.toLowerCase().includes("challan");
 
         return (
             <Popover>
                 <Tooltip>
                     <TooltipTrigger asChild>
                         <PopoverTrigger asChild>
-                            <button className={`inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-muted transition-colors relative ${isChallan ? "text-blue-500 bg-blue-50" : "text-green-500 bg-green-50"}`}>
+                            <button className={`inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-muted transition-colors relative text-green-500 bg-green-50`}>
                                 <Icon className="h-4 w-4" />
                                 {urlList.length > 1 && (
-                                    <span className={`absolute -top-1 -right-1 text-white text-[8px] font-bold h-3.5 w-3.5 rounded-full flex items-center justify-center shadow-sm border border-white ${isChallan ? "bg-blue-600" : "bg-green-600"}`}>
+                                    <span className={`absolute -top-1 -right-1 text-white text-[8px] font-bold h-3.5 w-3.5 rounded-full flex items-center justify-center shadow-sm border border-white bg-green-600`}>
                                         {urlList.length}
                                     </span>
                                 )}
@@ -2054,14 +2053,17 @@ const WorkOrderSales = () => {
                                             }}
                                         />
 
-                                        {sale.delivery_challan_url && (
-                                            <FilePopover
-                                                urls={sale.delivery_challan_url}
-                                                icon={FileText}
-                                                label="Delivery Challan"
-                                                saleId={sale.id}
-                                            />
-                                        )}
+                                        <FilePopover
+                                            urls={sale.delivery_challan_url}
+                                            icon={FileText}
+                                            label="Delivery Challan"
+                                            saleId={sale.id}
+                                            onUploadClick={() => {
+                                                setMarkDeliveredTarget(sale);
+                                                setDeliveryChallanUrl(sale.delivery_challan_url || "");
+                                                setMarkDeliveredOpen(true);
+                                            }}
+                                        />
 
                                         <Tooltip>
                                             <TooltipTrigger asChild>
@@ -2149,16 +2151,11 @@ const WorkOrderSales = () => {
                                         };
 
                                         const currentSaleHasChallan = hasValidChallan(sale.delivery_challan_url);
-                                        const isFullyComplete = wo?.status === "Completed";
 
                                         let finalBtnClass = "bg-red-600 border-red-600 text-white hover:bg-red-700"; // Default: Red (No challan)
 
                                         if (currentSaleHasChallan) {
-                                            if (isFullyComplete) {
-                                                finalBtnClass = "bg-green-600 border-green-600 text-white hover:bg-green-700"; // Success: Everything done
-                                            } else {
-                                                finalBtnClass = "bg-blue-600 border-blue-600 text-white hover:bg-blue-700"; // Progress: Current done, but others pending
-                                            }
+                                            finalBtnClass = "bg-green-600 border-green-600 text-white hover:bg-green-700"; // Green: Challan uploaded
                                         }
 
                                         return (
@@ -2227,24 +2224,46 @@ const WorkOrderSales = () => {
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader><DialogTitle>Mark as Delivered</DialogTitle></DialogHeader>
                     <div className="space-y-4 py-4">
-                        <p className="text-sm text-muted-foreground">Upload the delivery challan document to mark this sale as Delivered.</p>
-                        <div className="space-y-2">
-                            <Label>Delivery Challan Document(s) * {deliveryChallanUrl && <span className="ml-1 text-primary">({deliveryChallanUrl.split(";").filter(Boolean).length})</span>}</Label>
-                            <div className="space-y-2">
-                                <Input type="file" multiple className="hidden" id="wo-challan-file-upload" onChange={handleDeliveryChallanUpload} accept=".pdf,.jpg,.jpeg,.png" />
-                                <Button type="button" variant="outline" className="w-full border-slate-900 text-slate-900 hover:bg-slate-50" onClick={() => document.getElementById("wo-challan-file-upload").click()}>
-                                    <FileText className={`h-4 w-4 mr-2 ${deliveryChallanUrl ? "text-green-500" : "text-red-500"}`} />
-                                    {deliveryChallanUrl ? `${deliveryChallanUrl.split(";").filter(Boolean).length} File(s) Uploaded` : "Upload Challan(s)"}
-                                </Button>
-                                {deliveryChallanUrl && (
-                                    <div className="grid grid-cols-1 gap-2 mt-2">
-                                        {deliveryChallanUrl.split(";").map((url, i) => (
-                                            <FileItem key={i} url={url} onRemove={() => handleRemoveFile("challan", url)} />
+                        {markDeliveredTarget?.delivery_challan_url ? (
+                            <>
+                                <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 border border-green-200">
+                                    <CheckCircle className="h-5 w-5 text-green-600 shrink-0" />
+                                    <div>
+                                        <p className="text-sm font-medium text-green-800">Delivery Challan Already Uploaded</p>
+                                        <p className="text-xs text-green-600 mt-0.5">1 Sale = 1 Delivery Challan. Duplicate upload not allowed.</p>
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Uploaded Challan Document(s) <span className="ml-1 text-green-600">({markDeliveredTarget.delivery_challan_url.split(";").filter(Boolean).length})</span></Label>
+                                    <div className="grid grid-cols-1 gap-2">
+                                        {markDeliveredTarget.delivery_challan_url.split(";").filter(Boolean).map((url, i) => (
+                                            <FileItem key={i} url={url} />
                                         ))}
                                     </div>
-                                )}
-                            </div>
-                        </div>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <p className="text-sm text-muted-foreground">Upload the delivery challan document to mark this sale as Delivered.</p>
+                                <div className="space-y-2">
+                                    <Label>Delivery Challan Document(s) * {deliveryChallanUrl && <span className="ml-1 text-primary">({deliveryChallanUrl.split(";").filter(Boolean).length})</span>}</Label>
+                                    <div className="space-y-2">
+                                        <Input type="file" multiple className="hidden" id="wo-challan-file-upload" onChange={handleDeliveryChallanUpload} accept=".pdf,.jpg,.jpeg,.png" />
+                                        <Button type="button" variant="outline" className="w-full border-slate-900 text-slate-900 hover:bg-slate-50" onClick={() => document.getElementById("wo-challan-file-upload").click()}>
+                                            <FileText className={`h-4 w-4 mr-2 ${deliveryChallanUrl ? "text-green-500" : "text-red-500"}`} />
+                                            {deliveryChallanUrl ? `${deliveryChallanUrl.split(";").filter(Boolean).length} File(s) Uploaded` : "Upload Challan(s)"}
+                                        </Button>
+                                        {deliveryChallanUrl && (
+                                            <div className="grid grid-cols-1 gap-2 mt-2">
+                                                {deliveryChallanUrl.split(";").map((url, i) => (
+                                                    <FileItem key={i} url={url} onRemove={() => handleRemoveFile("challan", url)} />
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setMarkDeliveredOpen(false)}>Cancel</Button>
