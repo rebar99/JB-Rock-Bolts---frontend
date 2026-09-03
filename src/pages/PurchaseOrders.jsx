@@ -790,9 +790,6 @@ const PurchaseOrders = () => {
                                                             <Select value={newClientSalutation} onValueChange={setNewClientSalutation}>
                                                                 <SelectTrigger className="w-[80px]"><SelectValue /></SelectTrigger>
                                                                 <SelectContent>
-                                                                    <SelectItem value="Mr.">Mr.</SelectItem>
-                                                                    <SelectItem value="Mrs.">Mrs.</SelectItem>
-                                                                    <SelectItem value="Ms.">Ms.</SelectItem>
                                                                     <SelectItem value="M/s.">M/s.</SelectItem>
                                                                 </SelectContent>
                                                             </Select>
