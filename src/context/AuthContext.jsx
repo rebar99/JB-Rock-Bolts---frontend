@@ -57,6 +57,48 @@ export const AuthProvider = ({ children }) => {
         };
     }, [token]);
 
+    const logout = async () => {
+        try {
+            await logoutUser();
+        } catch {
+            // Best-effort: clear local state even if API call fails
+        }
+        setToken(null);
+        setUser(null);
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(USER_KEY);
+        localStorage.removeItem("app_current_user");
+    };
+
+    useEffect(() => {
+        if (!token) return;
+
+        let timeoutId;
+        const TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
+
+        const handleActivity = () => {
+            clearTimeout(timeoutId);
+            timeoutId = setTimeout(() => {
+                toast.error("Session expired due to inactivity.");
+                logout();
+            }, TIMEOUT_MS);
+        };
+
+        handleActivity();
+
+        window.addEventListener("mousemove", handleActivity);
+        window.addEventListener("keydown", handleActivity);
+        window.addEventListener("click", handleActivity);
+        window.addEventListener("scroll", handleActivity);
+
+        return () => {
+            clearTimeout(timeoutId);
+            window.removeEventListener("mousemove", handleActivity);
+            window.removeEventListener("keydown", handleActivity);
+            window.removeEventListener("click", handleActivity);
+            window.removeEventListener("scroll", handleActivity);
+        };
+    }, [token]);
     const handleApproval = async (action) => {
         if (!loginAttempt) return;
         try {
@@ -78,19 +120,6 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem(TOKEN_KEY, data.access_token);
         localStorage.setItem(USER_KEY, JSON.stringify(data.user));
         localStorage.setItem("app_current_user", data.user.name);
-    };
-
-    const logout = async () => {
-        try {
-            await logoutUser();
-        } catch {
-            // Best-effort: clear local state even if API call fails
-        }
-        setToken(null);
-        setUser(null);
-        localStorage.removeItem(TOKEN_KEY);
-        localStorage.removeItem(USER_KEY);
-        localStorage.removeItem("app_current_user");
     };
 
     return (
