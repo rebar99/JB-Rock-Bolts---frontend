@@ -252,7 +252,7 @@ export const Topbar = ({ onMenu }) => {
                 </Button>
 
                 <div className="hidden md:flex flex-col leading-tight mr-4">
-                    <h1 className="font-bold text-base text-foreground">JB Rock Bolts Dashboard</h1>
+                    <h1 className="font-bold text-base text-foreground">JB Engineering Dashboard</h1>
                     <p className="text-[11px] text-muted-foreground">Marketing &amp; Sales Management System</p>
                 </div>
 

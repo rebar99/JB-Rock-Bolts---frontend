@@ -31,11 +31,11 @@ export const Sidebar = ({ open, onClose }) => {
                 open ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
             )}
         >
-            <div className="px-5 py-5 border-b border-sidebar-border">
+            <div className="px-4 py-4 border-b border-sidebar-border">
                 <img 
                     src="https://jbrockbolts.com/images/rebar-couplers-logo.jpg" 
-                    alt="JB Rock Bolts Logo" 
-                    className="w-full h-auto object-contain rounded-xl p-1.5 bg-white shadow-glow" 
+                    alt="JB Engineering Logo" 
+                    className="w-full h-auto object-contain rounded-xl p-2 bg-white shadow-glow" 
                 />
             </div>
 

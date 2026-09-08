@@ -49,13 +49,13 @@ export default function Register() {
                 <div className="w-full">
                     <img
                         src="https://jbrockbolts.com/images/rebar-couplers-logo.jpg"
-                        alt="JB Rock Bolts"
-                        className="w-full max-w-[260px] mx-auto rounded-xl p-2 bg-white shadow-glow"
+                        alt="JB Engineering"
+                        className="w-full max-w-[380px] mx-auto rounded-xl p-3 bg-white shadow-glow"
                     />
                 </div>
 
                 <div className="text-center space-y-3">
-                    <h1 className="text-2xl font-bold text-white tracking-tight">JB Rock Bolts</h1>
+                    <h1 className="text-2xl font-bold text-white tracking-tight">JB Engineering</h1>
                     <p className="text-sm text-sidebar-foreground/70 leading-relaxed max-w-xs">
                         Marketing &amp; Sales Management System — manage purchase orders, invoices, inventory, and clients from one place.
                     </p>
@@ -74,8 +74,8 @@ export default function Register() {
                     <div className="lg:hidden mb-8 flex justify-center">
                         <img
                             src="https://jbrockbolts.com/images/rebar-couplers-logo.jpg"
-                            alt="JB Rock Bolts"
-                            className="w-48 rounded-xl p-2 bg-white shadow-md"
+                            alt="JB Engineering"
+                            className="w-56 rounded-xl p-2 bg-white shadow-md"
                         />
                     </div>
 
