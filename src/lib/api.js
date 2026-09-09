@@ -1,5 +1,19 @@
 const BASE = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
 
+/**
+ * Resolves a file URL for window.open / display.
+ * - Absolute URLs (http/https) → returned as-is
+ * - Relative paths starting with "/" (e.g. /uploads/file.pdf) → prepend API BASE
+ * - Relative paths without "/" → add leading "/" then prepend BASE
+ * - null / undefined / empty → ""
+ */
+export const resolveFileUrl = (url) => {
+    if (!url) return "";
+    if (/^https?:\/\//.test(url)) return url;
+    const path = url.startsWith("/") ? url : `/${url}`;
+    return `${BASE}${path}`;
+};
+
 const getToken = () => localStorage.getItem("auth_token");
 
 async function request(path, options = {}) {
@@ -85,8 +99,10 @@ export const shortClosePurchaseOrder = (id, body) => post(`/api/purchase-orders/
 export const uploadPOFile = async (file) => {
     const formData = new FormData();
     formData.append("file", file);
+    const token = getToken();
     const res = await fetch(`${BASE}/api/purchase-orders/upload`, {
         method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
     });
     if (!res.ok) throw new Error("Upload failed");
@@ -139,8 +155,10 @@ export const fetchNextWONumber = () => get("/api/work-orders/next-number");
 export const uploadWorkOrderFile = async (file) => {
     const formData = new FormData();
     formData.append("file", file);
+    const token = getToken();
     const res = await fetch(`${BASE}/api/work-orders/upload`, {
         method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
     });
     if (!res.ok) throw new Error("Upload failed");

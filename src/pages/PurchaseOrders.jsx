@@ -22,7 +22,8 @@ import {
     deletePurchaseOrder, bulkDeletePurchaseOrders, fetchPurchaseOrder, openPODocument,
     createClient, createProject, fetchProjects, uploadPOFile, fetchItemMasterList,
     exportPurchaseOrders, importPurchaseOrders, shortClosePurchaseOrder, fetchPOFulfillmentSummary,
-    fetchClients, mergeClients, deleteClient, deleteProject, mergeProjects, increasePOQuantity
+    fetchClients, mergeClients, deleteClient, deleteProject, mergeProjects, increasePOQuantity,
+    resolveFileUrl
 } from "@/lib/api";
 import { ArrowLeft, Pencil, Plus, Search, Trash2, Eye, FileText, Package, Truck, Clock, Printer, X, UploadCloud, Download, Upload, Settings } from "lucide-react";
 import { toast } from "sonner";
@@ -1018,7 +1019,7 @@ const PurchaseOrders = () => {
                                                 <Button type="button" variant="ghost" size="sm" onClick={() => set("fileUrl", "")} className="text-destructive hover:bg-destructive/10">
                                                     <Trash2 className="h-4 w-4 mr-2" /> Remove upload file
                                                 </Button>
-                                                <Button type="button" variant="link" size="sm" className="text-primary text-xs" onClick={() => window.open(`http://localhost:8000${form.fileUrl}`, "_blank")}>
+                                                <Button type="button" variant="link" size="sm" className="text-primary text-xs" onClick={() => window.open(resolveFileUrl(form.fileUrl), "_blank")}>
                                                     View current file
                                                 </Button>
                                             </div>
@@ -1196,7 +1197,7 @@ const PurchaseOrders = () => {
                                                 <Button size="icon" variant="ghost" className="h-6 w-6"
                                                     onClick={() => {
                                                         if (o.file_url) {
-                                                            window.open(`http://localhost:8000${o.file_url}`, "_blank");
+                                                            window.open(resolveFileUrl(o.file_url), "_blank");
                                                         } else {
                                                             setUploadingPoId(o.id);
                                                             document.getElementById("direct-file-upload").click();
@@ -1353,7 +1354,7 @@ const PurchaseOrders = () => {
                             {/* Document */}
                             {viewing.file_url && (
                                 <div className="sm:col-span-2">
-                                    <Button variant="outline" size="sm" className="w-full" onClick={() => window.open(`http://localhost:8000${viewing.file_url}`, "_blank")}>
+                                    <Button variant="outline" size="sm" className="w-full" onClick={() => window.open(resolveFileUrl(viewing.file_url), "_blank")}>
                                         <FileText className="h-4 w-4 mr-2" /> View Attached PO Document
                                     </Button>
                                 </div>
