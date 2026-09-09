@@ -21,7 +21,7 @@ import {
     deleteWorkOrder, bulkDeleteWorkOrders, fetchWorkOrder, openWODocument, closeWorkOrder,
     createClient, createProject, fetchProjects, fetchNextWONumber,
     exportWorkOrders, importWorkOrders, uploadWorkOrderFile, fetchItemMasterList,
-    increaseWOQuantity,
+    increaseWOQuantity, resolveFileUrl,
 } from "@/lib/api";
 import { Pencil, Plus, Search, Trash2, Eye, FileText, Package, CheckCircle2, Clock, Printer, X, Download, Upload, UploadCloud, RefreshCw, Settings } from "lucide-react";
 import { toast } from "sonner";
@@ -162,6 +162,7 @@ const WorkOrders = () => {
     const [selectedIds, setSelectedIds] = useState(() => new Set());
     const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
     const [generatingNumber, setGeneratingNumber] = useState(false);
+    const [uploadingWoId, setUploadingWoId] = useState(null);
 
     const [closeItem, setCloseItem] = useState(null);
     const [closeRemark, setCloseRemark] = useState("");
@@ -309,6 +310,37 @@ const WorkOrders = () => {
             toast.success("WO File uploaded");
         } catch (err) {
             toast.error("File upload failed: " + err.message);
+        }
+    };
+
+    const handleDirectUpload = async (e, woId) => {
+        const file = e.target.files[0];
+        if (!file || !woId) return;
+        const tid = toast.loading("Uploading file...");
+        try {
+            const data = await uploadWorkOrderFile(file);
+            await updateMutation.mutateAsync({
+                id: woId,
+                body: { file_url: data.file_url, last_updated_by: getCurrentUser() }
+            });
+            toast.success("WO Document updated", { id: tid });
+            setUploadingWoId(null);
+        } catch (err) {
+            toast.error("Upload failed: " + err.message, { id: tid });
+        }
+    };
+
+    const handleDeleteWOFile = async (woId) => {
+        if (!window.confirm("Are you sure you want to delete this document? You can then upload a new one.")) return;
+        const tid = toast.loading("Removing document...");
+        try {
+            await updateMutation.mutateAsync({
+                id: woId,
+                body: { file_url: null, last_updated_by: getCurrentUser() }
+            });
+            toast.success("Document removed", { id: tid });
+        } catch (err) {
+            toast.error("Failed to remove document: " + err.message, { id: tid });
         }
     };
 
@@ -854,7 +886,7 @@ const WorkOrders = () => {
                                                 <Button type="button" variant="ghost" size="sm" onClick={() => set("fileUrl", "")} className="text-destructive hover:bg-destructive/10">
                                                     <Trash2 className="h-4 w-4 mr-2" /> Remove upload file
                                                 </Button>
-                                                <Button type="button" variant="link" size="sm" className="text-primary text-xs" onClick={() => window.open(`http://localhost:8000${form.fileUrl}`, "_blank")}>
+                                                <Button type="button" variant="link" size="sm" className="text-primary text-xs" onClick={() => window.open(resolveFileUrl(form.fileUrl), "_blank")}>
                                                     View current file
                                                 </Button>
                                             </div>
@@ -992,6 +1024,23 @@ const WorkOrders = () => {
                                         <td className="px-1.5 py-3 text-center">
                                             <div className="flex gap-0.5 justify-center">
                                                 <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => openView(o)} title="View details"><Eye className="h-3 w-3" /></Button>
+                                                <Button size="icon" variant="ghost" className="h-6 w-6"
+                                                    onClick={() => {
+                                                        if (o.file_url) {
+                                                            window.open(resolveFileUrl(o.file_url), "_blank");
+                                                        } else {
+                                                            setUploadingWoId(o.id);
+                                                            document.getElementById("wo-direct-file-upload").click();
+                                                        }
+                                                    }}
+                                                    title={o.file_url ? "View Uploaded WO Document" : "Upload WO Document"}
+                                                >
+                                                    {o.file_url ? (
+                                                        <FileText className="h-3 w-3 text-green-500" />
+                                                    ) : (
+                                                        <UploadCloud className="h-3 w-3 text-red-500" />
+                                                    )}
+                                                </Button>
                                                 <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => openWODocument(o.id)} title="Print Work Order"><Printer className="h-3 w-3" /></Button>
                                                 <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => openEdit(o)} disabled={isClosedLike} title="Edit">
                                                     <Pencil className={`h-3 w-3 ${isClosedLike ? "text-muted-foreground" : "text-blue-500"}`} />
@@ -1147,7 +1196,7 @@ const WorkOrders = () => {
 
                             {viewing.file_url && (
                                 <div className="sm:col-span-2">
-                                    <Button variant="outline" size="sm" className="w-full" onClick={() => window.open(`http://localhost:8000${viewing.file_url}`, "_blank")}>
+                                    <Button variant="outline" size="sm" className="w-full" onClick={() => window.open(resolveFileUrl(viewing.file_url), "_blank")}>
                                         <FileText className="h-4 w-4 mr-2" /> View Attached WO Document
                                     </Button>
                                 </div>
@@ -1262,6 +1311,14 @@ const WorkOrders = () => {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <input
+                type="file"
+                id="wo-direct-file-upload"
+                className="hidden"
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={(e) => handleDirectUpload(e, uploadingWoId)}
+            />
 
             {/* Import Dialog */}
             <Dialog open={importOpen} onOpenChange={(o) => { setImportOpen(o); if (!o) { setImportFile(null); setImportResult(null); } }}>

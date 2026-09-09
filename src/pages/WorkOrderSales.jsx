@@ -18,7 +18,7 @@ import { useAuth } from "@/context/AuthContext";
 import {
     fetchWorkOrders, fetchWorkOrderSales, fetchWorkOrderSale, createWorkOrderSale, updateWorkOrderSale,
     deleteWorkOrderSale as deleteWorkOrderSaleApi, bulkDeleteWorkOrderSales, addWorkOrderSaleActivity, addWorkOrderSaleDispatch, openWOInvoiceDocument, downloadWOInvoiceDocument,
-    uploadWorkOrderSaleFile, exportWorkOrderSales, importWorkOrderSales, fetchCompanyAddresses,
+    uploadWorkOrderSaleFile, exportWorkOrderSales, importWorkOrderSales, fetchCompanyAddresses, resolveFileUrl,
 } from "@/lib/api";
 import { toast } from "sonner";
 import { Plus, Truck, Clock, CreditCard, Eye, Package, User, Trash2, Search, Download, UploadCloud, FileText, X, Pencil, CheckCircle, Printer, FileDown, Upload, ChevronDown, ChevronUp } from "lucide-react";
@@ -370,7 +370,7 @@ const WorkOrderSales = () => {
         const fileName = url.split("/").pop();
         const ext = fileName.split(".").pop().toLowerCase();
         const isPdf = ext === "pdf";
-        const fullUrl = `http://localhost:8000${url}`;
+        const fullUrl = resolveFileUrl(url);
 
         const handlePrint = () => {
             const win = window.open(fullUrl, "_blank");
@@ -429,7 +429,7 @@ const WorkOrderSales = () => {
         );
     };
 
-    const FilePopover = ({ urls, icon: Icon, label, saleId, onUploadClick }) => {
+    const FilePopover = ({ urls, icon: Icon, label, saleId, onUploadClick, onDelete }) => {
         if (!urls) {
             return (
                 <Tooltip>
@@ -473,7 +473,24 @@ const WorkOrderSales = () => {
                         </div>
                         <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar">
                             {urlList.map((url, i) => (
-                                <FileItem key={i} url={url} />
+                                <div key={i} className="flex items-center gap-1">
+                                    <div className="flex-1 min-w-0">
+                                        <FileItem url={url} />
+                                    </div>
+                                    {onDelete && (
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <button
+                                                    onClick={() => onDelete(saleId, url)}
+                                                    className="shrink-0 inline-flex items-center justify-center h-7 w-7 rounded hover:bg-destructive/10 text-destructive transition-colors"
+                                                >
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                </button>
+                                            </TooltipTrigger>
+                                            <TooltipContent><p>Delete this file</p></TooltipContent>
+                                        </Tooltip>
+                                    )}
+                                </div>
                             ))}
                         </div>
                     </div>
@@ -532,6 +549,27 @@ const WorkOrderSales = () => {
             toast.success("Invoice removed", { id: tid });
         } catch (err) {
             toast.error("Failed to remove invoice: " + err.message, { id: tid });
+        }
+    };
+
+    const handleDeleteChallan = async (saleId, urlToRemove) => {
+        if (!window.confirm("Are you sure you want to delete this challan file?")) return;
+        const tid = toast.loading("Removing challan...");
+        try {
+            const sale = sales?.find(s => s.id === saleId);
+            const existing = sale?.delivery_challan_url ? sale.delivery_challan_url.split(";").filter(Boolean) : [];
+            const updated = existing.filter(u => u !== urlToRemove);
+            await updateMutation.mutateAsync({
+                id: saleId,
+                body: { delivery_challan_url: updated.length > 0 ? updated.join(";") : null, updated_by: getCurrentUser() }
+            });
+            await activityMutation.mutateAsync({
+                id: saleId,
+                body: { action: "Challan Deleted", note: "Delivery challan document was removed", by: getCurrentUser() },
+            });
+            toast.success("Challan removed", { id: tid });
+        } catch (err) {
+            toast.error("Failed to remove challan: " + err.message, { id: tid });
         }
     };
 
@@ -2063,6 +2101,7 @@ const WorkOrderSales = () => {
                                                 setDeliveryChallanUrl(sale.delivery_challan_url || "");
                                                 setMarkDeliveredOpen(true);
                                             }}
+                                            onDelete={handleDeleteChallan}
                                         />
 
                                         <Tooltip>
