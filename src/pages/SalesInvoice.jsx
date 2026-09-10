@@ -522,6 +522,12 @@ const SalesInvoice = () => {
     const handleInvoiceUpload = async (e) => {
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
+        const oversized = files.find(f => f.size > 1 * 1024 * 1024);
+        if (oversized) {
+            toast.error(`"${oversized.name}" is too large! Maximum allowed size is 1 MB per file.`);
+            e.target.value = "";
+            return;
+        }
         const tid = toast.loading(`Uploading ${files.length} invoice(s)...`);
         try {
             const urls = [];
@@ -540,6 +546,12 @@ const SalesInvoice = () => {
     const handleEWayBillUpload = async (e) => {
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
+        const oversized = files.find(f => f.size > 1 * 1024 * 1024);
+        if (oversized) {
+            toast.error(`"${oversized.name}" is too large! Maximum allowed size is 1 MB per file.`);
+            e.target.value = "";
+            return;
+        }
         const tid = toast.loading(`Uploading ${files.length} e-way bill(s)...`);
         try {
             const urls = [];
@@ -558,6 +570,11 @@ const SalesInvoice = () => {
     const handleDirectInvoiceUpload = async (e, saleId) => {
         const file = e.target.files[0];
         if (!file || !saleId) return;
+        if (file.size > 1 * 1024 * 1024) {
+            toast.error("File too large! Maximum allowed size is 1 MB. Please upload a smaller file.");
+            e.target.value = "";
+            return;
+        }
         const tid = toast.loading("Uploading invoice...");
         try {
             const data = await uploadInvoiceFile(file);
@@ -1073,6 +1090,12 @@ const SalesInvoice = () => {
     const handleEditInvoiceUpload = async (e) => {
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
+        const oversized = files.find(f => f.size > 1 * 1024 * 1024);
+        if (oversized) {
+            toast.error(`"${oversized.name}" is too large! Maximum allowed size is 1 MB per file.`);
+            e.target.value = "";
+            return;
+        }
         const tid = toast.loading(`Uploading ${files.length} invoice(s)...`);
         try {
             const urls = [];
@@ -1091,6 +1114,12 @@ const SalesInvoice = () => {
     const handleEditEWayBillUpload = async (e) => {
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
+        const oversized = files.find(f => f.size > 1 * 1024 * 1024);
+        if (oversized) {
+            toast.error(`"${oversized.name}" is too large! Maximum allowed size is 1 MB per file.`);
+            e.target.value = "";
+            return;
+        }
         const tid = toast.loading(`Uploading ${files.length} e-way bill(s)...`);
         try {
             const urls = [];
@@ -1109,6 +1138,12 @@ const SalesInvoice = () => {
     const handleDeliveryChallanUpload = async (e) => {
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
+        const oversized = files.find(f => f.size > 1 * 1024 * 1024);
+        if (oversized) {
+            toast.error(`"${oversized.name}" is too large! Maximum allowed size is 1 MB per file.`);
+            e.target.value = "";
+            return;
+        }
         const tid = toast.loading(`Uploading ${files.length} challan(s)...`);
         try {
             const urls = [];
