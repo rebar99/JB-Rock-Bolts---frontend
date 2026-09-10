@@ -304,6 +304,11 @@ const WorkOrders = () => {
     const handleFileUpload = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
+        if (file.size > 1 * 1024 * 1024) {
+            toast.error("File too large! Maximum allowed size is 1 MB. Please upload a smaller file.");
+            e.target.value = "";
+            return;
+        }
         try {
             const data = await uploadWorkOrderFile(file);
             set("fileUrl", data.file_url);
@@ -316,6 +321,11 @@ const WorkOrders = () => {
     const handleDirectUpload = async (e, woId) => {
         const file = e.target.files[0];
         if (!file || !woId) return;
+        if (file.size > 1 * 1024 * 1024) {
+            toast.error("File too large! Maximum allowed size is 1 MB. Please upload a smaller file.");
+            e.target.value = "";
+            return;
+        }
         const tid = toast.loading("Uploading file...");
         try {
             const data = await uploadWorkOrderFile(file);
