@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, FileBarChart2, FileText, ShoppingCart, UserCheck, ClipboardList, Building2, Database } from "lucide-react";
+import { LayoutDashboard, FileBarChart2, FileText, ShoppingCart, UserCheck, ClipboardList, Building2, Database, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 
@@ -116,6 +116,22 @@ export const Sidebar = ({ open, onClose }) => {
                         >
                             <Database className="h-4 w-4 shrink-0" size={18} />
                             <span>System Backup</span>
+                        </NavLink>
+                        <NavLink
+                            to="/admin/recently-deleted"
+                            onClick={onClose}
+                            className={({ isActive }) =>
+                                cn(
+                                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+                                    "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                                    isActive
+                                        ? "bg-sidebar-accent text-sidebar-accent-foreground border-l-2 border-sidebar-primary shadow-sm"
+                                        : "text-sidebar-foreground/80"
+                                )
+                            }
+                        >
+                            <Trash2 className="h-4 w-4 shrink-0" size={18} />
+                            <span>Recently Deleted</span>
                         </NavLink>
                     </>
                 )}

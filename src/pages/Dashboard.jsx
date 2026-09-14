@@ -182,7 +182,9 @@ const Dashboard = () => {
     });
     const filteredClientNames = useMemo(() => {
         const s = clientSearch.trim().toLowerCase();
-        return s ? clientNames.filter((c) => c.toLowerCase().includes(s)) : clientNames;
+        const stripPrefix = (name) => name.replace(/^m\/s\.?\s*/i, "").trim();
+        const filtered = s ? clientNames.filter((c) => c.toLowerCase().includes(s)) : [...clientNames];
+        return filtered.sort((a, b) => stripPrefix(a).localeCompare(stripPrefix(b), undefined, { sensitivity: "base" }));
     }, [clientNames, clientSearch]);
 
     return (

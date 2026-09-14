@@ -27,7 +27,7 @@ import OverviewReport from "@/pages/OverviewReport";
 
 // Guards footer quantity totals against floating-point drift from repeated
 // addition (e.g. 0.1 + 0.2 producing 0.30000000000000004).
-const roundQty = round2;
+const roundQty = (n) => Math.round((Number(n) + Number.EPSILON) * 1000) / 1000;
 
 // Pill-style UOM filter tab — active uses the app's primary brand color
 // (theme token, so it stays correct in dark mode too); inactive is a plain

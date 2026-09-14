@@ -20,6 +20,7 @@ import ForgotPassword from "./pages/ForgotPassword";
 import NotFound from "./pages/NotFound";
 import CompanyAddresses from "./pages/CompanyAddresses";
 import SystemBackup from "./pages/SystemBackup";
+import RecentlyDeleted from "./pages/RecentlyDeleted";
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -75,6 +76,7 @@ const App = () => (
                             <Route path="/user-approvals" element={<AdminRoute><AppLayout><UserApprovals /></AppLayout></AdminRoute>} />
                             <Route path="/admin/addresses" element={<AdminRoute><AppLayout><CompanyAddresses /></AppLayout></AdminRoute>} />
                             <Route path="/admin/system-backup" element={<AdminRoute><AppLayout><SystemBackup /></AppLayout></AdminRoute>} />
+                            <Route path="/admin/recently-deleted" element={<AdminRoute><AppLayout><RecentlyDeleted /></AppLayout></AdminRoute>} />
                             <Route path="*" element={<NotFound />} />
                         </Routes>
                     </AuthProvider>
