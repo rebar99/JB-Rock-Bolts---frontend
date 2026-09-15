@@ -367,6 +367,7 @@ export const importWorkOrderSales = async (file, onConflict = "skip", createdBy)
 
 // ── Work Order Sales Report ───────────────────────────────────────────────────
 export const fetchWorkOrderSalesReport = (params) => get("/api/work-order-reports/sales", params);
+export const fetchWOSalesFilterOptions = () => get("/api/work-order-reports/sales-filter-options");
 
 // ── Inventory ────────────────────────────────────────────────────────────────
 export const fetchInventory = () => get("/api/inventory");
@@ -405,6 +406,7 @@ export const fetchPendingPOs = () => get("/api/reports/pending-pos");
 export const fetchPOFulfillmentSummary = (poId) => get(`/api/reports/po-fulfillment-summary/${poId}`);
 export const fetchOverviewReport = () => get("/api/reports/overview");
 export const fetchProductPendingReport = (params) => get("/api/reports/product-pending", params);
+export const fetchSalesFilterOptions = () => get("/api/reports/sales-filter-options");
 
 export const exportProductPendingReport = async (params = {}) => {
     const token = getToken();

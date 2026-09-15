@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/StatusBadge";
-import { fetchWorkOrderReport, fetchWorkOrder, openWODocument, fetchWorkOrderSalesReport, exportCombinedWorkOrderReport, importCombinedWorkOrderReport, fetchWorkOrderSale } from "@/lib/api";
+import { fetchWorkOrderReport, fetchWorkOrder, openWODocument, fetchWorkOrderSalesReport, exportCombinedWorkOrderReport, importCombinedWorkOrderReport, fetchWorkOrderSale, fetchWOSalesFilterOptions } from "@/lib/api";
 import { inr, fmtDate, fmtDateTime, round2 } from "@/lib/format";
 import { getCurrentUser } from "@/lib/currentUser";
 import { Download, Upload, UploadCloud, FileText, Search, ClipboardList, CheckCircle2, Clock, TrendingUp, Eye, BarChart3, IndianRupee, Printer } from "lucide-react";
@@ -40,7 +40,7 @@ const SHEET_OPTIONS = [
 ];
 
 const COMPLETED_WOR_WIDTHS = { sno: 56, wo_date: 100, client_name: 150, project: 130, wo_number: 130, item: 160, total_quantity: 110, completed_quantity: 110 };
-const SALES_WOR_WIDTHS = { sno: 56, date: 100, invoice_number: 130, wo_number: 130, subtotal: 110, gst_amount: 110, grand_total: 120, payment_status: 100 };
+const SALES_WOR_WIDTHS = { sno: 56, date: 100, invoice_number: 130, wo_number: 130, client_name: 150, subtotal: 110, gst_amount: 110, grand_total: 120, payment_status: 100 };
 const PENDING_WOR_WIDTHS = { sno: 56, wo_date: 100, wo_number: 130, client_name: 140, project: 120, item: 160, total_quantity: 100, completed_quantity: 100, pending_quantity: 100, status: 110 };
 
 const CompletedWORColumnAccessors = {
@@ -56,6 +56,7 @@ const SalesWORColumnAccessors = {
     date: (r) => r.date,
     invoice_number: (r) => r.invoice_number,
     wo_number: (r) => r.wo_number,
+    client_name: (r) => r.client_name,
     subtotal: (r) => r.subtotal,
     gst_amount: (r) => r.gst_amount,
     grand_total: (r) => r.grand_total,
@@ -129,9 +130,35 @@ const WorkOrderReport = () => {
     // ── Sales WO tab (real Work Order Sale invoices) ────────────────────────
     const [salesFrom, setSalesFrom] = useState("");
     const [salesTo, setSalesTo] = useState("");
+    const [salesClient, setSalesClient] = useState("all");
+    const [salesProduct, setSalesProduct] = useState("all");
+
+    const { data: woFilterOptions } = useQuery({
+        queryKey: ["woSalesFilterOptions"],
+        queryFn: fetchWOSalesFilterOptions,
+    });
+    const stripMsWO = (s) => (s || "").replace(/^m\/s\.?\s*/i, "").trim();
+
+    const woClientOptions = useMemo(() => {
+        const raw = woFilterOptions?.clients ?? [];
+        const seen = new Set();
+        return raw
+            .filter((c) => {
+                const key = stripMsWO(c).toLowerCase();
+                if (!key || seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            })
+            .sort((a, b) => stripMsWO(a).localeCompare(stripMsWO(b)));
+    }, [woFilterOptions]);
+
+    const woProductOptions = woFilterOptions?.products ?? [];
+
     const salesParams = {
         from_date: salesFrom ? new Date(salesFrom).toISOString() : undefined,
         to_date: salesTo ? new Date(salesTo).toISOString() : undefined,
+        client: salesClient !== "all" ? salesClient : undefined,
+        product: salesProduct !== "all" ? salesProduct : undefined,
     };
     const { data: salesData, isLoading: salesLoading } = useQuery({
         queryKey: ["workOrderSalesReport", salesParams],
@@ -371,7 +398,7 @@ const WorkOrderReport = () => {
                 {/* ── Sales (In Progress) Tab ──────────────────────────────────── */}
                 <TabsContent value="sales" className="space-y-6">
                     <Card className="p-5 shadow-card">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                             <div className="space-y-2">
                                 <Label>From Date</Label>
                                 <Input type="date" value={salesFrom} onChange={(e) => setSalesFrom(e.target.value)} />
@@ -379,6 +406,30 @@ const WorkOrderReport = () => {
                             <div className="space-y-2">
                                 <Label>To Date</Label>
                                 <Input type="date" value={salesTo} onChange={(e) => setSalesTo(e.target.value)} />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Client Name</Label>
+                                <Select value={salesClient} onValueChange={setSalesClient}>
+                                    <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All</SelectItem>
+                                        {woClientOptions.map((c) => (
+                                            <SelectItem key={c} value={c}>{c}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Product</Label>
+                                <Select value={salesProduct} onValueChange={setSalesProduct}>
+                                    <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All</SelectItem>
+                                        {woProductOptions.map((p) => (
+                                            <SelectItem key={p} value={p}>{p}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                             </div>
                         </div>
                     </Card>
@@ -429,6 +480,7 @@ const WorkOrderReport = () => {
                                         <FilterableHeader label="Invoice Date" columnKey="date" type="date" accessor={SalesWORColumnAccessors.date} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.date} onResizeStart={startSalesResize("date")} rows={salesRowsAll} filterValue={salesFilters.date} onApplyFilter={setSalesFilter} />
                                         <FilterableHeader label="Invoice No" columnKey="invoice_number" accessor={SalesWORColumnAccessors.invoice_number} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.invoice_number} onResizeStart={startSalesResize("invoice_number")} rows={salesRowsAll} filterValue={salesFilters.invoice_number} onApplyFilter={setSalesFilter} />
                                         <FilterableHeader label="WO Number" columnKey="wo_number" accessor={SalesWORColumnAccessors.wo_number} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.wo_number} onResizeStart={startSalesResize("wo_number")} rows={salesRowsAll} filterValue={salesFilters.wo_number} onApplyFilter={setSalesFilter} />
+                                        <FilterableHeader label="Client Name" columnKey="client_name" accessor={SalesWORColumnAccessors.client_name} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.client_name} onResizeStart={startSalesResize("client_name")} rows={salesRowsAll} filterValue={salesFilters.client_name} onApplyFilter={setSalesFilter} />
                                         <FilterableHeader label="Subtotal" columnKey="subtotal" type="number" align="right" accessor={SalesWORColumnAccessors.subtotal} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.subtotal} onResizeStart={startSalesResize("subtotal")} rows={salesRowsAll} filterValue={salesFilters.subtotal} onApplyFilter={setSalesFilter} />
                                         <FilterableHeader label="GST Amount" columnKey="gst_amount" type="number" align="right" accessor={SalesWORColumnAccessors.gst_amount} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.gst_amount} onResizeStart={startSalesResize("gst_amount")} rows={salesRowsAll} filterValue={salesFilters.gst_amount} onApplyFilter={setSalesFilter} />
                                         <FilterableHeader label="Grand Total" columnKey="grand_total" type="number" align="right" accessor={SalesWORColumnAccessors.grand_total} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.grand_total} onResizeStart={startSalesResize("grand_total")} rows={salesRowsAll} filterValue={salesFilters.grand_total} onApplyFilter={setSalesFilter} />
@@ -436,7 +488,7 @@ const WorkOrderReport = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {salesLoading && <tr><td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">Loading...</td></tr>}
+                                    {salesLoading && <tr><td colSpan={9} className="px-5 py-12 text-center text-muted-foreground">Loading...</td></tr>}
                                     {sortedSalesRows.map((r, idx) => (
                                         <tr key={r.id} className="border-t border-border hover:bg-muted/30 transition-colors text-[12.5px]">
                                             <td className="px-2 py-3 text-center text-muted-foreground">{idx + 1}</td>
@@ -449,6 +501,7 @@ const WorkOrderReport = () => {
                                                 ) : "—"}
                                             </td>
                                             <td className="px-2 py-3 text-center text-muted-foreground truncate" title={r.wo_number}>{r.wo_number || "—"}</td>
+                                            <td className="px-2 py-3 text-center font-semibold text-foreground truncate" title={r.client_name}>{r.client_name || "—"}</td>
                                             <td className="px-2 py-3 text-center font-medium">{inr(r.subtotal)}</td>
                                             <td className="px-2 py-3 text-center font-medium text-blue-500">{inr(r.gst_amount)}</td>
                                             <td className="px-2 py-3 text-center font-bold text-foreground">{inr(r.grand_total)}</td>
@@ -456,13 +509,13 @@ const WorkOrderReport = () => {
                                         </tr>
                                     ))}
                                     {!salesLoading && sortedSalesRows.length === 0 && (
-                                        <tr><td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">No work order sales match the filters.</td></tr>
+                                        <tr><td colSpan={9} className="px-5 py-12 text-center text-muted-foreground">No work order sales match the filters.</td></tr>
                                     )}
                                 </tbody>
                                 {!salesLoading && salesFilteredRows.length > 0 && (
                                     <tfoot className="sticky bottom-0">
                                         <tr className="border-t-2 border-primary bg-primary/10 text-sm">
-                                            <td className="px-2 py-3 text-center font-bold text-primary tracking-wide" colSpan={4}>TOTAL</td>
+                                            <td className="px-2 py-3 text-center font-bold text-primary tracking-wide" colSpan={5}>TOTAL</td>
                                             <td className="px-2 py-3 text-center font-bold text-primary">{inr(salesTotals.subtotal)}</td>
                                             <td className="px-2 py-3 text-center font-bold text-blue-500">{inr(salesTotals.gst)}</td>
                                             <td className="px-2 py-3 text-center font-bold text-success">{inr(salesTotals.grandTotal)}</td>

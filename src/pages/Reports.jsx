@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useConstants } from "@/lib/constants";
-import { fetchReport, fetchFulfillmentReport, fetchPendingPOs, fetchPOFulfillmentSummary, openPODocument, exportCombinedReport, importCombinedReport, fetchSale } from "@/lib/api";
+import { fetchReport, fetchFulfillmentReport, fetchPendingPOs, fetchPOFulfillmentSummary, openPODocument, exportCombinedReport, importCombinedReport, fetchSale, fetchSalesFilterOptions } from "@/lib/api";
 import { inr, fmtDate, round2 } from "@/lib/format";
 import { StatusBadge } from "@/components/StatusBadge";
 import { getCurrentUser } from "@/lib/currentUser";
@@ -40,7 +40,7 @@ const pillTabClass =
     "data-[state=inactive]:hover:border-primary/50 data-[state=inactive]:hover:bg-muted/50 " +
     "data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md";
 
-const SALES_WIDTHS = { sno: 56, date: 100, invoice_number: 130, po_number: 130, subtotal: 110, gst_amount: 110, price: 120, payment_status: 100 };
+const SALES_WIDTHS = { sno: 56, date: 100, invoice_number: 130, po_number: 130, client_name: 150, project: 140, subtotal: 110, gst_amount: 110, price: 120, payment_status: 100 };
 const PENDING_WIDTHS = { sno: 56, date: 100, invoice_number: 140, po_number: 130, client_name: 140, project: 120, item: 160, total_qty: 100, delivered_qty: 100, pending_qty: 100, delivered_payment: 130, pending_total: 130, status: 110 };
 const COMPLETED_WIDTHS = { sno: 56, date: 100, client_name: 140, project: 120, po_number: 130, item: 160, total_required: 110, delivered: 110 };
 
@@ -60,6 +60,8 @@ const SalesColumnAccessors = {
     date: (r) => r.date,
     invoice_number: (r) => r.invoice_number,
     po_number: (r) => r.po_number,
+    client_name: (r) => r.client_name,
+    project: (r) => r.location,
     subtotal: (r) => r.subtotal,
     gst_amount: (r) => r.gst_amount,
     price: (r) => r.price,
@@ -116,6 +118,7 @@ const Reports = () => {
     const [to, setTo] = useState("");
     const [product, setProduct] = useState("all");
     const [client, setClient] = useState("all");
+    const [project, setProject] = useState("all");
     const [pendingUomTab, setPendingUomTab] = useState("all");
     const [completedUomTab, setCompletedUomTab] = useState("all");
 
@@ -188,11 +191,35 @@ const Reports = () => {
     };
 
     // ── Query params ──────────────────────────────────────────────────────────
+    const { data: salesFilterOptions } = useQuery({
+        queryKey: ["salesFilterOptions"],
+        queryFn: fetchSalesFilterOptions,
+    });
+    // Strip "M/s." prefix for sorting/deduplication (same logic as Dashboard)
+    const stripMs = (s) => (s || "").replace(/^m\/s\.?\s*/i, "").trim();
+
+    const salesClientOptions = useMemo(() => {
+        const raw = salesFilterOptions?.clients ?? [];
+        const seen = new Set();
+        return raw
+            .filter((c) => {
+                const key = stripMs(c).toLowerCase();
+                if (!key || seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            })
+            .sort((a, b) => stripMs(a).localeCompare(stripMs(b)));
+    }, [salesFilterOptions]);
+
+    const salesProductOptions = salesFilterOptions?.products ?? [];
+    const salesProjectOptions = salesFilterOptions?.projects ?? [];
+
     const salesParams = {
         from_date: from ? new Date(from).toISOString() : undefined,
         to_date:   to   ? new Date(to).toISOString()   : undefined,
         product:   product !== "all" ? product : undefined,
         client:    client  !== "all" ? client  : undefined,
+        project:   project !== "all" ? project : undefined,
     };
     const { data: salesData,       isLoading: salesLoading }       = useQuery({ queryKey: ["report", salesParams],            queryFn: () => fetchReport(salesParams),          enabled: tab === "sales" });
 
@@ -407,7 +434,7 @@ const Reports = () => {
                 {/* ── Sales Tab ────────────────────────────────────────────────── */}
                 <TabsContent value="sales" className="space-y-6">
                     <Card className="p-5 shadow-card">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                             <div className="space-y-2">
                                 <Label>From Date</Label>
                                 <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
@@ -415,6 +442,30 @@ const Reports = () => {
                             <div className="space-y-2">
                                 <Label>To Date</Label>
                                 <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Client Name</Label>
+                                <Select value={client} onValueChange={setClient}>
+                                    <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All</SelectItem>
+                                        {salesClientOptions.map((c) => (
+                                            <SelectItem key={c} value={c}>{c}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Product</Label>
+                                <Select value={product} onValueChange={setProduct}>
+                                    <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All</SelectItem>
+                                        {salesProductOptions.map((p) => (
+                                            <SelectItem key={p} value={p}>{p}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                             </div>
                         </div>
                     </Card>
@@ -465,6 +516,8 @@ const Reports = () => {
                                         <FilterableHeader label="Invoice Date" columnKey="date" type="date" accessor={SalesColumnAccessors.date} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.date} onResizeStart={startSalesResize("date")} rows={salesRows} filterValue={salesFilters.date} onApplyFilter={setSalesFilter} />
                                         <FilterableHeader label="Invoice No" columnKey="invoice_number" accessor={SalesColumnAccessors.invoice_number} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.invoice_number} onResizeStart={startSalesResize("invoice_number")} rows={salesRows} filterValue={salesFilters.invoice_number} onApplyFilter={setSalesFilter} />
                                         <FilterableHeader label="PO No" columnKey="po_number" accessor={SalesColumnAccessors.po_number} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.po_number} onResizeStart={startSalesResize("po_number")} rows={salesRows} filterValue={salesFilters.po_number} onApplyFilter={setSalesFilter} />
+                                        <FilterableHeader label="Client Name" columnKey="client_name" accessor={SalesColumnAccessors.client_name} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.client_name} onResizeStart={startSalesResize("client_name")} rows={salesRows} filterValue={salesFilters.client_name} onApplyFilter={setSalesFilter} />
+                                        <FilterableHeader label="Project" columnKey="project" accessor={SalesColumnAccessors.project} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.project} onResizeStart={startSalesResize("project")} rows={salesRows} filterValue={salesFilters.project} onApplyFilter={setSalesFilter} />
                                         <FilterableHeader label="Subtotal" columnKey="subtotal" type="number" align="right" accessor={SalesColumnAccessors.subtotal} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.subtotal} onResizeStart={startSalesResize("subtotal")} rows={salesRows} filterValue={salesFilters.subtotal} onApplyFilter={setSalesFilter} />
                                         <FilterableHeader label="GST Amount" columnKey="gst_amount" type="number" align="right" accessor={SalesColumnAccessors.gst_amount} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.gst_amount} onResizeStart={startSalesResize("gst_amount")} rows={salesRows} filterValue={salesFilters.gst_amount} onApplyFilter={setSalesFilter} />
                                         <FilterableHeader label="Grand Total" columnKey="price" type="number" align="right" accessor={SalesColumnAccessors.price} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.price} onResizeStart={startSalesResize("price")} rows={salesRows} filterValue={salesFilters.price} onApplyFilter={setSalesFilter} />
@@ -472,7 +525,7 @@ const Reports = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {salesLoading && <tr><td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">Loading...</td></tr>}
+                                    {salesLoading && <tr><td colSpan={10} className="px-5 py-12 text-center text-muted-foreground">Loading...</td></tr>}
                                     {sortedSalesRows.map((r, idx) => (
                                         <tr key={r.id} className={`border-t border-border hover:bg-muted/30 transition-colors text-[12.5px]${r.payment_note ? " bg-amber-50 dark:bg-amber-950/20" : ""}`}>
                                             <td className="px-2 py-3 text-center text-muted-foreground">{idx + 1}</td>
@@ -485,6 +538,8 @@ const Reports = () => {
                                                 ) : "—"}
                                             </td>
                                             <td className="px-2 py-3 text-center text-muted-foreground truncate" title={r.po_number}>{r.po_number || "—"}</td>
+                                            <td className="px-2 py-3 text-center font-semibold text-foreground truncate" title={r.client_name}>{r.client_name || "—"}</td>
+                                            <td className="px-2 py-3 text-center text-muted-foreground truncate" title={r.location}>{r.location || "—"}</td>
                                             <td className="px-2 py-3 text-center font-medium">{inr(r.subtotal)}</td>
                                             <td className="px-2 py-3 text-center font-medium text-blue-500">{inr(r.gst_amount)}</td>
                                             <td className="px-2 py-3 text-center font-bold text-foreground">{inr(r.price)}</td>
@@ -492,13 +547,13 @@ const Reports = () => {
                                         </tr>
                                     ))}
                                     {!salesLoading && sortedSalesRows.length === 0 && (
-                                        <tr><td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">No records match the filters.</td></tr>
+                                        <tr><td colSpan={10} className="px-5 py-12 text-center text-muted-foreground">No records match the filters.</td></tr>
                                     )}
                                 </tbody>
                                 {!salesLoading && salesFilteredRows.length > 0 && (
                                     <tfoot className="sticky bottom-0">
                                         <tr className="border-t-2 border-primary bg-primary/10 text-sm">
-                                            <td className="px-2 py-3 text-center font-bold text-primary tracking-wide" colSpan={4}>TOTAL</td>
+                                            <td className="px-2 py-3 text-center font-bold text-primary tracking-wide" colSpan={6}>TOTAL</td>
                                             <td className="px-2 py-3 text-center font-bold text-primary">{inr(salesTotals.subtotal)}</td>
                                             <td className="px-2 py-3 text-center font-bold text-blue-500">{inr(salesTotals.gst)}</td>
                                             <td className="px-2 py-3 text-center font-bold text-success">{inr(salesTotals.grandTotal)}</td>
