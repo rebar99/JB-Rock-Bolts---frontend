@@ -13,7 +13,7 @@ import { MapPin, Building2, Trash2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
 const Clients = () => {
-    const { user } = useAuth();
+    const { user, isReadOnly } = useAuth();
     const qc = useQueryClient();
 
     const { data: clients = [], isLoading } = useQuery({
@@ -106,10 +106,12 @@ const Clients = () => {
                         <div className="text-xs uppercase tracking-wider text-muted-foreground">Total Clients</div>
                         <div className="text-2xl font-bold text-foreground">{clientStats?.total_clients ?? clients.length}</div>
                     </div>
-                    {user?.is_admin && (
+                    {!isReadOnly && (
                         <Button variant="outline" onClick={() => setMergeOpen(true)}>Merge Duplicates</Button>
                     )}
-                    <Button onClick={() => setOpen(true)}>+ Add Client</Button>
+                    {!isReadOnly && (
+                        <Button onClick={() => setOpen(true)}>+ Add Client</Button>
+                    )}
                 </div>
             </div>
 
@@ -125,10 +127,12 @@ const Clients = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-5">
                         {list.map((c) => (
                             <div key={c.id} className="rounded-xl border border-border bg-card p-4 hover:shadow-elegant transition-shadow relative">
+                                {!isReadOnly && (
                                 <button onClick={() => handleDelete(c.id)}
                                     className="absolute top-2 right-2 text-red-500 hover:text-red-700">
                                     <Trash2 size={16} />
                                 </button>
+                                )}
                                 <div className="flex items-start gap-3">
                                     <div className="h-10 w-10 rounded-lg bg-gradient-steel grid place-items-center text-steel-foreground">
                                         <Building2 className="h-5 w-5" />

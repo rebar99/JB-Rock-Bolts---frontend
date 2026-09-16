@@ -63,7 +63,7 @@ const InvoiceInput = ({ value, onChange, prefix, suffix, setSuffix, isAdmin, sto
 
 const SalesInvoice = () => {
     const qc = useQueryClient();
-    const { user } = useAuth();
+    const { user, isReadOnly } = useAuth();
     const isAdmin = !!user?.is_admin;
     const { uom_options } = useConstants();
 
@@ -1266,12 +1266,16 @@ const SalesInvoice = () => {
                     <Button variant="outline" onClick={handleSalesExport} className="border-green-500 text-green-700 hover:bg-green-50">
                         <Download className="h-4 w-4 mr-2" /> Export Excel
                     </Button>
+                    {!isReadOnly && (
                     <Button variant="outline" onClick={() => { setSalesImportFile(null); setSalesImportResult(null); setSalesImportOpen(true); }} className="border-blue-500 text-blue-700 hover:bg-blue-50">
                         <Upload className="h-4 w-4 mr-2" /> Import Excel
                     </Button>
+                    )}
+                    {!isReadOnly && (
                     <Button onClick={() => setAddOpen(true)} className="bg-gradient-primary hover:opacity-90 shadow-elegant">
                         <Plus className="h-4 w-4 mr-2" /> Add New Sale
                     </Button>
+                    )}
                 </div>
             </div>
 
@@ -2266,6 +2270,7 @@ const SalesInvoice = () => {
                                             <TooltipContent><p>View Activity</p></TooltipContent>
                                         </Tooltip>
 
+                                        {!isReadOnly && (
                                         <Tooltip>
                                             <TooltipTrigger asChild>
                                                 <button onClick={() => openEditSale(sale)}
@@ -2275,6 +2280,7 @@ const SalesInvoice = () => {
                                             </TooltipTrigger>
                                             <TooltipContent><p>Edit Sale</p></TooltipContent>
                                         </Tooltip>
+                                        )}
 
                                         <FilePopover
                                             urls={sale.invoice_url}
@@ -2311,6 +2317,7 @@ const SalesInvoice = () => {
                                             onDelete={handleDeleteChallan}
                                         />
 
+                                        {!isReadOnly && (
                                         <Tooltip>
                                             <TooltipTrigger asChild>
                                                 <button onClick={() => setItemToDelete(sale.id)}
@@ -2320,6 +2327,7 @@ const SalesInvoice = () => {
                                             </TooltipTrigger>
                                             <TooltipContent><p>Delete Sale</p></TooltipContent>
                                         </Tooltip>
+                                        )}
                                     </div>
                                 </div>
 

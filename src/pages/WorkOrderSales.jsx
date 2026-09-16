@@ -63,7 +63,7 @@ const InvoiceInput = ({ value, onChange, prefix, suffix, setSuffix, isAdmin, sto
 
 const WorkOrderSales = () => {
     const qc = useQueryClient();
-    const { user } = useAuth();
+    const { user, isReadOnly } = useAuth();
     const isAdmin = !!user?.is_admin;
     const { uom_options } = useConstants();
 
@@ -1161,9 +1161,11 @@ const WorkOrderSales = () => {
                     <span className="text-sm font-medium text-foreground">{selectedIds.size} selected</span>
                     <div className="flex items-center gap-2">
                         <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>Clear</Button>
+                        {!isReadOnly && (
                         <Button variant="destructive" size="sm" onClick={() => setBulkDeleteConfirmOpen(true)}>
                             <Trash2 className="h-4 w-4 mr-2" /> Delete Selected
                         </Button>
+                        )}
                     </div>
                 </div>
             )}
@@ -1172,12 +1174,16 @@ const WorkOrderSales = () => {
                     <Button variant="outline" onClick={handleSalesExport} className="border-green-500 text-green-700 hover:bg-green-50">
                         <Download className="h-4 w-4 mr-2" /> Export Excel
                     </Button>
+                    {!isReadOnly && (
                     <Button variant="outline" onClick={() => { setSalesImportFile(null); setSalesImportResult(null); setSalesImportOpen(true); }} className="border-blue-500 text-blue-700 hover:bg-blue-50">
                         <Upload className="h-4 w-4 mr-2" /> Import Excel
                     </Button>
+                    )}
+                    {!isReadOnly && (
                     <Button onClick={() => setAddOpen(true)} className="bg-gradient-primary hover:opacity-90 shadow-elegant">
                         <Plus className="h-4 w-4 mr-2" /> Add New Sale
                     </Button>
+                    )}
                 </div>
             </div>
             {/* Add New Sale Dialog */}
@@ -2093,6 +2099,7 @@ const WorkOrderSales = () => {
                                             <TooltipContent><p>View Activity</p></TooltipContent>
                                         </Tooltip>
 
+                                        {!isReadOnly && (
                                         <Tooltip>
                                             <TooltipTrigger asChild>
                                                 <button onClick={() => openEditSale(sale)}
@@ -2102,6 +2109,7 @@ const WorkOrderSales = () => {
                                             </TooltipTrigger>
                                             <TooltipContent><p>Edit Sale</p></TooltipContent>
                                         </Tooltip>
+                                        )}
 
                                         <FilePopover
                                             urls={sale.invoice_url}
@@ -2127,6 +2135,7 @@ const WorkOrderSales = () => {
                                             onDelete={handleDeleteChallan}
                                         />
 
+                                        {!isReadOnly && (
                                         <Tooltip>
                                             <TooltipTrigger asChild>
                                                 <button onClick={() => setItemToDelete(sale.id)}
@@ -2136,6 +2145,7 @@ const WorkOrderSales = () => {
                                             </TooltipTrigger>
                                             <TooltipContent><p>Delete Sale</p></TooltipContent>
                                         </Tooltip>
+                                        )}
                                     </div>
                                 </div>
 

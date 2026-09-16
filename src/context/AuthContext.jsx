@@ -123,7 +123,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ token, user, login, logout, isAuthenticated: !!token }}>
+        <AuthContext.Provider value={{ token, user, login, logout, isAuthenticated: !!token, isReadOnly: !user?.is_admin }}>
             {children}
             {loginAttempt && (
                 <Dialog open={true} onOpenChange={() => {}}>

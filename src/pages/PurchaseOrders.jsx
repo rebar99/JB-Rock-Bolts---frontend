@@ -123,7 +123,7 @@ const PurchaseOrders = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const { products, po_clients, projects, payment_terms, uom_options } = useConstants();
-    const { user } = useAuth();
+    const { user, isReadOnly } = useAuth();
     const isAdmin = !!user?.is_admin;
     const [manageItemsOpen, setManageItemsOpen] = useState(false);
     const [manageUomOpen, setManageUomOpen] = useState(false);
@@ -763,9 +763,12 @@ const PurchaseOrders = () => {
                     <Button variant="outline" onClick={handleExport} className="border-green-500 text-green-700 hover:bg-green-50">
                         <Download className="h-4 w-4 mr-2" /> Export Excel
                     </Button>
+                    {!isReadOnly && (
                     <Button variant="outline" onClick={() => { setImportFile(null); setImportResult(null); setImportOpen(true); }} className="border-blue-500 text-blue-700 hover:bg-blue-50">
                         <Upload className="h-4 w-4 mr-2" /> Import Excel
                     </Button>
+                    )}
+                    {!isReadOnly && (
                     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                         <DialogTrigger asChild>
                             <Button onClick={openNew} className="bg-gradient-primary hover:opacity-90 shadow-elegant">
@@ -1048,6 +1051,7 @@ const PurchaseOrders = () => {
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
+                )}
                 </div>
             </div>
 
@@ -1222,15 +1226,19 @@ const PurchaseOrders = () => {
                                                     )}
                                                 </Button>
                                                 <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => openPODocument(o.id)} title="Print PO"><Printer className="h-3 w-3" /></Button>
+                                                {!isReadOnly && (
                                                 <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => openEdit(o)} disabled={o.short_closed} title="Edit">
                                                     <Pencil className={`h-3 w-3 ${o.short_closed ? "text-muted-foreground" : "text-blue-500"}`} />
                                                 </Button>
+                                                )}
                                                 {isAdmin && o.delivery_status !== "Delivered" && !o.short_closed && (
                                                     <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[10px] font-semibold text-slate-600 hover:bg-slate-100" onClick={() => setShortCloseItem(o)} title="Short Close PO">
                                                         Close
                                                     </Button>
                                                 )}
+                                                {!isReadOnly && (
                                                 <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setItemToDelete(o.id)} title="Delete"><Trash2 className="h-3 w-3 text-destructive" /></Button>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>
@@ -1486,9 +1494,11 @@ const PurchaseOrders = () => {
                                         <Plus className="h-4 w-4 mr-2" /> Update PO Quantity
                                     </Button>
                                 )}
+                                {!isReadOnly && (
                                 <Button className="bg-gradient-primary" disabled={viewing.short_closed} onClick={() => { const o = viewing; setViewing(null); openEdit(o); }}>
                                     <Pencil className="h-4 w-4 mr-2" /> Edit
                                 </Button>
+                                )}
                             </>
                         )}
                     </DialogFooter>

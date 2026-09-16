@@ -595,6 +595,7 @@ const WorkOrderReport = () => {
                                             <td className="px-2 py-3 text-center font-medium whitespace-nowrap">{r.total_quantity} <span className="text-[10px] text-muted-foreground">{r.uom}</span></td>
                                             <td className="px-2 py-3 text-center font-bold text-success whitespace-nowrap">{r.completed_quantity} <span className="text-[10px] text-muted-foreground">{r.uom}</span></td>
                                             <td className="px-2 py-3 text-center font-bold text-warning whitespace-nowrap">{r.pending_quantity} <span className="text-[10px] text-muted-foreground">{r.uom}</span></td>
+                                            <td className="px-2 py-3 text-center"><StatusBadge status={r.status} label={r.status} /></td>
                                         </tr>
                                     ))}
                                     {!isLoading && sortedPendingRows.length === 0 && (

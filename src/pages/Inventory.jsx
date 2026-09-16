@@ -18,7 +18,10 @@ const STATUS_MAP = {
 };
 const REVERSE_STATUS = { InStock: "In Stock", Low: "Low Stock", Out: "Out of Stock" };
 
+import { useAuth } from "@/context/AuthContext";
+
 const Inventory = () => {
+    const { isReadOnly } = useAuth();
     const qc = useQueryClient();
 
     const { data: products = [], isLoading } = useQuery({
@@ -71,9 +74,11 @@ const Inventory = () => {
                     <h2 className="text-2xl font-bold tracking-tight">Inventory</h2>
                     <p className="text-sm text-muted-foreground">Current stock levels for all JB Rock Bolts products.</p>
                 </div>
+                {!isReadOnly && (
                 <Button onClick={() => { setEditingProduct("new"); setFormData({ name: "", quantity: "", status: "In Stock" }); }}>
                     + Add Product
                 </Button>
+                )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -135,7 +140,9 @@ const Inventory = () => {
                                     <StatusBadge status={stockBadgeStatus(p.status)} label={p.status} />
                                 </td>
                                 <td className="px-5 py-3 text-center">
-                                    <Button size="sm" onClick={() => handleEdit(p)}>Edit</Button>
+                                    {!isReadOnly && (
+                                        <Button size="sm" onClick={() => handleEdit(p)}>Edit</Button>
+                                    )}
                                 </td>
                             </tr>
                         ))}

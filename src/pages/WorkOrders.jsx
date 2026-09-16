@@ -85,7 +85,7 @@ const WOColumnAccessors = {
 const WorkOrders = () => {
     const qc = useQueryClient();
     const { wo_clients, projects, uom_options, wo_statuses, wo_priorities } = useConstants();
-    const { user } = useAuth();
+    const { user, isReadOnly } = useAuth();
     const isAdmin = !!user?.is_admin;
 
     const { data: orders = [], isLoading } = useQuery({
@@ -594,9 +594,12 @@ const WorkOrders = () => {
                     <Button variant="outline" onClick={handleExport} className="border-green-500 text-green-700 hover:bg-green-50">
                         <Download className="h-4 w-4 mr-2" /> Export Excel
                     </Button>
+                    {!isReadOnly && (
                     <Button variant="outline" onClick={() => { setImportFile(null); setImportResult(null); setImportOpen(true); }} className="border-blue-500 text-blue-700 hover:bg-blue-50">
                         <Upload className="h-4 w-4 mr-2" /> Import Excel
                     </Button>
+                    )}
+                    {!isReadOnly && (
                     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                         <DialogTrigger asChild>
                             <Button onClick={openNew} className="bg-gradient-primary hover:opacity-90 shadow-elegant">
@@ -914,6 +917,7 @@ const WorkOrders = () => {
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
+                )}
                 </div>
             </div>
 
@@ -1052,15 +1056,19 @@ const WorkOrders = () => {
                                                     )}
                                                 </Button>
                                                 <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => openWODocument(o.id)} title="Print Work Order"><Printer className="h-3 w-3" /></Button>
+                                                {!isReadOnly && (
                                                 <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => openEdit(o)} disabled={isClosedLike} title="Edit">
                                                     <Pencil className={`h-3 w-3 ${isClosedLike ? "text-muted-foreground" : "text-blue-500"}`} />
                                                 </Button>
-                                                {!isClosedLike && (
+                                                )}
+                                                {!isClosedLike && !isReadOnly && (
                                                     <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[10px] font-semibold text-slate-600 hover:bg-slate-100" onClick={() => setCloseItem(o)} title="Close Work Order">
                                                         Close
                                                     </Button>
                                                 )}
+                                                {!isReadOnly && (
                                                 <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setItemToDelete(o.id)} title="Delete"><Trash2 className="h-3 w-3 text-destructive" /></Button>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>
@@ -1244,9 +1252,11 @@ const WorkOrders = () => {
                                         <Plus className="h-4 w-4 mr-2" /> Update WO Quantity
                                     </Button>
                                 )}
+                                {!isReadOnly && (
                                 <Button className="bg-gradient-primary" disabled={CLOSED_STATUSES.includes(viewing.status)} onClick={() => { const o = viewing; setViewing(null); openEdit(o); }}>
                                     <Pencil className="h-4 w-4 mr-2" /> Edit
                                 </Button>
+                                )}
                             </>
                         )}
                     </DialogFooter>

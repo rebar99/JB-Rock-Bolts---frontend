@@ -105,7 +105,10 @@ export const uploadPOFile = async (file) => {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
     });
-    if (!res.ok) throw new Error("Upload failed");
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: "Upload failed" }));
+        throw new Error(err.detail || "Upload failed");
+    }
     return res.json();
 };
 
@@ -161,7 +164,10 @@ export const uploadWorkOrderFile = async (file) => {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
     });
-    if (!res.ok) throw new Error("Upload failed");
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: "Upload failed" }));
+        throw new Error(err.detail || "Upload failed");
+    }
     return res.json();
 };
 
@@ -267,11 +273,16 @@ export const markSaleDelivered = (id, body) => put(`/api/sales/${id}/mark-delive
 export const uploadInvoiceFile = async (file) => {
     const formData = new FormData();
     formData.append("file", file);
+    const token = getToken();
     const res = await fetch(`${BASE}/api/sales/upload`, {
         method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
     });
-    if (!res.ok) throw new Error("Upload failed");
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: "Upload failed" }));
+        throw new Error(err.detail || "Upload failed");
+    }
     return res.json();
 };
 
@@ -323,11 +334,16 @@ export const markWorkOrderSaleDelivered = (id, body) => put(`/api/work-order-sal
 export const uploadWorkOrderSaleFile = async (file) => {
     const formData = new FormData();
     formData.append("file", file);
+    const token = getToken();
     const res = await fetch(`${BASE}/api/work-order-sales/upload`, {
         method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
     });
-    if (!res.ok) throw new Error("Upload failed");
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: "Upload failed" }));
+        throw new Error(err.detail || "Upload failed");
+    }
     return res.json();
 };
 
