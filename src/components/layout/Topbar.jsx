@@ -75,8 +75,8 @@ function OnlineUserRow({ session, isCurrentUser }) {
         .split(" ").map((n) => n[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "?";
 
     return (
-        <div className="flex items-center gap-3 px-3 py-2.5 border-b border-border last:border-0 hover:bg-muted/40 transition-colors">
-            <div className="relative shrink-0">
+        <div className="flex items-start gap-3 px-3 py-2.5 border-b border-border last:border-0 hover:bg-muted/40 transition-colors">
+            <div className="relative shrink-0 mt-0.5">
                 <div className={`h-8 w-8 rounded-full grid place-items-center text-xs font-bold text-white ${
                     isCurrentUser
                         ? "bg-gradient-to-br from-primary to-primary/70"
@@ -100,6 +100,18 @@ function OnlineUserRow({ session, isCurrentUser }) {
                     )}
                 </p>
                 <p className="text-[10px] text-muted-foreground truncate">{session.user_email}</p>
+                {(session.login_at || session.connected_at) && (
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                        <span className="text-green-600 dark:text-green-400 font-medium">Login:</span>{" "}
+                        {fmtDateTimeIST(session.login_at || session.connected_at)}
+                    </p>
+                )}
+                {!session.is_active && session.logout_at && (
+                    <p className="text-[10px] text-muted-foreground">
+                        <span className="text-slate-500 dark:text-slate-400 font-medium">Logout:</span>{" "}
+                        {fmtDateTimeIST(session.logout_at)}
+                    </p>
+                )}
             </div>
             <div className="text-right shrink-0">
                 {session.is_active ? (
@@ -111,10 +123,6 @@ function OnlineUserRow({ session, isCurrentUser }) {
                         <Circle className="h-1.5 w-1.5 fill-current" /> Offline
                     </p>
                 )}
-                <p className="text-[10px] text-muted-foreground"
-                    title={session.login_at ? fmtDateTimeIST(session.login_at) : (session.connected_at ? fmtDateTimeIST(session.connected_at) : "")}>
-                    {session.login_at ? relativeTimeIST(session.login_at) : (session.connected_at ? relativeTimeIST(session.connected_at) : "Just now")}
-                </p>
             </div>
         </div>
     );
@@ -182,9 +190,10 @@ export const Topbar = ({ onMenu }) => {
             (log) => {
                 setSseBuffer((prev) => [log, ...prev].slice(0, 100));
                 setNewCount((n) => n + 1);
-                // Refresh the online list whenever any user logs in or out
+                // Refresh the online list AND history whenever any user logs in or out
                 if (log.entity_type === "User") {
                     queryClient.invalidateQueries({ queryKey: ["online_users"] });
+                    queryClient.invalidateQueries({ queryKey: ["recent_logins"] });
                 }
             },
             null,
@@ -195,6 +204,7 @@ export const Topbar = ({ onMenu }) => {
         // (tiny delay to let the server process the new connection)
         const t = setTimeout(() => {
             queryClient.invalidateQueries({ queryKey: ["online_users"] });
+            queryClient.invalidateQueries({ queryKey: ["recent_logins"] });
         }, 800);
 
         return () => {

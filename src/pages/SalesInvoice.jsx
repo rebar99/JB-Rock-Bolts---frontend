@@ -1578,20 +1578,8 @@ const SalesInvoice = () => {
                                                         return (
                                                             <>
                                                                 <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-                                                                    <span className="text-muted-foreground">Subtotal: <b className="text-foreground">{inr(subtotal)}</b></span>
-                                                                    <div className="flex items-center gap-2">
-                                                                        <span className="text-muted-foreground whitespace-nowrap">GST Rate (%):</span>
-                                                                        <Input
-                                                                            type="number"
-                                                                            className="h-7 w-14 text-[11px] py-0 px-2 text-center"
-                                                                            placeholder="Rate"
-                                                                            value={manualTotalGstRate}
-                                                                            onChange={(e) => setManualTotalGstRate(e.target.value)}
-                                                                        />
-                                                                        {manualTotalGstRate !== "" && (
-                                                                            <span className="text-muted-foreground">({inr(finalGstAmt)})</span>
-                                                                        )}
-                                                                    </div>
+                                                                    <span className="text-muted-foreground">Total Basic: <b className="text-foreground">{inr(subtotal)}</b></span>
+                                                                    <span className="text-muted-foreground">Total GST: <b className="text-foreground">{inr(finalGstAmt)}</b></span>
                                                                     <div className="flex items-center gap-2">
                                                                         <span className="text-muted-foreground whitespace-nowrap">Freight:</span>
                                                                         <Input
