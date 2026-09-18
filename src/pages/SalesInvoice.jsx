@@ -328,7 +328,7 @@ const SalesInvoice = () => {
             parsedGst = 0; // Fixed amount, so % is 0
         } else {
             const gstVal = parseFloat((po?.gst ?? "18").toString().replace("%", ""));
-            parsedGst = (isNaN(gstVal) || gstVal === 0) ? 18 : gstVal;
+            parsedGst = isNaN(gstVal) ? 18 : gstVal;
         }
         setManualGstRate(parsedGst);
         setManualFreight(po?.freight?.toString() || "0");
@@ -361,7 +361,7 @@ const SalesInvoice = () => {
                 parsedGst = 0;
             } else {
                 const gstVal = parseFloat((li?.gst ?? "18").toString().replace("%", ""));
-                parsedGst = (isNaN(gstVal) || gstVal === 0) ? 18 : gstVal;
+                parsedGst = isNaN(gstVal) ? 18 : gstVal;
             }
             setManualGstRate(parsedGst);
         }
