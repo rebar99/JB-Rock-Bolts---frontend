@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+﻿import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import {
     fetchPurchaseOrders, fetchSales, fetchSale, createSale, updateSale,
     deleteSale as deleteSaleApi, bulkDeleteSales, addSaleActivity, addSaleDispatch, openInvoiceDocument, downloadInvoiceDocument,
     uploadInvoiceFile, exportSales, importSales, fetchCompanyAddresses, resolveFileUrl,
+    fetchCreditNotesBySale,
 } from "@/lib/api";
 import { toast } from "sonner";
 import { Plus, Truck, Clock, CreditCard, Eye, Package, User, Trash2, Search, Download, UploadCloud, FileText, X, Pencil, Receipt, CheckCircle, Printer, FileDown, Upload, ChevronDown, ChevronUp } from "lucide-react";
@@ -2169,6 +2170,9 @@ const SalesInvoice = () => {
                                     <p className="text-xs text-muted-foreground">No activities recorded.</p>
                                 )}
                             </div>
+
+                            {/* ── Credit Notes Section ──────────────────────────── */}
+                            <SaleCreditNotesSection saleId={viewSale.id} />
                         </div>
                     )}
                     <DialogFooter>
@@ -2656,5 +2660,63 @@ const Field = ({ label, value, full }) => (
         <div className="font-medium text-foreground break-words">{value ?? "—"}</div>
     </div>
 );
+
+// -- Sale Credit Notes Section (shown inside sale view dialog)
+const SaleCreditNotesSection = ({ saleId }) => {
+    const { data: cns = [], isLoading } = useQuery({
+        queryKey: ["credit-notes-by-sale", saleId],
+        queryFn: () => fetchCreditNotesBySale(saleId),
+        enabled: !!saleId,
+    });
+
+    return (
+        <div className="mt-4">
+            <div className="flex items-center justify-between mb-2">
+                <h4 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                    <Receipt className="h-4 w-4 text-primary" />
+                    Credit Notes
+                    {cns.length > 0 && (
+                        <span className="ml-1 text-xs font-normal text-muted-foreground">({cns.length})</span>
+                    )}
+                </h4>
+                <a href="/credit-notes" className="text-xs text-primary hover:underline font-medium">
+                    + Add / View All
+                </a>
+            </div>
+            {isLoading ? (
+                <p className="text-xs text-muted-foreground">Loading credit notes...</p>
+            ) : cns.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">No credit notes for this sale.</p>
+            ) : (
+                <div className="overflow-x-auto rounded-lg border border-border">
+                    <table className="w-full text-xs">
+                        <thead className="bg-muted/50">
+                            <tr>
+                                {["CN No.", "Date", "Reason", "Amount", "Status"].map(h => (
+                                    <th key={h} className="px-3 py-1.5 text-left font-medium text-muted-foreground">{h}</th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {cns.map(cn => (
+                                <tr key={cn.id} className="border-t border-border">
+                                    <td className="px-3 py-1.5 font-mono font-semibold text-primary">{cn.cn_number}</td>
+                                    <td className="px-3 py-1.5 text-muted-foreground">{fmtDate(cn.cn_date)}</td>
+                                    <td className="px-3 py-1.5">{cn.reason}</td>
+                                    <td className="px-3 py-1.5 font-semibold">{inr(cn.total_amount)}</td>
+                                    <td className="px-3 py-1.5">
+                                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium border ${cn.status === "Issued" ? "bg-green-100 text-green-700 border-green-200" : "bg-red-100 text-red-700 border-red-200"}`}>
+                                            {cn.status}
+                                        </span>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
+    );
+};
 
 export default SalesInvoice;

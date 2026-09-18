@@ -36,7 +36,7 @@ export const compareSizes = (aSizeStr, bSizeStr) => {
     return (aSizeStr || "").localeCompare(bSizeStr || "", undefined, { numeric: true, sensitivity: 'base' });
 };
 
-export const ItemCombobox = ({ value, onChange, items = [], placeholder = "Select item...", disabled }) => {
+export const ItemCombobox = ({ value, onChange, items = [], placeholder = "Select item...", disabled, popoverClassName }) => {
     const [open, setOpen] = useState(false);
     const [activeItem, setActiveItem] = useState(null); // item object while picking its size
 
@@ -76,7 +76,7 @@ export const ItemCombobox = ({ value, onChange, items = [], placeholder = "Selec
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+            <PopoverContent className={cn("w-[--radix-popover-trigger-width] p-0", popoverClassName)} align="start">
                 {!activeItem ? (
                     <Command>
                         <CommandInput placeholder="Search item..." />

@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, FileBarChart2, FileText, ShoppingCart, UserCheck, ClipboardList, Building2, Database, Trash2 } from "lucide-react";
+import { LayoutDashboard, FileBarChart2, FileText, ShoppingCart, UserCheck, ClipboardList, Building2, Database, Trash2, Receipt } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 
@@ -8,6 +8,7 @@ const items = [
     { to: "/purchase-orders", label: "Purchase Orders", icon: FileText },
     { to: "/work-orders", label: "Work Orders", icon: ClipboardList },
     { to: "/sales-invoice", label: "Sales", icon: ShoppingCart },
+    { to: "/credit-notes", label: "Credit Notes", icon: Receipt },
     { to: "/reports", label: "Reports", icon: FileBarChart2 },
 ];
 

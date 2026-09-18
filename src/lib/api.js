@@ -630,3 +630,18 @@ export const increaseWOQuantity = async (id, data) => {
     }
     return response.json();
 };
+
+// ── Credit Notes ──────────────────────────────────────────────────────────────
+export const fetchCreditNotes = (params = {}) => get("/api/credit-notes", params);
+export const fetchCreditNote = (id) => get(`/api/credit-notes/${id}`);
+export const createCreditNote = (body) => post("/api/credit-notes", body);
+export const updateCreditNote = (id, body) => put(`/api/credit-notes/${id}`, body);
+export const cancelCreditNote = (id) => del(`/api/credit-notes/${id}`);
+export const fetchCreditNotesBySale = (saleId) => get(`/api/credit-notes`, { sale_id: saleId, sale_type: "PO" });
+export const fetchCreditNotesByWOSale = (woSaleId) => get(`/api/credit-notes`, { wo_sale_id: woSaleId, sale_type: "WO" });
+export const fetchAlreadyCreditedSale = (saleId) => get(`/api/credit-notes/already-credited/sale/${saleId}`);
+export const fetchAlreadyCreditedWOSale = (woSaleId) => get(`/api/credit-notes/already-credited/wo-sale/${woSaleId}`);
+// Fetch all PO Sale invoices for the CN form dropdown
+export const fetchAllSalesForCN = () => get("/api/sales", { limit: 100000 });
+// Fetch all WO Sale invoices for the CN form dropdown
+export const fetchAllWOSalesForCN = () => get("/api/work-order-sales", { limit: 100000 });

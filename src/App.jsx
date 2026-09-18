@@ -10,6 +10,7 @@ import Dashboard from "./pages/Dashboard";
 import PurchaseOrders from "./pages/PurchaseOrders";
 import WorkOrders from "./pages/WorkOrders";
 import Sales from "./pages/Sales";
+import CreditNotes from "./pages/CreditNotes";
 import Inventory from "./pages/Inventory";
 import Clients from "./pages/Clients";
 import Reports from "./pages/Reports";
@@ -70,6 +71,7 @@ const App = () => (
                             <Route path="/purchase-orders" element={<ProtectedRoute><AppLayout><PurchaseOrders /></AppLayout></ProtectedRoute>} />
                             <Route path="/work-orders" element={<ProtectedRoute><AppLayout><WorkOrders /></AppLayout></ProtectedRoute>} />
                             <Route path="/sales-invoice" element={<ProtectedRoute><AppLayout><Sales /></AppLayout></ProtectedRoute>} />
+                            <Route path="/credit-notes" element={<ProtectedRoute><AppLayout><CreditNotes /></AppLayout></ProtectedRoute>} />
                             <Route path="/inventory" element={<ProtectedRoute><AppLayout><Inventory /></AppLayout></ProtectedRoute>} />
                             <Route path="/clients" element={<ProtectedRoute><AppLayout><Clients /></AppLayout></ProtectedRoute>} />
                             <Route path="/reports" element={<ProtectedRoute><AppLayout><Reports /></AppLayout></ProtectedRoute>} />
