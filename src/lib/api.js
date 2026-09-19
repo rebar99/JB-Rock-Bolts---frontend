@@ -39,7 +39,12 @@ async function request(path, options = {}) {
                 return;
             }
             const err = await res.json().catch(() => ({ detail: res.statusText }));
-            throw new Error(err.detail || `Server error: ${res.status}`);
+            // FastAPI validation details are an array. Convert them to a
+            // readable message instead of showing "[object Object]".
+            const detail = Array.isArray(err.detail)
+                ? err.detail.map(issue => `${(issue.loc || []).filter(part => part !== "body").join(" → ") || "Input"}: ${issue.msg}`).join("; ")
+                : err.detail;
+            throw new Error(detail || `Server error: ${res.status}`);
         }
         if (res.status === 204) return null;
         return res.json();

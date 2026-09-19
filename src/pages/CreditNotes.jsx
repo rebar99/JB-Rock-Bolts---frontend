@@ -240,7 +240,9 @@ function CreditNoteForm({ saleType, editing, onClose }) {
             sale_type: saleType,
             ...(!manualEntry && (saleType === "PO" ? { sale_id: selectedSaleId } : { wo_sale_id: selectedSaleId })),
             invoice_number: manualEntry ? manualInvoice.invoice_number : selectedSale?.invoice_number,
-            invoice_date: manualEntry ? manualInvoice.invoice_date : selectedSale?.invoice_date,
+            // Do not send an empty string: FastAPI correctly rejects "" as
+            // a date. A historical invoice date is optional.
+            invoice_date: (manualEntry ? manualInvoice.invoice_date : selectedSale?.invoice_date) || undefined,
             po_number: manualEntry ? manualInvoice.po_number : (selectedSale?.po_number || selectedSale?.wo_number),
             client_name: manualEntry ? manualInvoice.client_name : (selectedSale?.client_name || ""),
             project: manualEntry ? manualInvoice.project : selectedSale?.project,
