@@ -142,6 +142,7 @@ function CreditNoteForm({ saleType, editing, onClose }) {
     const [creditNoteNumber, setCreditNoteNumber] = useState(editing?.cn_number || "");
     const [manualInvoice, setManualInvoice] = useState({
         invoice_number: editing?.invoice_number || "",
+        invoice_date: editing?.invoice_date || "",
         po_number: editing?.po_number || "",
         client_name: editing?.client_name || "",
         project: editing?.project || "",
@@ -239,6 +240,7 @@ function CreditNoteForm({ saleType, editing, onClose }) {
             sale_type: saleType,
             ...(!manualEntry && (saleType === "PO" ? { sale_id: selectedSaleId } : { wo_sale_id: selectedSaleId })),
             invoice_number: manualEntry ? manualInvoice.invoice_number : selectedSale?.invoice_number,
+            invoice_date: manualEntry ? manualInvoice.invoice_date : selectedSale?.invoice_date,
             po_number: manualEntry ? manualInvoice.po_number : (selectedSale?.po_number || selectedSale?.wo_number),
             client_name: manualEntry ? manualInvoice.client_name : (selectedSale?.client_name || ""),
             project: manualEntry ? manualInvoice.project : selectedSale?.project,
@@ -314,10 +316,10 @@ function CreditNoteForm({ saleType, editing, onClose }) {
                     </div>
                 )}
                 </> : <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                    {[["invoice_number", "Invoice Number *"], ["cn_number", "Credit Note Number"], ["po_number", saleType === "PO" ? "PO Number" : "WO Number"], ["client_name", "Client Name *"], ["project", "Project / Site"]].map(([field, label]) => (
+                    {[["invoice_number", "Invoice Number *"], ["invoice_date", "Invoice Date"], ["cn_number", "Credit Note Number"], ["po_number", saleType === "PO" ? "PO Number" : "WO Number"], ["client_name", "Client Name *"], ["project", "Project / Site"]].map(([field, label]) => (
                         <div key={field}>
                             <label className="text-sm font-medium mb-1 block">{label}</label>
-                            <Input value={field === "cn_number" ? creditNoteNumber : manualInvoice[field]} onChange={e => field === "cn_number" ? setCreditNoteNumber(e.target.value) : setManualInvoice(prev => ({ ...prev, [field]: e.target.value }))} placeholder={field === "cn_number" ? "Auto-generated if blank" : undefined} />
+                            <Input type={field === "invoice_date" ? "date" : "text"} value={field === "cn_number" ? creditNoteNumber : manualInvoice[field]} onChange={e => field === "cn_number" ? setCreditNoteNumber(e.target.value) : setManualInvoice(prev => ({ ...prev, [field]: e.target.value }))} placeholder={field === "cn_number" ? "Auto-generated if blank" : undefined} />
                         </div>
                     ))}
                     <p className="md:col-span-2 text-xs text-muted-foreground">Historical invoice details system se fetch nahi hongi.</p>
