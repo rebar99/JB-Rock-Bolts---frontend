@@ -17,6 +17,11 @@ import { ItemCombobox } from "@/components/ItemCombobox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { useSortableRows } from "@/hooks/useSortableRows";
+import { useResizableColumns } from "@/hooks/useResizableColumns";
+import { SortableHeader } from "@/components/SortableHeader";
+import { FilterableHeader } from "@/components/FilterableHeader";
+import { useColumnFilters } from "@/hooks/useColumnFilters";
 import { Plus, Eye, Pencil, Trash2, Search, FileText, Info, Printer, ClipboardList } from "lucide-react";
 
 const REASONS = [
@@ -112,6 +117,22 @@ const printCreditNote = (cn) => {
     printWindow.document.close();
     printWindow.focus();
     printWindow.print();
+};
+
+const CREDIT_NOTE_TABLE_WIDTHS = {
+    cn_number: 110, cn_date: 120, invoice_number: 130, client_name: 220,
+    po_number: 140, reason: 170, total_amount: 130, status: 110, actions: 150,
+};
+
+const CREDIT_NOTE_COLUMN_ACCESSORS = {
+    cn_number: cn => cn.cn_number || "",
+    cn_date: cn => cn.cn_date || "",
+    invoice_number: cn => cn.invoice_number || "",
+    client_name: cn => cn.client_name || "",
+    po_number: cn => cn.po_number || "",
+    reason: cn => cn.reason || "",
+    total_amount: cn => cn.total_amount ?? 0,
+    status: cn => cn.status || "",
 };
 
 function ReasonHint({ reason }) {
@@ -603,6 +624,7 @@ function CNTabPanel({ saleType }) {
     const [formOpen, setFormOpen] = useState(false);
     const [viewCN, setViewCN] = useState(null);
     const [editCN, setEditCN] = useState(null);
+    const { filters: columnFilters, setFilter: setColumnFilter } = useColumnFilters();
 
     const { data: creditNotes = [], isLoading } = useQuery({
         queryKey: ["credit-notes", saleType],
@@ -625,6 +647,13 @@ function CNTabPanel({ saleType }) {
             (cn.reason || "").toLowerCase().includes(s)
         );
     }, [creditNotes, searchText]);
+    const columnFiltered = useMemo(() => filtered.filter(cn => Object.entries(columnFilters).every(([key, allowed]) => {
+        const value = CREDIT_NOTE_COLUMN_ACCESSORS[key]?.(cn);
+        return !allowed || allowed.has(value == null || value === "" ? "—" : String(value));
+    })), [filtered, columnFilters]);
+    const { widths, startResize } = useResizableColumns(`colw:credit-notes-${saleType.toLowerCase()}`, CREDIT_NOTE_TABLE_WIDTHS);
+    const { sortedRows, sortConfig, setSort } = useSortableRows(columnFiltered);
+    const tableWidth = Object.values(widths).reduce((total, width) => total + width, 0);
 
     return (
         <div className="space-y-4">
@@ -647,29 +676,46 @@ function CNTabPanel({ saleType }) {
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
+                        <table style={{ width: tableWidth }} className="table-fixed text-sm">
+                            <colgroup>
+                                <col style={{ width: widths.cn_number }} />
+                                <col style={{ width: widths.cn_date }} />
+                                <col style={{ width: widths.invoice_number }} />
+                                <col style={{ width: widths.client_name }} />
+                                <col style={{ width: widths.po_number }} />
+                                <col style={{ width: widths.reason }} />
+                                <col style={{ width: widths.total_amount }} />
+                                <col style={{ width: widths.status }} />
+                                <col style={{ width: widths.actions }} />
+                            </colgroup>
                             <thead className="bg-muted/50 border-b border-border">
                                 <tr>
-                                    {["CN No.", "Date", "Invoice", "Client", saleType === "PO" ? "PO No." : "WO No.", "Reason", "Amount", "Status", "Actions"].map(h => (
-                                        <th key={h} className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">{h}</th>
-                                    ))}
+                                    <FilterableHeader label="CN No." columnKey="cn_number" accessor={CREDIT_NOTE_COLUMN_ACCESSORS.cn_number} sortConfig={sortConfig} setSort={setSort} width={widths.cn_number} onResizeStart={startResize("cn_number")} rows={filtered} filterValue={columnFilters.cn_number} onApplyFilter={setColumnFilter} />
+                                    <FilterableHeader label="Date" columnKey="cn_date" accessor={CREDIT_NOTE_COLUMN_ACCESSORS.cn_date} type="date" sortConfig={sortConfig} setSort={setSort} width={widths.cn_date} onResizeStart={startResize("cn_date")} rows={filtered} filterValue={columnFilters.cn_date} onApplyFilter={setColumnFilter} />
+                                    <FilterableHeader label="Invoice" columnKey="invoice_number" accessor={CREDIT_NOTE_COLUMN_ACCESSORS.invoice_number} sortConfig={sortConfig} setSort={setSort} width={widths.invoice_number} onResizeStart={startResize("invoice_number")} rows={filtered} filterValue={columnFilters.invoice_number} onApplyFilter={setColumnFilter} />
+                                    <FilterableHeader label="Client" columnKey="client_name" accessor={CREDIT_NOTE_COLUMN_ACCESSORS.client_name} sortConfig={sortConfig} setSort={setSort} width={widths.client_name} onResizeStart={startResize("client_name")} rows={filtered} filterValue={columnFilters.client_name} onApplyFilter={setColumnFilter} />
+                                    <FilterableHeader label={saleType === "PO" ? "PO No." : "WO No."} columnKey="po_number" accessor={CREDIT_NOTE_COLUMN_ACCESSORS.po_number} sortConfig={sortConfig} setSort={setSort} width={widths.po_number} onResizeStart={startResize("po_number")} rows={filtered} filterValue={columnFilters.po_number} onApplyFilter={setColumnFilter} />
+                                    <FilterableHeader label="Reason" columnKey="reason" accessor={CREDIT_NOTE_COLUMN_ACCESSORS.reason} sortConfig={sortConfig} setSort={setSort} width={widths.reason} onResizeStart={startResize("reason")} rows={filtered} filterValue={columnFilters.reason} onApplyFilter={setColumnFilter} />
+                                    <FilterableHeader label="Amount" columnKey="total_amount" accessor={CREDIT_NOTE_COLUMN_ACCESSORS.total_amount} type="number" sortConfig={sortConfig} setSort={setSort} width={widths.total_amount} onResizeStart={startResize("total_amount")} rows={filtered} filterValue={columnFilters.total_amount} onApplyFilter={setColumnFilter} />
+                                    <FilterableHeader label="Status" columnKey="status" accessor={CREDIT_NOTE_COLUMN_ACCESSORS.status} sortConfig={sortConfig} setSort={setSort} width={widths.status} onResizeStart={startResize("status")} rows={filtered} filterValue={columnFilters.status} onApplyFilter={setColumnFilter} />
+                                    <SortableHeader label="Actions" width={widths.actions} onResizeStart={startResize("actions")} />
                                 </tr>
                             </thead>
                             <tbody>
-                                {filtered.map(cn => (
+                                {sortedRows.map(cn => (
                                     <tr key={cn.id} className="border-t border-border hover:bg-muted/20 transition-colors">
-                                        <td className="px-4 py-3 font-mono text-xs font-semibold text-primary">{cn.cn_number}</td>
-                                        <td className="px-4 py-3 text-muted-foreground text-xs">{fmtDate(cn.cn_date)}</td>
-                                        <td className="px-4 py-3 font-mono text-xs">{cn.invoice_number || "—"}</td>
-                                        <td className="px-4 py-3 truncate max-w-[140px] text-xs" title={cn.client_name}>{cn.client_name}</td>
-                                        <td className="px-4 py-3 text-xs">{cn.po_number || "—"}</td>
-                                        <td className="px-4 py-3"><span className="text-xs bg-muted px-2 py-0.5 rounded whitespace-nowrap">{cn.reason}</span></td>
-                                        <td className="px-4 py-3 font-semibold text-primary text-xs">{inr(cn.total_amount)}</td>
-                                        <td className="px-4 py-3">
+                                        <td style={{ width: widths.cn_number }} className="px-4 py-3 truncate text-center font-mono text-xs font-semibold text-primary">{cn.cn_number}</td>
+                                        <td style={{ width: widths.cn_date }} className="px-4 py-3 truncate text-center text-muted-foreground text-xs">{fmtDate(cn.cn_date)}</td>
+                                        <td style={{ width: widths.invoice_number }} className="px-4 py-3 truncate text-center font-mono text-xs">{cn.invoice_number || "—"}</td>
+                                        <td style={{ width: widths.client_name }} className="px-4 py-3 truncate text-center text-xs" title={cn.client_name}>{cn.client_name}</td>
+                                        <td style={{ width: widths.po_number }} className="px-4 py-3 truncate text-center text-xs">{cn.po_number || "—"}</td>
+                                        <td style={{ width: widths.reason }} className="px-4 py-3 truncate text-center"><span className="text-xs bg-muted px-2 py-0.5 rounded whitespace-nowrap">{cn.reason}</span></td>
+                                        <td style={{ width: widths.total_amount }} className="px-4 py-3 truncate text-center font-semibold text-primary text-xs">{inr(cn.total_amount)}</td>
+                                        <td style={{ width: widths.status }} className="px-4 py-3 truncate text-center">
                                             <span className={`text-xs border px-2 py-0.5 rounded-full font-medium ${STATUS_BADGE[cn.status] || "bg-muted"}`}>{cn.status}</span>
                                         </td>
-                                        <td className="px-4 py-3">
-                                            <div className="flex items-center gap-1">
+                                        <td style={{ width: widths.actions }} className="px-4 py-3">
+                                            <div className="flex items-center justify-center gap-1">
                                                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setViewCN(cn)} title="View"><Eye className="h-3.5 w-3.5" /></Button>
                                                 <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => printCreditNote(cn)} title="Print"><Printer className="h-3.5 w-3.5" /></Button>
                                                 {isAdmin && cn.status !== "Cancelled" && (
