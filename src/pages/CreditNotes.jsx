@@ -139,6 +139,7 @@ function CreditNoteForm({ saleType, editing, onClose }) {
 
     const [selectedSaleId, setSelectedSaleId] = useState(editing?.sale_id || editing?.wo_sale_id || null);
     const [manualEntry, setManualEntry] = useState(Boolean(editing && !(editing.sale_id || editing.wo_sale_id)));
+    const [creditNoteNumber, setCreditNoteNumber] = useState(editing?.cn_number || "");
     const [manualInvoice, setManualInvoice] = useState({
         invoice_number: editing?.invoice_number || "",
         po_number: editing?.po_number || "",
@@ -234,6 +235,7 @@ function CreditNoteForm({ saleType, editing, onClose }) {
 
         save({
             cn_date: cnDate,
+            cn_number: creditNoteNumber || undefined,
             sale_type: saleType,
             ...(!manualEntry && (saleType === "PO" ? { sale_id: selectedSaleId } : { wo_sale_id: selectedSaleId })),
             invoice_number: manualEntry ? manualInvoice.invoice_number : selectedSale?.invoice_number,
@@ -312,13 +314,13 @@ function CreditNoteForm({ saleType, editing, onClose }) {
                     </div>
                 )}
                 </> : <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                    {[["invoice_number", "Invoice Number *"], ["po_number", saleType === "PO" ? "PO Number" : "WO Number"], ["client_name", "Client Name *"], ["project", "Project / Site"]].map(([field, label]) => (
+                    {[["invoice_number", "Invoice Number *"], ["cn_number", "Credit Note Number"], ["po_number", saleType === "PO" ? "PO Number" : "WO Number"], ["client_name", "Client Name *"], ["project", "Project / Site"]].map(([field, label]) => (
                         <div key={field}>
                             <label className="text-sm font-medium mb-1 block">{label}</label>
-                            <Input value={manualInvoice[field]} onChange={e => setManualInvoice(prev => ({ ...prev, [field]: e.target.value }))} />
+                            <Input value={field === "cn_number" ? creditNoteNumber : manualInvoice[field]} onChange={e => field === "cn_number" ? setCreditNoteNumber(e.target.value) : setManualInvoice(prev => ({ ...prev, [field]: e.target.value }))} placeholder={field === "cn_number" ? "Auto-generated if blank" : undefined} />
                         </div>
                     ))}
-                    <p className="md:col-span-2 text-xs text-muted-foreground">Historical invoice details are entered here and are not fetched from the system.</p>
+                    <p className="md:col-span-2 text-xs text-muted-foreground">Historical invoice details system se fetch nahi hongi.</p>
                 </div>}
             </div>
 
@@ -326,6 +328,10 @@ function CreditNoteForm({ saleType, editing, onClose }) {
             <div className="rounded-lg border border-border p-4 space-y-3">
                 <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Step 2 &mdash; Credit Note Details</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {!manualEntry && <div>
+                        <label className="text-sm font-medium mb-1 block">Credit Note Number</label>
+                        <Input value={creditNoteNumber} onChange={e => setCreditNoteNumber(e.target.value)} placeholder="Auto-generated if blank" />
+                    </div>}
                     <div>
                         <label className="text-sm font-medium mb-1 block">Credit Note Date <span className="text-destructive">*</span></label>
                         <Input type="date" value={cnDate} onChange={e => setCnDate(e.target.value)} />
