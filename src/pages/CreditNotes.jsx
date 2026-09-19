@@ -138,6 +138,13 @@ function CreditNoteForm({ saleType, editing, onClose }) {
     const invoiceList = saleType === "PO" ? poSales : woSales;
 
     const [selectedSaleId, setSelectedSaleId] = useState(editing?.sale_id || editing?.wo_sale_id || null);
+    const [manualEntry, setManualEntry] = useState(Boolean(editing && !(editing.sale_id || editing.wo_sale_id)));
+    const [manualInvoice, setManualInvoice] = useState({
+        invoice_number: editing?.invoice_number || "",
+        po_number: editing?.po_number || "",
+        client_name: editing?.client_name || "",
+        project: editing?.project || "",
+    });
     const [cnDate, setCnDate] = useState(editing?.cn_date || today());
     const [reason, setReason] = useState(editing?.reason || "");
     const [items, setItems] = useState(editing?.items?.map(it => ({ ...it, source_item: it.item })) || []);
@@ -182,23 +189,32 @@ function CreditNoteForm({ saleType, editing, onClose }) {
     const updateItem = (idx, field, value) => {
         setItems(prev => {
             const next = [...prev];
-            const itemValue = field === "item" ? value : (value === "" ? 0 : (parseFloat(value) || 0));
+            const itemValue = ["item", "uom"].includes(field) ? value : (value === "" ? 0 : (parseFloat(value) || 0));
             next[idx] = calcItem({ ...next[idx], [field]: itemValue });
             return next;
         });
     };
 
     const totals = useMemo(() => {
-        const taxable = items.reduce((s, it) => s + (it.subtotal || 0), 0);
-        const gst = items.reduce((s, it) => s + (it.gst_amount || 0), 0);
+        // Positive Quantity Less input means a reduction; Quantity Excess
+        // means an increase. Other reasons honour a manually typed +/- sign.
+        const signedQty = (q) => reason === "Quantity Less" ? -Math.abs(q) : reason === "Quantity Excess" ? Math.abs(q) : q;
+        const taxable = items.reduce((s, it) => s + signedQty(parseFloat(it.credit_qty || 0)) * parseFloat(it.unit_price || 0), 0);
+        const gst = items.reduce((s, it) => {
+            const sub = signedQty(parseFloat(it.credit_qty || 0)) * parseFloat(it.unit_price || 0);
+            return s + sub * parseFloat(it.gst_rate || 0) / 100;
+        }, 0);
         return { taxable, gst, total: taxable + gst };
-    }, [items]);
+    }, [items, reason]);
 
     const { mutate: save, isPending } = useMutation({
         mutationFn: (data) => editing ? updateCreditNote(editing.id, data) : createCreditNote(data),
         onSuccess: (cn) => {
             qc.invalidateQueries({ queryKey: ["credit-notes"] });
             qc.invalidateQueries({ queryKey: ["credit-notes-by-sale"] });
+            qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
+            qc.invalidateQueries({ queryKey: ["report"] });
+            qc.invalidateQueries({ queryKey: ["workOrderSalesReport"] });
             toast.success(editing ? "Credit Note updated" : `Credit Note ${cn.cn_number} created`);
             onClose();
         },
@@ -206,7 +222,8 @@ function CreditNoteForm({ saleType, editing, onClose }) {
     });
 
     const handleSubmit = () => {
-        if (!selectedSaleId) return toast.error("Please select an invoice");
+        if (!manualEntry && !selectedSaleId) return toast.error("Please select an invoice");
+        if (manualEntry && (!manualInvoice.invoice_number.trim() || !manualInvoice.client_name.trim())) return toast.error("Manual invoice number and client name are required");
         if (!reason) return toast.error("Please select a reason");
         const activeItems = cfg.showItems
             ? items
@@ -218,11 +235,11 @@ function CreditNoteForm({ saleType, editing, onClose }) {
         save({
             cn_date: cnDate,
             sale_type: saleType,
-            ...(saleType === "PO" ? { sale_id: selectedSaleId } : { wo_sale_id: selectedSaleId }),
-            invoice_number: selectedSale?.invoice_number,
-            po_number: selectedSale?.po_number || selectedSale?.wo_number,
-            client_name: selectedSale?.client_name || "",
-            project: selectedSale?.project,
+            ...(!manualEntry && (saleType === "PO" ? { sale_id: selectedSaleId } : { wo_sale_id: selectedSaleId })),
+            invoice_number: manualEntry ? manualInvoice.invoice_number : selectedSale?.invoice_number,
+            po_number: manualEntry ? manualInvoice.po_number : (selectedSale?.po_number || selectedSale?.wo_number),
+            client_name: manualEntry ? manualInvoice.client_name : (selectedSale?.client_name || ""),
+            project: manualEntry ? manualInvoice.project : selectedSale?.project,
             reason,
             taxable_amount: cfg.showItems ? totals.taxable : 0,
             gst_amount: cfg.showItems ? totals.gst : 0,
@@ -253,7 +270,12 @@ function CreditNoteForm({ saleType, editing, onClose }) {
 
             {/* STEP 1 - Invoice */}
             <div className="rounded-lg border border-border p-4 space-y-3">
-                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Step 1 &mdash; Select Invoice</h4>
+                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Step 1 &mdash; Invoice</h4>
+                {!editing && <div className="flex gap-2">
+                    <Button type="button" variant={!manualEntry ? "default" : "outline"} size="sm" onClick={() => setManualEntry(false)}>Select Invoice</Button>
+                    <Button type="button" variant={manualEntry ? "default" : "outline"} size="sm" onClick={() => { setManualEntry(true); setSelectedSaleId(null); setItems([]); }}>Manual Invoice Entry</Button>
+                </div>}
+                {!manualEntry ? <>
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input className="pl-9" placeholder="Search invoice / client / PO..." value={search} onChange={e => setSearch(e.target.value)} />
@@ -289,6 +311,15 @@ function CreditNoteForm({ saleType, editing, onClose }) {
                         ))}
                     </div>
                 )}
+                </> : <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                    {[["invoice_number", "Invoice Number *"], ["po_number", saleType === "PO" ? "PO Number" : "WO Number"], ["client_name", "Client Name *"], ["project", "Project / Site"]].map(([field, label]) => (
+                        <div key={field}>
+                            <label className="text-sm font-medium mb-1 block">{label}</label>
+                            <Input value={manualInvoice[field]} onChange={e => setManualInvoice(prev => ({ ...prev, [field]: e.target.value }))} />
+                        </div>
+                    ))}
+                    <p className="md:col-span-2 text-xs text-muted-foreground">Historical invoice details are entered here and are not fetched from the system.</p>
+                </div>}
             </div>
 
             {/* STEP 2 - Date + Reason */}
@@ -335,18 +366,25 @@ function CreditNoteForm({ saleType, editing, onClose }) {
                     )}
 
                     {/* Items table */}
-                    {cfg.showItems && items.length > 0 && (
+                    {cfg.showItems && (items.length > 0 || manualEntry) && (
+                        <>
+                        {manualEntry && <Button type="button" variant="outline" size="sm" onClick={() => setItems(prev => [...prev, calcItem({ item: "", uom: "Nos", original_qty: 0, credit_qty: 0, unit_price: 0, gst_rate: 0 })])}>Add invoice item</Button>}
                         <div className="overflow-x-auto rounded-lg border border-border">
                             <table className="w-full text-sm min-w-[700px]">
                                 <thead className="bg-muted/50">
                                     <tr>
                                         <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Product</th>
                                         <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">UOM</th>
-                                        <th className="px-3 py-2 text-center text-xs font-medium text-muted-foreground">Orig Qty</th>
-                                        <th className="px-3 py-2 text-center text-xs font-medium text-muted-foreground">Credited</th>
-                                        <th className="px-3 py-2 text-center text-xs font-medium text-muted-foreground">Remaining</th>
-                                        <th className="px-3 py-2 text-center text-xs font-medium text-muted-foreground">Credit Qty</th>
-                                        {cfg.rateEditable ? (
+                                        {!manualEntry && <>
+                                            <th className="px-3 py-2 text-center text-xs font-medium text-muted-foreground">Orig Qty</th>
+                                            <th className="px-3 py-2 text-center text-xs font-medium text-muted-foreground">Credited</th>
+                                            <th className="px-3 py-2 text-center text-xs font-medium text-muted-foreground">Remaining</th>
+                                        </>}
+                                        {manualEntry && <th className="px-3 py-2 text-center text-xs font-medium text-muted-foreground">Invoice Qty</th>}
+                                        <th className="px-3 py-2 text-center text-xs font-medium text-muted-foreground">Adjustment Qty</th>
+                                        {manualEntry ? (
+                                            <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Rate</th>
+                                        ) : cfg.rateEditable ? (
                                             <>
                                                 <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Orig Rate</th>
                                                 <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Credit Rate</th>
@@ -354,7 +392,9 @@ function CreditNoteForm({ saleType, editing, onClose }) {
                                         ) : (
                                             <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Rate</th>
                                         )}
-                                        {cfg.gstEditable ? (
+                                        {manualEntry ? (
+                                            <th className="px-3 py-2 text-center text-xs font-medium text-muted-foreground">GST%</th>
+                                        ) : cfg.gstEditable ? (
                                             <>
                                                 <th className="px-3 py-2 text-center text-xs font-medium text-muted-foreground">Orig GST%</th>
                                                 <th className="px-3 py-2 text-center text-xs font-medium text-muted-foreground">Credit GST%</th>
@@ -365,16 +405,22 @@ function CreditNoteForm({ saleType, editing, onClose }) {
                                         <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Taxable</th>
                                         <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">GST Amt</th>
                                         <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Total</th>
+                                        {manualEntry && <th className="px-3 py-2 text-center text-xs font-medium text-muted-foreground">Action</th>}
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {items.map((it, idx) => {
                                         const alrCredited = creditedMap[it.source_item || it.item] || 0;
                                         const remaining = Math.max(0, it.original_qty - alrCredited);
+                                        const rawQty = parseFloat(it.credit_qty || 0);
+                                        const adjustmentQty = reason === "Quantity Less" ? -Math.abs(rawQty) : reason === "Quantity Excess" ? Math.abs(rawQty) : rawQty;
+                                        const taxable = adjustmentQty * parseFloat(it.unit_price || 0);
+                                        const gstAmount = taxable * parseFloat(it.gst_rate || 0) / 100;
+                                        const totalAmount = taxable + gstAmount;
                                         return (
                                             <tr key={idx} className="border-t border-border hover:bg-muted/20">
                                                 <td className="px-3 py-2 text-xs font-medium max-w-[180px]" title={it.item}>
-                                                    {cfg.productEditable ? (
+                                                    {(cfg.productEditable || manualEntry) ? (
                                                         <ItemCombobox
                                                             value={it.item}
                                                             onChange={value => updateItem(idx, "item", value)}
@@ -386,16 +432,22 @@ function CreditNoteForm({ saleType, editing, onClose }) {
                                                         <span className="block truncate">{it.item}</span>
                                                     )}
                                                 </td>
-                                                <td className="px-3 py-2 text-xs text-muted-foreground">{it.uom}</td>
-                                                <td className="px-3 py-2 text-xs text-center">{it.original_qty}</td>
-                                                <td className="px-3 py-2 text-xs text-center text-amber-600 font-medium">{alrCredited}</td>
-                                                <td className="px-3 py-2 text-xs text-center text-blue-600 font-semibold">{remaining}</td>
+                                                <td className="px-3 py-2 text-xs text-muted-foreground">{manualEntry ? <Input value={it.uom || ""} onChange={e => updateItem(idx, "uom", e.target.value)} className="w-16 h-7 text-xs" /> : it.uom}</td>
+                                                {manualEntry ? (
+                                                    <td className="px-3 py-2 text-xs text-center"><Input type="number" value={it.original_qty || ""} onChange={e => updateItem(idx, "original_qty", e.target.value)} className="w-20 h-7 text-xs" /></td>
+                                                ) : <>
+                                                    <td className="px-3 py-2 text-xs text-center">{it.original_qty}</td>
+                                                    <td className="px-3 py-2 text-xs text-center text-amber-600 font-medium">{alrCredited}</td>
+                                                    <td className="px-3 py-2 text-xs text-center text-blue-600 font-semibold">{remaining}</td>
+                                                </>}
                                                 <td className="px-3 py-2">
                                                     <Input type="number" value={it.credit_qty || ""}
                                                         onChange={e => updateItem(idx, "credit_qty", e.target.value)}
                                                         className="w-20 h-7 text-xs" />
                                                 </td>
-                                                {cfg.rateEditable ? (
+                                                {manualEntry ? (
+                                                    <td className="px-3 py-2"><Input type="number" min={0} value={it.unit_price || ""} onChange={e => updateItem(idx, "unit_price", e.target.value)} className="w-24 h-7 text-xs" /></td>
+                                                ) : cfg.rateEditable ? (
                                                     <>
                                                         <td className="px-3 py-2 text-xs text-right text-muted-foreground line-through">{inr(it.original_unit_price)}</td>
                                                         <td className="px-3 py-2">
@@ -407,7 +459,9 @@ function CreditNoteForm({ saleType, editing, onClose }) {
                                                 ) : (
                                                     <td className="px-3 py-2 text-xs text-right">{inr(it.unit_price)}</td>
                                                 )}
-                                                {cfg.gstEditable ? (
+                                                {manualEntry ? (
+                                                    <td className="px-3 py-2"><Input type="number" min={0} max={100} value={it.gst_rate || ""} onChange={e => updateItem(idx, "gst_rate", e.target.value)} className="w-16 h-7 text-xs" /></td>
+                                                ) : cfg.gstEditable ? (
                                                     <>
                                                         <td className="px-3 py-2 text-xs text-center text-muted-foreground line-through">{it.original_gst_rate}%</td>
                                                         <td className="px-3 py-2">
@@ -419,15 +473,21 @@ function CreditNoteForm({ saleType, editing, onClose }) {
                                                 ) : (
                                                     <td className="px-3 py-2 text-xs text-center">{it.gst_rate}%</td>
                                                 )}
-                                                <td className="px-3 py-2 text-xs text-right">{inr(it.subtotal)}</td>
-                                                <td className="px-3 py-2 text-xs text-right">{inr(it.gst_amount)}</td>
-                                                <td className="px-3 py-2 text-xs text-right font-semibold text-primary">{inr(it.total_amount)}</td>
+                                                <td className="px-3 py-2 text-xs text-right">{inr(taxable)}</td>
+                                                <td className="px-3 py-2 text-xs text-right">{inr(gstAmount)}</td>
+                                                <td className="px-3 py-2 text-xs text-right font-semibold text-primary">{inr(totalAmount)}</td>
+                                                {manualEntry && <td className="px-3 py-2 text-center">
+                                                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" title="Remove item" onClick={() => setItems(prev => prev.filter((_, itemIndex) => itemIndex !== idx))}>
+                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                    </Button>
+                                                </td>}
                                             </tr>
                                         );
                                     })}
                                 </tbody>
                             </table>
                         </div>
+                        </>
                     )}
 
                     {/* Note / Remark */}
@@ -441,7 +501,7 @@ function CreditNoteForm({ saleType, editing, onClose }) {
                     </div>
 
                     {/* Summary */}
-                    {cfg.showItems && totals.total > 0 && (
+                    {cfg.showItems && items.length > 0 && (
                         <div className="flex justify-end">
                             <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 min-w-[240px] space-y-1.5 text-sm">
                                 <div className="flex justify-between"><span className="text-muted-foreground">Taxable Amount</span><span className="font-medium">{inr(totals.taxable)}</span></div>
@@ -541,7 +601,7 @@ function CNTabPanel({ saleType }) {
 
     const { mutate: doCancel } = useMutation({
         mutationFn: (id) => cancelCreditNote(id),
-        onSuccess: () => { qc.invalidateQueries({ queryKey: ["credit-notes"] }); toast.success("Credit Note cancelled"); },
+        onSuccess: () => { qc.invalidateQueries({ queryKey: ["credit-notes"] }); qc.invalidateQueries({ queryKey: ["dashboard-stats"] }); qc.invalidateQueries({ queryKey: ["report"] }); qc.invalidateQueries({ queryKey: ["workOrderSalesReport"] }); toast.success("Credit Note cancelled"); },
         onError: (e) => toast.error(e.message),
     });
 

@@ -191,7 +191,7 @@ const Dashboard = () => {
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                    <h2 className="text-2xl font-bold tracking-tight text-foreground">Dashboard Overview</h2>
+                    <h2 className="text-2xl font-bold tracking-tight text-foreground">Dashboard Overview (Supply &amp; Job Work)</h2>
                     <p className="text-sm text-muted-foreground mt-1">Track sales performance, orders and client insights.</p>
                 </div>
                 <div className="flex items-center bg-muted/50 p-1 rounded-lg">
