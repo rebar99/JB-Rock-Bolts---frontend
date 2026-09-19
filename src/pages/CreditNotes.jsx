@@ -629,9 +629,9 @@ function CNTabPanel({ saleType }) {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input className="pl-9" placeholder="Search CN No, client, invoice..." value={searchText} onChange={e => setSearchText(e.target.value)} />
                 </div>
-                <Button onClick={() => { setEditCN(null); setFormOpen(true); }} className="shrink-0">
+                {isAdmin && <Button onClick={() => { setEditCN(null); setFormOpen(true); }} className="shrink-0">
                     <Plus className="h-4 w-4 mr-2" />Add New Credit Note
-                </Button>
+                </Button>}
             </div>
 
             <Card className="overflow-hidden">
