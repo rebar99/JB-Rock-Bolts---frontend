@@ -1,0 +1,13 @@
+
+> marketing_ui@0.0.0 build
+> vite build
+
+vite v5.4.21 building for production...
+transforming...
+✓ 2571 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                     1.27 kB │ gzip:   0.50 kB
+dist/assets/index-DLjy8_LR.css     93.14 kB │ gzip:  15.83 kB
+dist/assets/index-C6pR8o5N.js   1,403.69 kB │ gzip: 364.11 kB
+✓ built in 12.00s

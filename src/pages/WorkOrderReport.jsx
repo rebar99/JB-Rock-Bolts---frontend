@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -86,6 +87,7 @@ const applyColumnFilters = (rows, filters, accessors) => {
 };
 
 const WorkOrderReport = () => {
+    const [searchParams] = useSearchParams();
     const [search, setSearch] = useState("");
     const queryClient = useQueryClient();
     const importInputRef = useRef(null);
@@ -108,7 +110,7 @@ const WorkOrderReport = () => {
         );
     }, [allRows, search]);
 
-    const [tab, setTab] = useState("completed");
+    const [tab, setTab] = useState(() => ["completed", "pending", "sales"].includes(searchParams.get("tab")) ? searchParams.get("tab") : "completed");
     const [completedUomTab, setCompletedUomTab] = useState("all");
     const [pendingUomTab, setPendingUomTab] = useState("all");
 

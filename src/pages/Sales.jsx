@@ -1,11 +1,13 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { FileText, ClipboardList } from "lucide-react";
 import SalesInvoice from "@/pages/SalesInvoice";
 import WorkOrderSales from "@/pages/WorkOrderSales";
 
 const Sales = () => {
-    const [tab, setTab] = useState("po");
+    const [searchParams] = useSearchParams();
+    const [tab, setTab] = useState(searchParams.get("tab") === "wo" ? "wo" : "po");
 
     return (
         <Tabs value={tab} onValueChange={setTab} className="w-full">

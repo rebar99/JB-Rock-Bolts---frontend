@@ -3,10 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { StatusBadge } from "@/components/StatusBadge";
 import { inr, fmtDate } from "@/lib/format";
-import { fetchDashboardStats, fetchDashboardCharts, fetchRecentSales, fetchDashboardClients, fetchMonthlyProductSales, fetchPurchaseOrders } from "@/lib/api";
+import { fetchDashboardStats, fetchDashboardCharts, fetchRecentSales, fetchDashboardClients, fetchMonthlyProductSales } from "@/lib/api";
 import {
     Line, LineChart, CartesianGrid, Cell, LabelList, Legend,
     Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -15,12 +15,13 @@ import { ArrowUpRight, IndianRupee, Package, Users, Search, FileText, CheckCircl
 
 import { useNavigate } from "react-router-dom";
 
-const StatCard = ({ icon: Icon, label, value, delta, accent, onClick }) => (
+const StatCard = ({ icon: Icon, label, value, delta, detail, accent, onClick }) => (
     <Card className={`p-5 shadow-card hover:shadow-elegant transition-shadow border-border/60 ${onClick ? "cursor-pointer" : ""}`} onClick={onClick}>
         <div className="flex items-start justify-between">
             <div>
                 <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</div>
                 <div className="mt-2 text-2xl font-bold text-foreground tracking-tight">{value}</div>
+                {detail && <div className="mt-2 text-xs font-medium text-muted-foreground">{detail}</div>}
                 {delta && (
                     <div className="mt-1 inline-flex items-center gap-1 text-xs text-success font-medium">
                         <ArrowUpRight className="h-3.5 w-3.5" />{delta}
@@ -97,15 +98,6 @@ const Dashboard = () => {
         queryKey: ["dashboard-charts", selectedMonth, includeGst], 
         queryFn: () => fetchDashboardCharts(undefined, selectedMonth !== "all" ? Number(selectedMonth) : undefined, includeGst) 
     });
-    // Shares the same queryKey/queryFn as the Purchase Orders page's own
-    // full-list fetch, so react-query serves this from cache instead of a
-    // second network round-trip whenever both are visited in a session.
-    const { data: purchaseOrders = [] } = useQuery({ queryKey: ["purchase-orders"], queryFn: () => fetchPurchaseOrders({ limit: 100000 }) });
-    // Same split the Purchase Order Report's own tabs use: "Completed" is
-    // fully delivered, everything else (including short-closed) is what
-    // that report's "Pending POs" tab lists.
-    const completedPOCount = useMemo(() => purchaseOrders.filter((o) => o.delivery_status === "Delivered").length, [purchaseOrders]);
-    const pendingPOCount = purchaseOrders.length - completedPOCount;
     const { data: recent = [] } = useQuery({ queryKey: ["recent-sales", includeGst], queryFn: () => fetchRecentSales(100, includeGst) });
     // Grouped-bar Monthly Sales data — real Sale Invoice records only (no
     // dummy data), all 12 months always present, revenue broken down per
@@ -165,8 +157,6 @@ const Dashboard = () => {
         color: colorForProduct(i),
     }));
 
-    const goToSalesReport = () => navigate("/reports?tab=sales");
-
     // ── Total Clients dialog ─────────────────────────────────────────────────
     // Sourced from Purchase Orders only (GET /api/dashboard/clients) — the
     // same PurchaseOrder.client_name data the "Total Clients" count itself is
@@ -174,18 +164,21 @@ const Dashboard = () => {
     // the card, and never includes a Client record that has no PO (e.g. one
     // only used on a Work Order, or added but never actually ordered from).
     const [clientsOpen, setClientsOpen] = useState(false);
+    const [clientType, setClientType] = useState("PO");
     const [clientSearch, setClientSearch] = useState("");
     const { data: clientNames = [] } = useQuery({
         queryKey: ["dashboard-clients"],
         queryFn: fetchDashboardClients,
         enabled: clientsOpen,
     });
+    const clientNamesForType = clientType === "WO" ? (clientNames?.wo_clients || []) : (clientNames?.po_clients || []);
     const filteredClientNames = useMemo(() => {
         const s = clientSearch.trim().toLowerCase();
         const stripPrefix = (name) => name.replace(/^m\/s\.?\s*/i, "").trim();
-        const filtered = s ? clientNames.filter((c) => c.toLowerCase().includes(s)) : [...clientNames];
+        const filtered = s ? clientNamesForType.filter((c) => c.toLowerCase().includes(s)) : [...clientNamesForType];
         return filtered.sort((a, b) => stripPrefix(a).localeCompare(stripPrefix(b), undefined, { sensitivity: "base" }));
-    }, [clientNames, clientSearch]);
+    }, [clientNamesForType, clientSearch]);
+    const openClients = (type) => { setClientType(type); setClientSearch(""); setClientsOpen(true); };
 
     return (
         <div className="space-y-6">
@@ -211,31 +204,50 @@ const Dashboard = () => {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard onClick={goToSalesReport} icon={IndianRupee} label="Total Sales" value={inr(stats?.total_revenue ?? 0)} accent="bg-primary/10 text-primary" />
-                <StatCard onClick={goToSalesReport} icon={Package} label="Number of Invoice made" value={String(stats?.total_orders ?? 0)} accent="bg-accent/15 text-accent" />
-                <StatCard onClick={() => setClientsOpen(true)} icon={Users} label="Total Clients" value={String(stats?.total_clients ?? 0)} accent="bg-steel/15 text-steel" />
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild><div><StatCard onClick={() => {}} icon={IndianRupee} label="Total Sales (PO + WO + CN)" value={inr(stats?.total_revenue ?? 0)} accent="bg-primary/10 text-primary" /></div></DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                        <DropdownMenuItem onClick={() => navigate("/reports?section=po&tab=sales")}>PO Sales <span className="ml-auto pl-4 font-semibold">{inr(stats?.po_revenue ?? 0)}</span></DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => navigate("/reports?section=wo&tab=sales")}>WO Sales <span className="ml-auto pl-4 font-semibold">{inr(stats?.wo_revenue ?? 0)}</span></DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => navigate("/credit-notes")}>CN Adjustment <span className={`ml-auto pl-4 font-semibold ${(stats?.credit_note_adjustment ?? 0) < 0 ? "text-destructive" : "text-success"}`}>{inr(stats?.credit_note_adjustment ?? 0)}</span></DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild><div><StatCard onClick={() => {}} icon={Package} label="Number of Invoice Made (PO + WO)" value={String(stats?.total_orders ?? 0)} accent="bg-accent/15 text-accent" /></div></DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                        <DropdownMenuItem onClick={() => navigate("/reports?section=po&tab=sales")}>PO Invoices <span className="ml-auto pl-4 font-semibold">{stats?.po_invoice_count ?? 0}</span></DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => navigate("/reports?section=wo&tab=sales")}>WO Invoices <span className="ml-auto pl-4 font-semibold">{stats?.wo_invoice_count ?? 0}</span></DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild><div><StatCard onClick={() => {}} icon={Users} label="Total Clients (PO + WO)" value={String(stats?.total_clients ?? 0)} accent="bg-steel/15 text-steel" /></div></DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                        <DropdownMenuItem onClick={() => openClients("PO")}>PO Clients <span className="ml-auto pl-4 font-semibold">{stats?.po_client_count ?? 0}</span></DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => openClients("WO")}>WO Clients <span className="ml-auto pl-4 font-semibold">{stats?.wo_client_count ?? 0}</span></DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <div>
-                            <StatCard onClick={() => {}} icon={FileText} label="Total Purchase Order" value={String(purchaseOrders.length)} accent="bg-warning/15 text-warning" />
+                            <StatCard onClick={() => {}} icon={FileText} label="Total Orders (PO + WO)" value={String((stats?.po_order_count ?? 0) + (stats?.wo_order_count ?? 0))} accent="bg-warning/15 text-warning" />
                         </div>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start">
-                        <DropdownMenuItem onClick={() => navigate("/reports?tab=completed")}>
-                            <CheckCircle2 className="h-4 w-4 mr-2 text-success" /> Completed PO
-                            <span className="ml-auto pl-3 text-xs font-semibold text-muted-foreground">{completedPOCount}</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => navigate("/reports?tab=pending")}>
-                            <Clock className="h-4 w-4 mr-2 text-warning" /> Pending PO
-                            <span className="ml-auto pl-3 text-xs font-semibold text-muted-foreground">{pendingPOCount}</span>
-                        </DropdownMenuItem>
+                        <DropdownMenuSub><DropdownMenuSubTrigger><span className="mr-2">Purchase Orders</span><span className="mr-2 text-xs font-bold text-slate-900 dark:text-slate-100">{stats?.po_order_count ?? 0}</span></DropdownMenuSubTrigger><DropdownMenuSubContent>
+                            <DropdownMenuItem onClick={() => navigate("/reports?section=po&tab=completed")}><CheckCircle2 className="h-4 w-4 mr-2 text-success" /> Completed <span className="ml-auto pl-3 font-semibold">{stats?.completed_po_count ?? 0}</span></DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => navigate("/reports?section=po&tab=pending")}><Clock className="h-4 w-4 mr-2 text-warning" /> Pending <span className="ml-auto pl-3 font-semibold">{stats?.pending_po_count ?? 0}</span></DropdownMenuItem>
+                        </DropdownMenuSubContent></DropdownMenuSub>
+                        <DropdownMenuSub><DropdownMenuSubTrigger><span className="mr-2">Work Orders</span><span className="mr-2 text-xs font-bold text-slate-900 dark:text-slate-100">{stats?.wo_order_count ?? 0}</span></DropdownMenuSubTrigger><DropdownMenuSubContent>
+                            <DropdownMenuItem onClick={() => navigate("/reports?section=wo&tab=completed")}><CheckCircle2 className="h-4 w-4 mr-2 text-success" /> Completed <span className="ml-auto pl-3 font-semibold">{stats?.completed_wo_count ?? 0}</span></DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => navigate("/reports?section=wo&tab=pending")}><Clock className="h-4 w-4 mr-2 text-warning" /> Pending <span className="ml-auto pl-3 font-semibold">{stats?.pending_wo_count ?? 0}</span></DropdownMenuItem>
+                        </DropdownMenuSubContent></DropdownMenuSub>
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>
 
             <Dialog open={clientsOpen} onOpenChange={setClientsOpen}>
                 <DialogContent className="sm:max-w-md max-h-[80vh] flex flex-col">
-                    <DialogHeader><DialogTitle>Clients ({(clientNames || []).length})</DialogTitle></DialogHeader>
+                    <DialogHeader><DialogTitle>{clientType} Clients ({clientNamesForType.length})</DialogTitle></DialogHeader>
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input className="pl-9" placeholder="Search clients..." value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} />
@@ -359,7 +371,8 @@ const Dashboard = () => {
                                 <th className="text-left font-medium px-5 py-3 bg-muted/50">Date</th>
                                 <th className="text-left font-medium px-5 py-3 bg-muted/50">Client</th>
                                 <th className="text-left font-medium px-5 py-3 bg-muted/50">Product</th>
-                                <th className="text-left font-medium px-5 py-3 bg-muted/50">PO No.</th>
+                                <th className="text-left font-medium px-5 py-3 bg-muted/50">Type</th>
+                                <th className="text-left font-medium px-5 py-3 bg-muted/50">PO / WO No.</th>
                                 <th className="text-left font-medium px-5 py-3 bg-muted/50">Invoice No.</th>
                                 <th className="text-right font-medium px-5 py-3 bg-muted/50">Amount</th>
                                 <th className="text-left font-medium px-5 py-3 bg-muted/50">Delivery</th>
@@ -376,6 +389,7 @@ const Dashboard = () => {
                                     <td className="px-5 py-3 text-muted-foreground">
                                         <div className="max-w-[350px] truncate" title={r.product}>{r.product}</div>
                                     </td>
+                                    <td className="px-5 py-3 whitespace-nowrap"><span className={`rounded-full px-2 py-1 text-xs font-semibold ${r.sale_type === "WO" ? "bg-violet-100 text-violet-700" : "bg-blue-100 text-blue-700"}`}>{r.sale_type || "PO"}</span></td>
                                     <td className="px-5 py-3 text-muted-foreground whitespace-nowrap">{r.po_number || "—"}</td>
                                     <td className="px-5 py-3 text-muted-foreground whitespace-nowrap">{r.invoice_number || "—"}</td>
                                     <td className="px-5 py-3 text-right font-semibold whitespace-nowrap">{inr(r.price)}</td>
@@ -383,7 +397,7 @@ const Dashboard = () => {
                                 </tr>
                             ))}
                             {recent.length === 0 && (
-                                <tr><td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">No sales data yet.</td></tr>
+                                <tr><td colSpan={9} className="px-5 py-12 text-center text-muted-foreground">No sales data yet.</td></tr>
                             )}
                         </tbody>
                     </table>

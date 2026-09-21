@@ -103,7 +103,8 @@ const Reports = () => {
     const qc = useQueryClient();
     const { products } = useConstants();
     const [searchParams] = useSearchParams();
-    const [reportSection, setReportSection] = useState(() => sessionStorage.getItem('reports_section') || "po");
+    const requestedSection = searchParams.get("section");
+    const [reportSection, setReportSection] = useState(() => ["overview", "po", "wo"].includes(requestedSection) ? requestedSection : (sessionStorage.getItem('reports_section') || "po"));
     const initialTab = searchParams.get("tab");
     const [tab, setTab] = useState(() => {
         if (["completed", "sales", "pending"].includes(initialTab)) return initialTab;
