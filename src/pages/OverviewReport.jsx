@@ -238,6 +238,7 @@ const OverviewReport = () => {
 
         return {
             total_pending_qty: totPending,
+            total_delivered_value: filteredProducts.reduce((sum, p) => sum + (Number(p.delivered_value) || 0), 0),
             total_pending_value: totValue,
             total_products: filteredProducts.length,
             total_clients: clientSet.size,
@@ -281,9 +282,10 @@ const OverviewReport = () => {
         acc.ordered += p.total_ordered_qty;
         acc.dispatched += p.total_dispatched_qty;
         acc.pending += p.pending_qty;
+        acc.deliveredValue += Number(p.delivered_value) || 0;
         acc.value += p.pending_value;
         return acc;
-    }, { ordered: 0, dispatched: 0, pending: 0, value: 0 });
+    }, { ordered: 0, dispatched: 0, pending: 0, deliveredValue: 0, value: 0 });
 
     const globalTotals = useMemo(() => {
         const pList = products || [];
@@ -481,9 +483,10 @@ const OverviewReport = () => {
             </Card>
 
             {/* Summary Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 <StatCard icon={Package} label="Total Pending Qty" value={fmtQty(displaySummary.total_pending_qty)} subtext="Nos" accent="bg-blue-500/10 text-blue-600" />
                 <StatCard icon={IndianRupee} label="Total pending payment ( without GST)" value={inr(displaySummary.total_pending_value)} subtext="In INR" accent="bg-green-500/10 text-green-600" />
+                <StatCard icon={IndianRupee} label="Delivered Payment (without GST)" value={inr(displaySummary.total_delivered_value)} subtext="In INR" accent="bg-emerald-500/10 text-emerald-600" />
                 <StatCard icon={Boxes} label="Total Products" value={String(displaySummary.total_products)} subtext="Different Diameters" accent="bg-purple-500/10 text-purple-600" onClick={() => { setProductSearch(""); setProductsDialogOpen(true); }} />
                 <StatCard icon={Users} label="Total Clients" value={String(displaySummary.total_clients)} subtext="With Pending Orders" accent="bg-amber-500/10 text-amber-600" onClick={() => { setClientSearch(""); setClientsDialogOpen(true); }} />
             </div>
@@ -503,6 +506,7 @@ const OverviewReport = () => {
                                 <th className="py-3 px-4 text-right">Total Ordered Qty</th>
                                 <th className="py-3 px-4 text-right">Total Dispatched Qty</th>
                                 <th className="py-3 px-4 text-right text-orange-600">Pending Qty</th>
+                                <th className="py-3 px-4 text-right text-emerald-600">Delivered Payment (without GST) (₹)</th>
                                 <th className="py-3 px-4 text-right text-green-600">Pending Value (without GST) (₹)</th>
                                 <th className="py-3 px-4 text-center w-28">Clients</th>
                                 <th className="py-3 px-4 text-center w-36">Action</th>
@@ -511,14 +515,14 @@ const OverviewReport = () => {
                         <tbody>
                             {isLoading && (
                                 <tr>
-                                    <td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">
+                                    <td colSpan={9} className="px-5 py-12 text-center text-muted-foreground">
                                         Loading product-wise pending details...
                                     </td>
                                 </tr>
                             )}
                             {!isLoading && displayProducts.length === 0 && (
                                 <tr>
-                                    <td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">
+                                    <td colSpan={9} className="px-5 py-12 text-center text-muted-foreground">
                                         No pending analysis data found.
                                     </td>
                                 </tr>
@@ -538,6 +542,7 @@ const OverviewReport = () => {
                                             <td className="py-3 px-4 text-right font-medium text-slate-700">{fmtQty(p.total_ordered_qty)}</td>
                                             <td className="py-3 px-4 text-right text-slate-700 font-medium">{fmtQty(p.total_dispatched_qty)}</td>
                                             <td className="py-3 px-4 text-right text-orange-600 font-bold">{fmtQty(p.pending_qty)}</td>
+                                            <td className="py-3 px-4 text-right text-emerald-600 font-bold">{inr(p.delivered_value)}</td>
                                             <td className="py-3 px-4 text-right text-green-600 font-bold">{inr(p.pending_value)}</td>
                                             <td className="py-3 px-4 text-center font-semibold text-slate-600">{p.client_count}</td>
                                             <td className="py-3 px-4 text-center">
@@ -553,7 +558,7 @@ const OverviewReport = () => {
                                         </tr>
                                         {isProductExpanded && (
                                             <tr className="bg-slate-50/20">
-                                                <td colSpan={8} className="py-3 px-4 border-b border-border/60">
+                                                <td colSpan={9} className="py-3 px-4 border-b border-border/60">
                                                     <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 space-y-4 max-w-7xl mx-auto animate-in fade-in duration-200">
                                                         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-2 bg-slate-50/50 p-2.5 rounded-t-lg">
                                                             <h4 className="text-sm font-bold text-slate-800 max-w-full md:max-w-3xl break-words flex items-center gap-1.5">
@@ -563,6 +568,8 @@ const OverviewReport = () => {
                                                                 <span>Pending Qty: <strong className="text-orange-600">{fmtQty(p.pending_qty)}</strong></span>
                                                                 <span className="text-slate-300">|</span>
                                                                 <span>Pending Value (without GST): <strong className="text-green-600">{inr(p.pending_value)}</strong></span>
+                                                                <span className="text-slate-300">|</span>
+                                                                <span>Delivered Payment (without GST): <strong className="text-emerald-600">{inr(p.delivered_value)}</strong></span>
                                                             </div>
                                                         </div>
                                                         <div className="overflow-x-auto">
@@ -574,6 +581,7 @@ const OverviewReport = () => {
                                                                         <th className="py-2.5 px-3 text-right">Total Ordered Qty</th>
                                                                         <th className="py-2.5 px-3 text-right">Total Dispatched Qty</th>
                                                                         <th className="py-2.5 px-3 text-right text-orange-600">Pending Qty</th>
+                                                                        <th className="py-2.5 px-3 text-right text-emerald-600">Delivered Payment (without GST) (₹)</th>
                                                                         <th className="py-2.5 px-3 text-right text-green-600">Pending Value (without GST) (₹)</th>
                                                                     </tr>
                                                                 </thead>
@@ -594,11 +602,12 @@ const OverviewReport = () => {
                                                                                     <td className="py-2.5 px-3 text-right font-medium text-slate-700">{fmtQty(c.total_ordered_qty)}</td>
                                                                                     <td className="py-2.5 px-3 text-right text-slate-700 font-medium">{fmtQty(c.total_dispatched_qty)}</td>
                                                                                     <td className="py-2.5 px-3 text-right text-orange-600 font-bold">{fmtQty(c.pending_qty)}</td>
+                                                                                    <td className="py-2.5 px-3 text-right text-emerald-600 font-bold">{inr(c.delivered_value)}</td>
                                                                                     <td className="py-2.5 px-3 text-right text-green-600 font-bold">{inr(c.pending_value)}</td>
                                                                                 </tr>
                                                                                 {isClientExpanded && (
                                                                                     <tr className="bg-slate-50/30">
-                                                                                        <td colSpan={6} className="py-3 px-6">
+                                                                                        <td colSpan={7} className="py-3 px-6">
                                                                                             <div className="bg-white rounded-lg border border-slate-200 p-3 space-y-2 shadow-sm animate-in fade-in duration-200">
                                                                                                 <table className="w-full text-xs">
                                                                                                     <thead className="bg-slate-100/70 text-slate-500 font-semibold uppercase tracking-wider text-[9px] border-b border-slate-200">
@@ -610,6 +619,7 @@ const OverviewReport = () => {
                                                                                                             <th className="py-2 px-2 text-right">Dispatched Qty</th>
                                                                                                             <th className="py-2 px-2 text-right text-orange-600">Pending Qty</th>
                                                                                                             <th className="py-2 px-2 text-right">Rate (₹)</th>
+                                                                                                            <th className="py-2 px-2 text-right text-emerald-600">Delivered Payment (without GST) (₹)</th>
                                                                                                             <th className="py-2 px-2 text-right text-green-600">Pending Value (₹)</th>
                                                                                                         </tr>
                                                                                                     </thead>
@@ -632,6 +642,7 @@ const OverviewReport = () => {
                                                                                                                 <td className="py-2 px-2 text-right text-slate-600">{fmtQty(po.dispatched_qty)}</td>
                                                                                                                 <td className="py-2 px-2 text-right text-orange-600 font-medium">{fmtQty(po.pending_qty)}</td>
                                                                                                                 <td className="py-2 px-2 text-right text-slate-500 font-medium">{round2(po.rate).toFixed(2)}</td>
+                                                                                                                <td className="py-2 px-2 text-right text-emerald-600 font-semibold">{inr(po.delivered_value)}</td>
                                                                                                                 <td className="py-2 px-2 text-right text-green-600 font-semibold">{inr(po.pending_value)}</td>
                                                                                                             </tr>
                                                                                                         ))}
@@ -641,6 +652,7 @@ const OverviewReport = () => {
                                                                                                             <td className="py-2 px-2 text-right">{fmtQty(c.total_dispatched_qty)}</td>
                                                                                                             <td className="py-2 px-2 text-right text-orange-600">{fmtQty(c.pending_qty)}</td>
                                                                                                             <td className="py-2 px-2"></td>
+                                                                                                            <td className="py-2 px-2 text-right text-emerald-600">{inr(c.delivered_value)}</td>
                                                                                                             <td className="py-2 px-2 text-right text-green-600">{inr(c.pending_value)}</td>
                                                                                                         </tr>
                                                                                                     </tbody>
@@ -659,7 +671,8 @@ const OverviewReport = () => {
                                                                         <td className="py-2.5 px-3 text-right">{fmtQty(p.total_ordered_qty)}</td>
                                                                         <td className="py-2.5 px-3 text-right">{fmtQty(p.total_dispatched_qty)}</td>
                                                                         <td className="py-2.5 px-3 text-right text-orange-600">{fmtQty(p.pending_qty)}</td>
-                                                                        <td className="py-2.5 px-3 text-right text-green-600" colSpan={2}>{inr(p.pending_value)}</td>
+                                                                        <td className="py-2.5 px-3 text-right text-emerald-600">{inr(p.delivered_value)}</td>
+                                                                        <td className="py-2.5 px-3 text-right text-green-600">{inr(p.pending_value)}</td>
                                                                     </tr>
                                                                 </tbody>
                                                             </table>
@@ -679,6 +692,7 @@ const OverviewReport = () => {
                                     <td className="py-3.5 px-4 text-right">{fmtQty(overallTotals.ordered)}</td>
                                     <td className="py-3.5 px-4 text-right">{fmtQty(overallTotals.dispatched)}</td>
                                     <td className="py-3.5 px-4 text-right text-orange-600">{fmtQty(overallTotals.pending)}</td>
+                                    <td className="py-3.5 px-4 text-right text-emerald-600">{inr(overallTotals.deliveredValue)}</td>
                                     <td className="py-3.5 px-4 text-right text-green-600">{inr(overallTotals.value)}</td>
                                     <td className="py-3.5 px-4 text-center text-slate-600">{displaySummary.total_clients}</td>
                                     <td className="py-3.5 px-4"></td>

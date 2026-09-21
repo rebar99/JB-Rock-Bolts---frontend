@@ -13,6 +13,7 @@ const MODULE_LABELS = {
   purchase_order: 'Purchase Order',
   work_order: 'Work Order',
   work_order_sale: 'WO Sale',
+  credit_note: 'Credit Note',
 };
 
 const MODULE_BADGE_COLORS = {
@@ -20,6 +21,7 @@ const MODULE_BADGE_COLORS = {
   purchase_order: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
   work_order: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
   work_order_sale: 'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200',
+  credit_note: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
 };
 
 function formatDateTime(dtStr) {
@@ -58,6 +60,7 @@ const TABS = [
   { key: 'purchase_order', label: 'Purchase Orders' },
   { key: 'work_order', label: 'Work Orders' },
   { key: 'work_order_sale', label: 'WO Sales' },
+  { key: 'credit_note', label: 'Credit Notes' },
 ];
 
 async function apiRequest(path, options = {}) {
