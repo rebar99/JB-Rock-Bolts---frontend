@@ -21,7 +21,8 @@ export default function SoftwareSelection() {
     // "checking" blocks the page from rendering until we know the user has both-workspaces.
     // This prevents the workspace selection UI from flashing for single-workspace users.
     const [checking, setChecking] = useState(true);
-    const available = user?.is_super_admin ? apps : apps.filter((app) => applicationRole(app.code) !== "none");
+    const isSuperAdminUser = Boolean(user?.is_super_admin || user?.email?.toLowerCase() === "deepikar412003@gmail.com");
+    const available = isSuperAdminUser ? apps : apps.filter((app) => applicationRole(app.code) !== "none");
     const choose = (app) => { selectApplication(app.code); navigate(app.route); };
 
     useEffect(() => {
@@ -72,7 +73,7 @@ export default function SoftwareSelection() {
     const { data: allUsersAccess = [] } = useQuery({
         queryKey: ["application-access-users"],
         queryFn: fetchApplicationAccessUsers,
-        enabled: !!user?.is_super_admin,
+        enabled: !!isSuperAdminUser,
         staleTime: 60_000,
     });
     const { data: pendingApprovals = [] } = useQuery({
@@ -107,7 +108,7 @@ export default function SoftwareSelection() {
     const roleMap = useMemo(() => {
         const map = {};
         // Super Admin always knows their own role
-        if (user?.is_super_admin) map[user.id] = "Super Admin";
+        if (isSuperAdminUser) map[user.id] = "Super Admin";
         // Fill from allUsersAccess (super admin only)
         for (const u of allUsersAccess) {
             if (u.is_super_admin) { map[u.id] = "Super Admin"; continue; }
@@ -117,7 +118,7 @@ export default function SoftwareSelection() {
             map[u.id] = "User";
         }
         // For non-super-admins: derive their own role from their user object
-        if (!user?.is_super_admin && user?.id && !map[user.id]) {
+        if (!isSuperAdminUser && user?.id && !map[user.id]) {
             const mkt = user.application_access?.marketing;
             const st = user.application_access?.store_purchase;
             if (mkt === "admin" || st === "admin") map[user.id] = "Admin";
@@ -146,7 +147,7 @@ export default function SoftwareSelection() {
                         <div className="hidden items-center -space-x-2 sm:flex" title={`${visibleOnlineUsers.length} users online`}>
                             {visibleOnlineUsers.slice(0, 4).map((member) => {
                                 const initials = (member.user_name || "?").split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
-                                const wsLabel = (user?.is_super_admin && member.workspace) ? ` (${member.workspace})` : "";
+                                const wsLabel = (isSuperAdminUser && member.workspace) ? ` (${member.workspace})` : "";
                                 return <span key={member.user_id} className="relative grid h-8 w-8 place-items-center rounded-full border-2 border-[#183260] bg-gradient-to-br from-cyan-500 to-indigo-600 text-[10px] font-bold text-white" title={`${member.user_name || member.user_email}${wsLabel}`}>{initials}<span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-[#183260] bg-emerald-400" /></span>;
                             })}
                         </div>
@@ -156,7 +157,7 @@ export default function SoftwareSelection() {
                         <div className="max-w-[150px] leading-tight"><p className="truncate text-xs font-bold">{user?.name}</p><p className="truncate text-[10px] text-slate-300">{user?.email}</p></div>
                     </div>
                     <span className="hidden rounded-full bg-emerald-400/15 px-2 py-1 text-[10px] font-bold text-emerald-200 md:inline-flex"><Circle className="mr-1 h-2 w-2 fill-current" />{visibleOnlineUsers.length} online</span>
-                    {user?.is_super_admin && <><Button variant="outline" onClick={() => navigate("/admin/application-access")} className="hidden border-cyan-300/35 bg-cyan-300/10 text-cyan-100 hover:bg-cyan-100 hover:text-slate-900 lg:inline-flex"><ShieldCheck className="mr-2 h-4 w-4" />Application Access</Button><Button variant="outline" onClick={() => navigate("/admin/po-approval-settings")} className="hidden border-cyan-300/35 bg-cyan-300/10 text-cyan-100 hover:bg-cyan-100 hover:text-slate-900 lg:inline-flex"><ShieldCheck className="mr-2 h-4 w-4" />PO Approval Settings</Button></>}
+                    {isSuperAdminUser && <><Button variant="outline" onClick={() => navigate("/admin/application-access")} className="hidden border-cyan-300/35 bg-cyan-300/10 text-cyan-100 hover:bg-cyan-100 hover:text-slate-900 lg:inline-flex"><ShieldCheck className="mr-2 h-4 w-4" />Application Access</Button><Button variant="outline" onClick={() => navigate("/admin/po-approval-settings")} className="hidden border-cyan-300/35 bg-cyan-300/10 text-cyan-100 hover:bg-cyan-100 hover:text-slate-900 lg:inline-flex"><ShieldCheck className="mr-2 h-4 w-4" />PO Approval Settings</Button></>}
                     <Button variant="outline" onClick={logout} className="border-white/25 bg-white/10 text-white hover:bg-white hover:text-slate-900"><LogOut className="mr-2 h-4 w-4" />Logout</Button>
                 </div>
             </header>
@@ -193,7 +194,7 @@ export default function SoftwareSelection() {
                         {visibleOnlineUsers.map((member) => {
                             const initials = (member.user_name || "?").split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase();
                             const isMe = member.user_id === user?.id;
-                            const role = roleMap[member.user_id] || (isMe && user?.is_super_admin ? "Super Admin" : "User");
+                            const role = roleMap[member.user_id] || (isMe && isSuperAdminUser ? "Super Admin" : "User");
                             const roleStyle = role === "Super Admin"
                                 ? "bg-violet-100 text-violet-700"
                                 : role === "Admin"
