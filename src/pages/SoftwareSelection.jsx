@@ -21,7 +21,7 @@ export default function SoftwareSelection() {
     // "checking" blocks the page from rendering until we know the user has both-workspaces.
     // This prevents the workspace selection UI from flashing for single-workspace users.
     const [checking, setChecking] = useState(true);
-    const available = apps.filter((app) => applicationRole(app.code) !== "none");
+    const available = user?.is_super_admin ? apps : apps.filter((app) => applicationRole(app.code) !== "none");
     const choose = (app) => { selectApplication(app.code); navigate(app.route); };
 
     useEffect(() => {
