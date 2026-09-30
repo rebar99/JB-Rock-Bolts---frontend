@@ -41,7 +41,7 @@ const SHEET_OPTIONS = [
 ];
 
 const COMPLETED_WOR_WIDTHS = { sno: 56, wo_date: 100, client_name: 150, project: 130, wo_number: 130, item: 160, total_quantity: 110, completed_quantity: 110 };
-const SALES_WOR_WIDTHS = { sno: 56, date: 100, invoice_number: 130, wo_number: 130, client_name: 150, subtotal: 110, gst_amount: 110, grand_total: 120, payment_status: 100 };
+const SALES_WOR_WIDTHS = { sno: 56, date: 100, invoice_number: 130, wo_number: 130, client_name: 150, subtotal: 110, gst_amount: 110, credit_note_amount: 120, grand_total: 120, payment_status: 100 };
 const PENDING_WOR_WIDTHS = { sno: 56, wo_date: 100, wo_number: 130, client_name: 140, project: 120, item: 160, total_quantity: 100, completed_quantity: 100, pending_quantity: 100, status: 110 };
 
 const CompletedWORColumnAccessors = {
@@ -61,6 +61,7 @@ const SalesWORColumnAccessors = {
     subtotal: (r) => r.subtotal,
     gst_amount: (r) => r.gst_amount,
     grand_total: (r) => r.grand_total,
+    credit_note_amount: (r) => r.credit_note_amount ?? 0,
     payment_status: (r) => r.payment_status,
 };
 const PendingWORColumnAccessors = {
@@ -181,6 +182,7 @@ const WorkOrderReport = () => {
     const salesTotals = {
         subtotal: salesFilteredRows.reduce((s, r) => s + (r.subtotal ?? 0), 0),
         gst: salesFilteredRows.reduce((s, r) => s + (r.gst_amount ?? 0), 0),
+        creditNote: salesFilteredRows.reduce((s, r) => s + (r.credit_note_amount ?? 0), 0),
         grandTotal: salesFilteredRows.reduce((s, r) => s + (r.grand_total ?? 0), 0),
     };
     const { widths: salesWidths, startResize: startSalesResize } = useResizableColumns("colw:wor-sales", SALES_WOR_WIDTHS);
@@ -485,6 +487,7 @@ const WorkOrderReport = () => {
                                         <FilterableHeader label="Client Name" columnKey="client_name" accessor={SalesWORColumnAccessors.client_name} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.client_name} onResizeStart={startSalesResize("client_name")} rows={salesRowsAll} filterValue={salesFilters.client_name} onApplyFilter={setSalesFilter} />
                                         <FilterableHeader label="Subtotal" columnKey="subtotal" type="number" align="right" accessor={SalesWORColumnAccessors.subtotal} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.subtotal} onResizeStart={startSalesResize("subtotal")} rows={salesRowsAll} filterValue={salesFilters.subtotal} onApplyFilter={setSalesFilter} />
                                         <FilterableHeader label="GST Amount" columnKey="gst_amount" type="number" align="right" accessor={SalesWORColumnAccessors.gst_amount} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.gst_amount} onResizeStart={startSalesResize("gst_amount")} rows={salesRowsAll} filterValue={salesFilters.gst_amount} onApplyFilter={setSalesFilter} />
+                                        <FilterableHeader label="Credit Note" columnKey="credit_note_amount" type="number" align="right" accessor={SalesWORColumnAccessors.credit_note_amount} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.credit_note_amount} onResizeStart={startSalesResize("credit_note_amount")} rows={salesRowsAll} filterValue={salesFilters.credit_note_amount} onApplyFilter={setSalesFilter} />
                                         <FilterableHeader label="Grand Total" columnKey="grand_total" type="number" align="right" accessor={SalesWORColumnAccessors.grand_total} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.grand_total} onResizeStart={startSalesResize("grand_total")} rows={salesRowsAll} filterValue={salesFilters.grand_total} onApplyFilter={setSalesFilter} />
                                         <FilterableHeader label="Payment" columnKey="payment_status" accessor={SalesWORColumnAccessors.payment_status} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.payment_status} onResizeStart={startSalesResize("payment_status")} rows={salesRowsAll} filterValue={salesFilters.payment_status} onApplyFilter={setSalesFilter} />
                                     </tr>
@@ -506,6 +509,7 @@ const WorkOrderReport = () => {
                                             <td className="px-2 py-3 text-center font-semibold text-foreground truncate" title={r.client_name}>{r.client_name || "—"}</td>
                                             <td className="px-2 py-3 text-center font-medium">{inr(r.subtotal)}</td>
                                             <td className="px-2 py-3 text-center font-medium text-blue-500">{inr(r.gst_amount)}</td>
+                                            <td className="px-2 py-3 text-center font-medium text-red-500">{r.credit_note_amount > 0 ? `-${inr(r.credit_note_amount)}` : "—"}</td>
                                             <td className="px-2 py-3 text-center font-bold text-foreground">{inr(r.grand_total)}</td>
                                             <td className="px-2 py-3 text-center text-muted-foreground text-[11px]">{r.payment_status}</td>
                                         </tr>
@@ -520,6 +524,7 @@ const WorkOrderReport = () => {
                                             <td className="px-2 py-3 text-center font-bold text-primary tracking-wide" colSpan={5}>TOTAL</td>
                                             <td className="px-2 py-3 text-center font-bold text-primary">{inr(salesTotals.subtotal)}</td>
                                             <td className="px-2 py-3 text-center font-bold text-blue-500">{inr(salesTotals.gst)}</td>
+                                            <td className="px-2 py-3 text-center font-bold text-red-500">{salesTotals.creditNote > 0 ? `-${inr(salesTotals.creditNote)}` : "—"}</td>
                                             <td className="px-2 py-3 text-center font-bold text-success">{inr(salesTotals.grandTotal)}</td>
                                             <td className="px-2 py-3"></td>
                                         </tr>

@@ -209,7 +209,7 @@ const Dashboard = () => {
                     <DropdownMenuContent align="start">
                         <DropdownMenuItem onClick={() => navigate("/reports?section=po&tab=sales")}>PO Sales <span className="ml-auto pl-4 font-semibold">{inr(stats?.po_revenue ?? 0)}</span></DropdownMenuItem>
                         <DropdownMenuItem onClick={() => navigate("/reports?section=wo&tab=sales")}>WO Sales <span className="ml-auto pl-4 font-semibold">{inr(stats?.wo_revenue ?? 0)}</span></DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => navigate("/credit-notes")}>CN Adjustment <span className={`ml-auto pl-4 font-semibold ${(stats?.credit_note_adjustment ?? 0) < 0 ? "text-destructive" : "text-success"}`}>{inr(stats?.credit_note_adjustment ?? 0)}</span></DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => navigate("/credit-notes")}>CN Adjustment <span className="ml-auto pl-4 font-semibold text-destructive">-{inr(stats?.credit_note_adjustment ?? 0)}</span></DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
                 <DropdownMenu>

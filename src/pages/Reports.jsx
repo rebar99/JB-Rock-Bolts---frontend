@@ -40,7 +40,7 @@ const pillTabClass =
     "data-[state=inactive]:hover:border-primary/50 data-[state=inactive]:hover:bg-muted/50 " +
     "data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md";
 
-const SALES_WIDTHS = { sno: 56, date: 100, invoice_number: 130, po_number: 130, client_name: 150, project: 140, subtotal: 110, gst_amount: 110, price: 120, payment_status: 100 };
+const SALES_WIDTHS = { sno: 56, date: 100, invoice_number: 130, po_number: 130, client_name: 150, project: 140, subtotal: 110, gst_amount: 110, credit_note_amount: 120, price: 120, payment_status: 100 };
 const PENDING_WIDTHS = { sno: 56, date: 100, invoice_number: 140, po_number: 130, client_name: 140, project: 120, item: 160, total_qty: 100, delivered_qty: 100, pending_qty: 100, delivered_payment: 130, pending_total: 130, status: 110 };
 const COMPLETED_WIDTHS = { sno: 56, date: 100, client_name: 140, project: 120, po_number: 130, item: 160, total_required: 110, delivered: 110 };
 
@@ -64,6 +64,7 @@ const SalesColumnAccessors = {
     project: (r) => r.location,
     subtotal: (r) => r.subtotal,
     gst_amount: (r) => r.gst_amount,
+    credit_note_amount: (r) => r.credit_note_amount ?? 0,
     price: (r) => r.price,
     payment_status: (r) => r.payment_status,
 };
@@ -235,6 +236,7 @@ const Reports = () => {
     const salesTotals = {
         subtotal: salesFilteredRows.reduce((s, r) => s + (r.subtotal ?? 0), 0),
         gst: salesFilteredRows.reduce((s, r) => s + (r.gst_amount ?? 0), 0),
+        creditNote: salesFilteredRows.reduce((s, r) => s + (r.credit_note_amount ?? 0), 0),
         grandTotal: salesFilteredRows.reduce((s, r) => s + (r.price ?? 0), 0),
     };
     const { data: pendingData,     isLoading: pendingLoading }     = useQuery({ queryKey: ["pendingPOsReport"],                queryFn: fetchPendingPOs,                         enabled: tab === "pending" });
@@ -521,6 +523,7 @@ const Reports = () => {
                                         <FilterableHeader label="Project" columnKey="project" accessor={SalesColumnAccessors.project} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.project} onResizeStart={startSalesResize("project")} rows={salesRows} filterValue={salesFilters.project} onApplyFilter={setSalesFilter} />
                                         <FilterableHeader label="Subtotal" columnKey="subtotal" type="number" align="right" accessor={SalesColumnAccessors.subtotal} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.subtotal} onResizeStart={startSalesResize("subtotal")} rows={salesRows} filterValue={salesFilters.subtotal} onApplyFilter={setSalesFilter} />
                                         <FilterableHeader label="GST Amount" columnKey="gst_amount" type="number" align="right" accessor={SalesColumnAccessors.gst_amount} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.gst_amount} onResizeStart={startSalesResize("gst_amount")} rows={salesRows} filterValue={salesFilters.gst_amount} onApplyFilter={setSalesFilter} />
+                                        <FilterableHeader label="Credit Note" columnKey="credit_note_amount" type="number" align="right" accessor={SalesColumnAccessors.credit_note_amount} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.credit_note_amount} onResizeStart={startSalesResize("credit_note_amount")} rows={salesRows} filterValue={salesFilters.credit_note_amount} onApplyFilter={setSalesFilter} />
                                         <FilterableHeader label="Grand Total" columnKey="price" type="number" align="right" accessor={SalesColumnAccessors.price} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.price} onResizeStart={startSalesResize("price")} rows={salesRows} filterValue={salesFilters.price} onApplyFilter={setSalesFilter} />
                                         <FilterableHeader label="Payment" columnKey="payment_status" accessor={SalesColumnAccessors.payment_status} sortConfig={salesSortConfig} setSort={setSalesSort} width={salesWidths.payment_status} onResizeStart={startSalesResize("payment_status")} rows={salesRows} filterValue={salesFilters.payment_status} onApplyFilter={setSalesFilter} />
                                     </tr>
@@ -543,6 +546,7 @@ const Reports = () => {
                                             <td className="px-2 py-3 text-center text-muted-foreground truncate" title={r.location}>{r.location || "—"}</td>
                                             <td className="px-2 py-3 text-center font-medium">{inr(r.subtotal)}</td>
                                             <td className="px-2 py-3 text-center font-medium text-blue-500">{inr(r.gst_amount)}</td>
+                                            <td className="px-2 py-3 text-center font-medium text-red-500">{r.credit_note_amount > 0 ? `-${inr(r.credit_note_amount)}` : "—"}</td>
                                             <td className="px-2 py-3 text-center font-bold text-foreground">{inr(r.price)}</td>
                                             <td className="px-2 py-3 text-center text-muted-foreground text-[11px]">{r.payment_status}</td>
                                         </tr>
@@ -557,6 +561,7 @@ const Reports = () => {
                                             <td className="px-2 py-3 text-center font-bold text-primary tracking-wide" colSpan={6}>TOTAL</td>
                                             <td className="px-2 py-3 text-center font-bold text-primary">{inr(salesTotals.subtotal)}</td>
                                             <td className="px-2 py-3 text-center font-bold text-blue-500">{inr(salesTotals.gst)}</td>
+                                            <td className="px-2 py-3 text-center font-bold text-red-500">{salesTotals.creditNote > 0 ? `-${inr(salesTotals.creditNote)}` : "—"}</td>
                                             <td className="px-2 py-3 text-center font-bold text-success">{inr(salesTotals.grandTotal)}</td>
                                             <td className="px-2 py-3"></td>
                                         </tr>

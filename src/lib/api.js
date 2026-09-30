@@ -71,6 +71,8 @@ const del = (path, params) => {
         : path;
     return request(url, { method: "DELETE" });
 };
+const patch = (path, body) => request(path, { method: "PATCH", body: JSON.stringify(body) });
+
 
 // ── Constants ────────────────────────────────────────────────────────────────
 export const fetchConstants = () => get("/api/constants");
@@ -516,16 +518,16 @@ export const importCombinedReport = async (file, onConflict = "skip", createdBy)
 
 // ── Documents (opens in new tab for printing) ─────────────────────────────────
 export const openPODocument = (poId) => {
-    window.open(`${BASE}/api/documents/po/${poId}`, "_blank");
+    window.open(`${BASE}/api/documents/po/${poId}?token=${encodeURIComponent(getToken() || "")}`, "_blank");
 };
 export const openWODocument = (woId) => {
-    window.open(`${BASE}/api/documents/wo/${woId}`, "_blank");
+    window.open(`${BASE}/api/documents/wo/${woId}?token=${encodeURIComponent(getToken() || "")}`, "_blank");
 };
 export const openInvoiceDocument = (saleId) => {
-    window.open(`${BASE}/api/documents/invoice/${saleId}`, "_blank");
+    window.open(`${BASE}/api/documents/invoice/${saleId}?token=${encodeURIComponent(getToken() || "")}`, "_blank");
 };
 export const downloadInvoiceDocument = (saleId) => {
-    window.open(`${BASE}/api/documents/invoice/${saleId}?download=true`, "_blank");
+    window.open(`${BASE}/api/documents/invoice/${saleId}?download=true&token=${encodeURIComponent(getToken() || "")}`, "_blank");
 };
 export const openWOInvoiceDocument = (saleId) => {
     window.open(`${BASE}/api/documents/wo-invoice/${saleId}`, "_blank");
@@ -539,11 +541,58 @@ export const loginUser = (body) => post("/api/users/login", body);
 export const registerUser = (body) => post("/api/users/register", body);
 export const fetchUsers = () => get("/api/users");
 export const updateUser = (id, body) => put(`/api/users/${id}`, body);
-export const resetPassword = (body) => post("/api/users/reset-password", body);
+export const requestPasswordResetOtp = (body) => post("/api/users/password-reset/request", body);
+export const confirmPasswordReset = (body) => post("/api/users/password-reset/confirm", body);
+export const changePassword = (body) => post("/api/users/password/change", body);
+export const fetchMyAccess = () => get("/api/application-access/me");
+export const fetchApplicationAccessUsers = () => get("/api/application-access/users");
+export const updateApplicationAccess = (id, body) => put(`/api/application-access/users/${id}`, body);
+export const deleteApplicationAccessUser = (id) => del(`/api/application-access/users/${id}`);
+export const fetchStoreDashboard = () => get("/api/store-purchase/dashboard");
+export const fetchStoreInventory = () => get("/api/store-purchase/inventory");
+export const fetchStoreOrders = () => get("/api/store-purchase/purchase-orders");
+export const createStoreItem = (body) => post("/api/store-purchase/inventory", body);
+export const updateStoreItem = (id, body) => put(`/api/store-purchase/inventory/${id}`, body);
+export const deleteStoreItem = (id) => del(`/api/store-purchase/inventory/${id}`);
+export const issueStoreItem = (id, body) => post(`/api/store-purchase/inventory/${id}/issue`, body);
+export const transferStoreItem = (id, body) => post(`/api/store-purchase/inventory/${id}/transfer`, body);
+export const fetchStoreItemHistory = (id) => get(`/api/store-purchase/inventory/${id}/history`);
+export const fetchAllStoreTransactions = () => get(`/api/store-purchase/inventory/all-transactions`);
+export const createStoreOrder = (body) => post("/api/store-purchase/purchase-orders", body);
+export const updateStoreOrder = (id, body) => put(`/api/store-purchase/purchase-orders/${id}`, body);
+export const completeStoreOrder = (id) => post(`/api/store-purchase/purchase-orders/${id}/complete`, {});
+export const deleteStoreOrder = (id) => del(`/api/store-purchase/purchase-orders/${id}`);
+export const fetchPOApprovalSettings = () => get("/api/store-purchase/approval-settings");
+export const createPOApprovalLevel = (body) => post("/api/store-purchase/approval-settings/levels", body);
+export const updatePOApprovalLevel = (id, body) => put(`/api/store-purchase/approval-settings/levels/${id}`, body);
+export const deletePOApprovalLevel = (id) => del(`/api/store-purchase/approval-settings/levels/${id}`);
+export const removePOApprovalLevelApprover = (levelId, userId) => del(`/api/store-purchase/approval-settings/levels/${levelId}/approvers/${userId}`);
+export const fetchMyPendingPOApprovals = () => get("/api/store-purchase/purchase-orders/pending-approvals");
+export const actOnPOApproval = (id, body) => post(`/api/store-purchase/purchase-orders/${id}/approval`, body);
+export const fetchStoreMaterialReceipts = () => get("/api/store-purchase/materials-received");
+export const createStoreMaterialReceipt = (body) => post("/api/store-purchase/materials-received", body);
+export const updateStoreMaterialReceipt = (id, body) => put(`/api/store-purchase/materials-received/${id}`, body);
+export const deleteStoreMaterialReceipt = (id) => del(`/api/store-purchase/materials-received/${id}`);
+export const patchStoreMaterialReceiptBill = (id, body) => patch(`/api/store-purchase/materials-received/${id}/bill`, body);
+export const patchStoreMaterialReceiptPayment = (id, body) => patch(`/api/store-purchase/materials-received/${id}/payment`, body);
+export const uploadStoreMaterialReceiptBill = async (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const token = getToken();
+    const res = await fetch(`${BASE}/api/store-purchase/materials-received/upload`, {
+        method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {}, body: formData,
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: "Bill upload failed" }));
+        throw new Error(err.detail || "Bill upload failed");
+    }
+    return res.json();
+};
 
 // ── User Approvals (admin only) ────────────────────────────────────────────
 export const fetchPendingUsers = () => get("/api/users/pending");
-export const approveUser = (id) => post(`/api/users/${id}/approve`, {});
+export const approveUser = (id, workspace) => post(`/api/users/${id}/approve`, { workspace });
+export const updateUserWorkspace = (id, workspace) => put(`/api/users/${id}/workspace`, { workspace });
 export const rejectUser = (id) => post(`/api/users/${id}/reject`, {});
 
 export const logoutUser = () => request("/api/users/logout", { method: "POST" });
@@ -571,11 +620,14 @@ export const fetchRecentLogins = () => get("/api/users/recent-logins");
  * @param {{ id, name, email }} [user]       - current authenticated user (for presence tracking)
  * @returns {EventSource} call .close() to disconnect
  */
-export function openLogStream(onLog, onError, user = null) {
+export function openLogStream(onLog, onError, user = null, workspace = "") {
     const params = new URLSearchParams();
     if (user?.id)    params.set("user_id",    user.id);
     if (user?.name)  params.set("user_name",  user.name);
     if (user?.email) params.set("user_email", user.email);
+    if (workspace)   params.set("workspace",  workspace);
+    const token = getToken();
+    if (token) params.set("token", token);
 
     const qs = params.toString();
     const es = new EventSource(`${BASE}/api/logs/stream${qs ? `?${qs}` : ""}`);
@@ -587,10 +639,10 @@ export function openLogStream(onLog, onError, user = null) {
 }
 
 // 🔹 UOM Management 🔹
-export const fetchUomOptions = () => get("/api/uom");
-export const createUomOption = (body) => post("/api/uom", body);
-export const updateUomOption = (id, body) => put(`/api/uom/${id}`, body);
-export const deleteUomOption = (id) => del(`/api/uom/${id}`);
+export const fetchUomOptions = (type = "PO") => get("/api/uom", { type });
+export const createUomOption = (body, type = "PO") => post(`/api/uom?type=${encodeURIComponent(type)}`, body);
+export const updateUomOption = (id, body, type = "PO") => put(`/api/uom/${id}?type=${encodeURIComponent(type)}`, body);
+export const deleteUomOption = (id, type = "PO") => del(`/api/uom/${id}`, { type });
 
 // 🔹 Company Addresses 🔹
 export const fetchCompanyAddresses = () => get("/api/company-addresses");

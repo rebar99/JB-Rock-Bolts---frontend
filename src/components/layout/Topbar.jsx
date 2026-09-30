@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Bell, LogOut, Menu, Moon, Search, Sun, Users, Activity, Circle, History } from "lucide-react";
+import { ArrowLeftRight, Bell, LogOut, Menu, Moon, Search, Sun, Users, Activity, Circle, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useTheme } from "@/context/ThemeContext";
@@ -70,7 +70,7 @@ function LogItem({ log, isNew }) {
 }
 
 // ── Online User Row ───────────────────────────────────────────────────────────
-function OnlineUserRow({ session, isCurrentUser }) {
+function OnlineUserRow({ session, isCurrentUser, showWorkspace = false }) {
     const initials = (session.user_name || "?")
         .split(" ").map((n) => n[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "?";
 
@@ -91,14 +91,21 @@ function OnlineUserRow({ session, isCurrentUser }) {
                 )}
             </div>
             <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold text-foreground truncate">
-                    {session.user_name}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                    <p className="text-xs font-semibold text-foreground truncate">
+                        {session.user_name}
+                    </p>
                     {isCurrentUser && (
-                        <span className="ml-1.5 text-[9px] font-medium text-primary bg-primary/10 px-1 py-0.5 rounded">
+                        <span className="text-[9px] font-medium text-primary bg-primary/10 px-1 py-0.5 rounded">
                             You
                         </span>
                     )}
-                </p>
+                    {showWorkspace && session.workspace && (
+                        <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300 border border-sky-200 dark:border-sky-800">
+                            {session.workspace}
+                        </span>
+                    )}
+                </div>
                 <p className="text-[10px] text-muted-foreground truncate">{session.user_email}</p>
                 {(session.login_at || session.connected_at) && (
                     <p className="text-[10px] text-muted-foreground mt-0.5">
@@ -129,9 +136,9 @@ function OnlineUserRow({ session, isCurrentUser }) {
 }
 
 // ── Main Topbar ───────────────────────────────────────────────────────────────
-export const Topbar = ({ onMenu }) => {
+export const Topbar = ({ onMenu, title = "JB Engineering Dashboard", subtitle = "Marketing & Sales Management System", searchPlaceholder = "Search clients, orders, invoices..." }) => {
     const { theme, toggle } = useTheme();
-    const { user, logout } = useAuth();
+    const { user, logout, selectApplication } = useAuth();
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -150,12 +157,14 @@ export const Topbar = ({ onMenu }) => {
     });
 
     // ── Online users (SSE-tracked, polled every 10 s as fallback) ─────────────
+    // All users see who is online; only super admin sees which workspace they are in.
     const { data: apiOnline = [] } = useQuery({
         queryKey: ["online_users"],
         queryFn: fetchOnlineUsers,
         refetchInterval: 10_000,
         staleTime: 0,
         refetchOnWindowFocus: true,
+        enabled: !!user,
     });
 
     // ── Recent Logins (polled every 60s) ───────────────────────────────────────
@@ -164,21 +173,31 @@ export const Topbar = ({ onMenu }) => {
         queryFn: fetchRecentLogins,
         refetchInterval: 60_000,
         staleTime: 30_000,
+        enabled: !!user?.is_super_admin,
     });
 
     // ── Always show current user even before server confirms ──────────────────
     // The SSE connection might not yet be indexed by the server on first render.
     // Inject the current user from AuthContext so they appear instantly, then
     // deduplicate once the API confirms the SSE connection is registered.
+    const currentWorkspace = useMemo(() => {
+        if (typeof window !== "undefined") {
+            if (window.location.pathname.startsWith("/store-purchase") || title.includes("Store")) {
+                return "Store Purchase";
+            }
+        }
+        return "Marketing";
+    }, [title]);
+
     const activeSessions = useMemo(() => {
         if (!user) return apiOnline;
         const alreadyIn = apiOnline.some((s) => s.user_id === user.id);
         if (alreadyIn) return apiOnline;
         return [
-            { user_id: user.id, user_name: user.name, user_email: user.email, connected_at: null, is_active: true },
+            { user_id: user.id, user_name: user.name, user_email: user.email, connected_at: null, is_active: true, workspace: currentWorkspace },
             ...apiOnline,
         ];
-    }, [apiOnline, user]);
+    }, [apiOnline, user, currentWorkspace]);
 
     // ── SSE connection — passing user registers this browser as "online" ──────
     // The server adds the user to its in-memory online dict when the SSE
@@ -191,13 +210,14 @@ export const Topbar = ({ onMenu }) => {
                 setSseBuffer((prev) => [log, ...prev].slice(0, 100));
                 setNewCount((n) => n + 1);
                 // Refresh the online list AND history whenever any user logs in or out
-                if (log.entity_type === "User") {
+                if (log.entity_type === "User" && user?.is_super_admin) {
                     queryClient.invalidateQueries({ queryKey: ["online_users"] });
                     queryClient.invalidateQueries({ queryKey: ["recent_logins"] });
                 }
             },
             null,
             user,   // <── registers this browser as online via SSE query params
+            currentWorkspace,
         );
 
         // Also trigger an immediate refresh after the SSE connection is established
@@ -228,6 +248,11 @@ export const Topbar = ({ onMenu }) => {
     const handleLogout = async () => {
         await logout();
         navigate("/login", { replace: true });
+    };
+
+    const handleSwitchSoftware = () => {
+        selectApplication(null);
+        navigate("/");
     };
 
     const initials = displayName.split(" ").map((n) => n[0]).filter(Boolean)
@@ -262,14 +287,14 @@ export const Topbar = ({ onMenu }) => {
                 </Button>
 
                 <div className="hidden md:flex flex-col leading-tight mr-4">
-                    <h1 className="font-bold text-base text-foreground">JB Engineering Dashboard</h1>
-                    <p className="text-[11px] text-muted-foreground">Marketing &amp; Sales Management System</p>
+                    <h1 className="font-bold text-base text-foreground">{title}</h1>
+                    <p className="text-[11px] text-muted-foreground">{subtitle}</p>
                 </div>
 
                 <div className="flex-1 max-w-md ml-auto md:ml-0">
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input placeholder="Search clients, orders, invoices..."
+                        <Input placeholder={searchPlaceholder}
                             className="pl-9 bg-secondary/60 border-transparent focus-visible:bg-card" />
                     </div>
                 </div>
@@ -328,14 +353,16 @@ export const Topbar = ({ onMenu }) => {
                                 <Users className="h-3.5 w-3.5" />
                                 Online{onlineCount > 0 && ` (${onlineCount})`}
                             </button>
-                            <button onClick={() => setActiveTab("logins")}
-                                className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors ${
-                                    activeTab === "logins"
-                                        ? "text-primary border-b-2 border-primary bg-background"
-                                        : "text-muted-foreground hover:text-foreground"
-                                }`}>
-                                <History className="h-3.5 w-3.5" /> History
-                            </button>
+                            {user?.is_super_admin && (
+                                <button onClick={() => setActiveTab("logins")}
+                                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors ${
+                                        activeTab === "logins"
+                                            ? "text-primary border-b-2 border-primary bg-background"
+                                            : "text-muted-foreground hover:text-foreground"
+                                    }`}>
+                                    <History className="h-3.5 w-3.5" /> History
+                                </button>
+                            )}
                         </div>
 
                         <div className="max-h-[420px] overflow-y-auto">
@@ -357,7 +384,8 @@ export const Topbar = ({ onMenu }) => {
                                         : <div className="flex flex-col">
                                             {activeSessions.map((s) => (
                                                 <OnlineUserRow key={s.user_id} session={s}
-                                                    isCurrentUser={s.user_id === user?.id} />
+                                                    isCurrentUser={s.user_id === user?.id}
+                                                    showWorkspace={!!user?.is_super_admin} />
                                             ))}
                                         </div>
                                     }
@@ -382,19 +410,20 @@ export const Topbar = ({ onMenu }) => {
                 </Popover>
 
                 <div className="flex items-center gap-2 pl-3 border-l border-border ml-2">
-                    {/* Inline Online Avatars */}
+                    {/* Inline Online Avatars - visible to all users */}
                     {activeSessions.length > 0 && (
                         <div className="hidden sm:flex items-center -space-x-2 mr-3 pr-3 border-r border-border">
                             {activeSessions.slice(0, 5).map((session, i) => {
                                 const sInitials = (session.user_name || "?")
                                     .split(" ").map((n) => n[0]).filter(Boolean).slice(0, 2).join("").toUpperCase() || "?";
                                 const isCur = session.user_id === user?.id;
+                                const wsLabel = (user?.is_super_admin && session.workspace) ? ` - in ${session.workspace}` : '';
                                 return (
                                     <div key={session.user_id} 
                                          className={`relative h-8 w-8 rounded-full border-2 border-background grid place-items-center text-[10px] font-bold text-white shadow-sm hover:z-10 hover:scale-110 transition-transform cursor-default ${
                                              isCur ? "bg-gradient-to-br from-primary to-primary/70" : "bg-gradient-to-br from-slate-500 to-slate-400"
                                          }`}
-                                         title={`${session.user_name} (${isCur ? 'You' : 'Online'})`}
+                                         title={`${session.user_name} (${isCur ? 'You' : 'Online'}${wsLabel})`}
                                          style={{ zIndex: 10 - i }}
                                     >
                                         {sInitials}
@@ -417,6 +446,11 @@ export const Topbar = ({ onMenu }) => {
                     <div className="h-9 w-9 rounded-full bg-gradient-primary grid place-items-center text-primary-foreground font-semibold text-sm shrink-0">
                         {initials}
                     </div>
+                    <Button variant="outline" onClick={handleSwitchSoftware} title="Switch Software"
+                        className="hidden lg:flex items-center gap-2 px-3 h-9 rounded-md font-semibold">
+                        <ArrowLeftRight className="h-4 w-4" />
+                        <span className="text-sm">Switch Software</span>
+                    </Button>
                     <Button variant="outline" onClick={() => setShowLogoutConfirm(true)} title="Sign out"
                         className="border-destructive/30 text-destructive hover:bg-destructive hover:text-white flex items-center gap-2 px-3 h-9 rounded-md transition-all shadow-sm ml-2 font-bold">
                         <LogOut className="h-4 w-4" />

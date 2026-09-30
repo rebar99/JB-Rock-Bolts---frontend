@@ -444,13 +444,13 @@ function CreditNoteForm({ saleType, editing, onClose }) {
                                         const alrCredited = creditedMap[it.source_item || it.item] || 0;
                                         const remaining = Math.max(0, it.original_qty - alrCredited);
                                         const rawQty = parseFloat(it.credit_qty || 0);
-                                        const adjustmentQty = reason === "Quantity Less" ? -Math.abs(rawQty) : reason === "Quantity Excess" ? Math.abs(rawQty) : rawQty;
+                                        const adjustmentQty = Math.abs(rawQty);
                                         const taxable = adjustmentQty * parseFloat(it.unit_price || 0);
                                         const gstAmount = taxable * parseFloat(it.gst_rate || 0) / 100;
                                         const totalAmount = taxable + gstAmount;
                                         return (
                                             <tr key={idx} className="border-t border-border hover:bg-muted/20">
-                                                <td className="px-3 py-2 text-xs font-medium max-w-[180px]" title={it.item}>
+                                                <td className="px-3 py-2 text-xs font-medium max-w-[180px] whitespace-normal" title={it.item}>
                                                     {(cfg.productEditable || manualEntry) ? (
                                                         <ItemCombobox
                                                             value={it.item}
@@ -460,7 +460,7 @@ function CreditNoteForm({ saleType, editing, onClose }) {
                                                             popoverClassName="w-[320px]"
                                                         />
                                                     ) : (
-                                                        <span className="block truncate">{it.item}</span>
+                                                        <span className="block whitespace-normal">{it.item}</span>
                                                     )}
                                                 </td>
                                                 <td className="px-3 py-2 text-xs text-muted-foreground">{manualEntry ? <Input value={it.uom || ""} onChange={e => updateItem(idx, "uom", e.target.value)} className="w-16 h-7 text-xs" /> : it.uom}</td>
@@ -506,7 +506,7 @@ function CreditNoteForm({ saleType, editing, onClose }) {
                                                 )}
                                                 <td className="px-3 py-2 text-xs text-right">{inr(taxable)}</td>
                                                 <td className="px-3 py-2 text-xs text-right">{inr(gstAmount)}</td>
-                                                <td className="px-3 py-2 text-xs text-right font-semibold text-primary">{inr(totalAmount)}</td>
+                                                <td className="px-3 py-2 text-xs text-right font-semibold text-red-500">{inr(totalAmount)}</td>
                                                 {manualEntry && <td className="px-3 py-2 text-center">
                                                     <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" title="Remove item" onClick={() => setItems(prev => prev.filter((_, itemIndex) => itemIndex !== idx))}>
                                                         <Trash2 className="h-3.5 w-3.5" />
@@ -539,7 +539,7 @@ function CreditNoteForm({ saleType, editing, onClose }) {
                                 <div className="flex justify-between"><span className="text-muted-foreground">GST Amount</span><span className="font-medium">{inr(totals.gst)}</span></div>
                                 <div className="flex justify-between font-bold text-base border-t border-primary/20 pt-1.5">
                                     <span>Credit Note Total</span>
-                                    <span className="text-primary">{inr(totals.total)}</span>
+                                    <span className="text-red-500">{inr(totals.total)}</span>
                                 </div>
                             </div>
                         </div>
@@ -605,7 +605,7 @@ function CreditNoteView({ cn, onClose }) {
                 <div className="bg-muted/40 rounded-lg p-4 min-w-[220px] space-y-1 text-sm">
                     <div className="flex justify-between"><span className="text-muted-foreground">Taxable Amount</span><span>{inr(cn.taxable_amount)}</span></div>
                     <div className="flex justify-between"><span className="text-muted-foreground">GST Amount</span><span>{inr(cn.gst_amount)}</span></div>
-                    <div className="flex justify-between font-bold text-base border-t pt-1 mt-1"><span>Credit Note Total</span><span className="text-primary">{inr(cn.total_amount)}</span></div>
+                    <div className="flex justify-between font-bold text-base border-t pt-1 mt-1"><span>Credit Note Total</span><span className="text-red-500">{inr(cn.total_amount)}</span></div>
                 </div>
             </div>
             <div className="flex justify-end">
@@ -710,7 +710,7 @@ function CNTabPanel({ saleType }) {
                                         <td style={{ width: widths.client_name }} className="px-4 py-3 truncate text-center text-xs" title={cn.client_name}>{cn.client_name}</td>
                                         <td style={{ width: widths.po_number }} className="px-4 py-3 truncate text-center text-xs">{cn.po_number || "—"}</td>
                                         <td style={{ width: widths.reason }} className="px-4 py-3 truncate text-center"><span className="text-xs bg-muted px-2 py-0.5 rounded whitespace-nowrap">{cn.reason}</span></td>
-                                        <td style={{ width: widths.total_amount }} className="px-4 py-3 truncate text-center font-semibold text-primary text-xs">{inr(cn.total_amount)}</td>
+                                        <td style={{ width: widths.total_amount }} className="px-4 py-3 text-center font-semibold text-red-500 text-xs">{inr(cn.total_amount)}</td>
                                         <td style={{ width: widths.status }} className="px-4 py-3 truncate text-center">
                                             <span className={`text-xs border px-2 py-0.5 rounded-full font-medium ${STATUS_BADGE[cn.status] || "bg-muted"}`}>{cn.status}</span>
                                         </td>

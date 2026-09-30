@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Pencil, Trash2, Check, X, Plus } from "lucide-react";
 import { toast } from "sonner";
 
-export const UomManageDialog = ({ open, onOpenChange }) => {
+export const UomManageDialog = ({ open, onOpenChange, type = "PO" }) => {
     const qc = useQueryClient();
     const [newName, setNewName] = useState("");
     const [editingId, setEditingId] = useState(null);
@@ -15,14 +15,14 @@ export const UomManageDialog = ({ open, onOpenChange }) => {
     const [uomToDelete, setUomToDelete] = useState(null);
 
     const { data: uomOptions = [], isLoading } = useQuery({
-        queryKey: ["uom"],
-        queryFn: fetchUomOptions,
+        queryKey: ["uom", type],
+        queryFn: () => fetchUomOptions(type),
     });
 
     const createMutation = useMutation({
-        mutationFn: (name) => createUomOption({ name }),
+        mutationFn: (name) => createUomOption({ name }, type),
         onSuccess: () => {
-            qc.invalidateQueries(["uom"]);
+            qc.invalidateQueries({ queryKey: ["uom", type] });
             qc.invalidateQueries(["constants"]);
             setNewName("");
             toast.success("UOM added");
@@ -31,9 +31,9 @@ export const UomManageDialog = ({ open, onOpenChange }) => {
     });
 
     const updateMutation = useMutation({
-        mutationFn: ({ id, name }) => updateUomOption(id, { name }),
+        mutationFn: ({ id, name }) => updateUomOption(id, { name }, type),
         onSuccess: () => {
-            qc.invalidateQueries(["uom"]);
+            qc.invalidateQueries({ queryKey: ["uom", type] });
             qc.invalidateQueries(["constants"]);
             setEditingId(null);
             toast.success("UOM updated");
@@ -42,9 +42,9 @@ export const UomManageDialog = ({ open, onOpenChange }) => {
     });
 
     const deleteMutation = useMutation({
-        mutationFn: (id) => deleteUomOption(id),
+        mutationFn: (id) => deleteUomOption(id, type),
         onSuccess: () => {
-            qc.invalidateQueries(["uom"]);
+            qc.invalidateQueries({ queryKey: ["uom", type] });
             qc.invalidateQueries(["constants"]);
             setUomToDelete(null);
             toast.success("UOM deleted");
@@ -72,7 +72,7 @@ export const UomManageDialog = ({ open, onOpenChange }) => {
             <Dialog open={open} onOpenChange={onOpenChange}>
                 <DialogContent className="max-w-md max-h-[85vh] flex flex-col p-4 sm:p-6 gap-0">
                     <DialogHeader className="mb-4">
-                        <DialogTitle>Manage UOM Options</DialogTitle>
+                        <DialogTitle>{type === "STORE" ? "Manage Store UOM Options" : "Manage UOM Options"}</DialogTitle>
                     </DialogHeader>
 
                     <div className="flex items-center gap-2 mb-4 shrink-0">

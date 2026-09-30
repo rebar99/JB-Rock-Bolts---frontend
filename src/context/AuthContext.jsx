@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, useRef } from "react";
-import { logoutUser, post } from "@/lib/api";
+import { logoutUser, post, fetchMyAccess } from "@/lib/api";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ const AuthContext = createContext(null);
 
 const TOKEN_KEY = "auth_token";
 const USER_KEY = "auth_user";
+const ACTIVE_APP_KEY = "active_application";
 
 export const AuthProvider = ({ children }) => {
     const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY));
@@ -19,6 +20,7 @@ export const AuthProvider = ({ children }) => {
             return null;
         }
     });
+    const [activeApplication, setActiveApplication] = useState(() => localStorage.getItem(ACTIVE_APP_KEY) || null);
 
     const [loginAttempt, setLoginAttempt] = useState(null);
     const ws = useRef(null);
@@ -68,6 +70,8 @@ export const AuthProvider = ({ children }) => {
         localStorage.removeItem(TOKEN_KEY);
         localStorage.removeItem(USER_KEY);
         localStorage.removeItem("app_current_user");
+        localStorage.removeItem(ACTIVE_APP_KEY);
+        setActiveApplication(null);
     };
 
     useEffect(() => {
@@ -120,10 +124,61 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem(TOKEN_KEY, data.access_token);
         localStorage.setItem(USER_KEY, JSON.stringify(data.user));
         localStorage.setItem("app_current_user", data.user.name);
+
+        // Auto-select workspace for users who only have access to one application.
+        // Super admins always see the selection screen.
+        const access = data.user?.application_access ?? {};
+        const hasMarketing = access.marketing && access.marketing !== "none";
+        const hasStore = access.store_purchase && access.store_purchase !== "none";
+        if (!data.user?.is_super_admin && hasMarketing && !hasStore) {
+            setActiveApplication("marketing");
+            localStorage.setItem(ACTIVE_APP_KEY, "marketing");
+        } else if (!data.user?.is_super_admin && hasStore && !hasMarketing) {
+            setActiveApplication("store_purchase");
+            localStorage.setItem(ACTIVE_APP_KEY, "store_purchase");
+        } else {
+            setActiveApplication(null);
+            localStorage.removeItem(ACTIVE_APP_KEY);
+        }
+    };
+
+    const selectApplication = (code) => {
+        setActiveApplication(code);
+        if (code) localStorage.setItem(ACTIVE_APP_KEY, code);
+        else localStorage.removeItem(ACTIVE_APP_KEY);
+    };
+
+    // Fetch fresh access data from server and update localStorage/state.
+    // Call this after Super Admin changes workspace so the user gets the latest access.
+    const refreshUser = async () => {
+        if (!token) return null;
+        try {
+            const fresh = await fetchMyAccess();
+            if (fresh) {
+                setUser(fresh);
+                localStorage.setItem(USER_KEY, JSON.stringify(fresh));
+                localStorage.setItem("app_current_user", fresh.name);
+            }
+            return fresh;
+        } catch {
+            return null;
+        }
+    };
+
+    // Returns the effective role for an application: "admin" | "user" | "none".
+    // "none" means the user has no access to that application (workspace restricted).
+    // Super Admin always gets "admin" for both apps regardless of access rows.
+    const applicationRole = (code) => {
+        if (user?.is_super_admin) return "admin";
+        const role = user?.application_access?.[code];
+        if (role === "admin") return "admin";
+        if (!role || role === "none") return "none";
+        return "user";
     };
 
     return (
-        <AuthContext.Provider value={{ token, user, login, logout, isAuthenticated: !!token, isReadOnly: !user?.is_admin }}>
+        <AuthContext.Provider value={{ token, user, login, logout, refreshUser, activeApplication, selectApplication, applicationRole,
+            isAuthenticated: !!token, isReadOnly: activeApplication ? applicationRole(activeApplication) !== "admin" : true }}>
             {children}
             {loginAttempt && (
                 <Dialog open={true} onOpenChange={() => {}}>

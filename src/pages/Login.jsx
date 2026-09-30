@@ -4,6 +4,8 @@ import { Eye, EyeOff, LogIn, Lock, Mail } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { loginUser } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+import jbEngineeringLogo from "@/assets/jb-engineering-logo.jpg";
+import loginBackground from "@/assets/login-background-reference.jpg";
 
 export default function Login() {
     const [email, setEmail] = useState("");
@@ -58,17 +60,18 @@ export default function Login() {
             </div>
 
             {/* Right form panel */}
-            <div className="flex-1 flex items-center justify-center bg-background px-6 py-12">
-                <div className="w-full max-w-md">
-                    {/* Logo visible only on mobile */}
-                    <div className="lg:hidden mb-8 flex justify-center">
-                        <img
-                            src="https://jbrockbolts.com/images/rebar-couplers-logo.jpg"
-                            alt="JB Engineering"
-                            className="w-56 rounded-xl p-2 bg-white shadow-md"
-                        />
-                    </div>
+            <div className="relative flex-1 flex items-center justify-center overflow-hidden bg-background px-6 py-12 lg:justify-start lg:px-16 xl:px-24">
+                {/* The supplied reference's white-side artwork; its blue half is deliberately excluded. */}
+                <div className="pointer-events-none absolute inset-0" aria-hidden="true">
+                    <img
+                        src={loginBackground}
+                        alt=""
+                        className="h-full w-full object-cover object-left"
+                    />
+                    <div className="absolute right-0 top-0 h-20 w-[58%] bg-gradient-to-b from-[#cde9fb] via-[#d9effd] to-transparent" />
+                </div>
 
+                <div className="relative z-10 w-full max-w-md rounded-2xl border border-white/90 bg-background/95 p-8 shadow-[0_18px_50px_rgba(15,35,65,0.14)] backdrop-blur-sm sm:p-10">
                     <div className="mb-8">
                         <h2 className="text-2xl font-bold text-foreground">Welcome back</h2>
                         <p className="mt-1.5 text-sm text-muted-foreground">Sign in to your account to continue</p>

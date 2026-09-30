@@ -22,6 +22,10 @@ import NotFound from "./pages/NotFound";
 import CompanyAddresses from "./pages/CompanyAddresses";
 import SystemBackup from "./pages/SystemBackup";
 import RecentlyDeleted from "./pages/RecentlyDeleted";
+import SoftwareSelection from "./pages/SoftwareSelection";
+import StorePurchase from "./pages/StorePurchase";
+import ApplicationAccessManagement from "./pages/ApplicationAccessManagement";
+import POApprovalSettings from "./pages/POApprovalSettings";
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -52,6 +56,24 @@ const AdminRoute = ({ children }) => {
     return children;
 };
 
+const MarketingRoute = ({ children }) => {
+    const { isAuthenticated, applicationRole } = useAuth();
+    if (!isAuthenticated) return <Navigate to="/login" replace />;
+    return applicationRole("marketing") === "none" ? <Navigate to="/" replace /> : children;
+};
+
+const SuperAdminRoute = ({ children }) => {
+    const { isAuthenticated, user } = useAuth();
+    if (!isAuthenticated) return <Navigate to="/login" replace />;
+    return user?.is_super_admin ? children : <Navigate to="/" replace />;
+};
+
+const StorePurchaseRoute = ({ children }) => {
+    const { isAuthenticated, applicationRole } = useAuth();
+    if (!isAuthenticated) return <Navigate to="/login" replace />;
+    return applicationRole("store_purchase") === "none" ? <Navigate to="/" replace /> : children;
+};
+
 const App = () => (
     <QueryClientProvider client={queryClient}>
         <ThemeProvider>
@@ -67,18 +89,22 @@ const App = () => (
                             <Route path="/forgot-password" element={<GuestRoute><ForgotPassword /></GuestRoute>} />
 
                             {/* Protected app routes */}
-                            <Route path="/" element={<ProtectedRoute><AppLayout><Dashboard /></AppLayout></ProtectedRoute>} />
-                            <Route path="/purchase-orders" element={<ProtectedRoute><AppLayout><PurchaseOrders /></AppLayout></ProtectedRoute>} />
-                            <Route path="/work-orders" element={<ProtectedRoute><AppLayout><WorkOrders /></AppLayout></ProtectedRoute>} />
-                            <Route path="/sales-invoice" element={<ProtectedRoute><AppLayout><Sales /></AppLayout></ProtectedRoute>} />
-                            <Route path="/credit-notes" element={<ProtectedRoute><AppLayout><CreditNotes /></AppLayout></ProtectedRoute>} />
-                            <Route path="/inventory" element={<ProtectedRoute><AppLayout><Inventory /></AppLayout></ProtectedRoute>} />
-                            <Route path="/clients" element={<ProtectedRoute><AppLayout><Clients /></AppLayout></ProtectedRoute>} />
-                            <Route path="/reports" element={<ProtectedRoute><AppLayout><Reports /></AppLayout></ProtectedRoute>} />
-                            <Route path="/user-approvals" element={<AdminRoute><AppLayout><UserApprovals /></AppLayout></AdminRoute>} />
-                            <Route path="/admin/addresses" element={<AdminRoute><AppLayout><CompanyAddresses /></AppLayout></AdminRoute>} />
-                            <Route path="/admin/system-backup" element={<AdminRoute><AppLayout><SystemBackup /></AppLayout></AdminRoute>} />
-                            <Route path="/admin/recently-deleted" element={<AdminRoute><AppLayout><RecentlyDeleted /></AppLayout></AdminRoute>} />
+                            <Route path="/" element={<ProtectedRoute><SoftwareSelection /></ProtectedRoute>} />
+                            <Route path="/marketing" element={<MarketingRoute><AppLayout><Dashboard /></AppLayout></MarketingRoute>} />
+                            <Route path="/purchase-orders" element={<MarketingRoute><AppLayout><PurchaseOrders /></AppLayout></MarketingRoute>} />
+                            <Route path="/work-orders" element={<MarketingRoute><AppLayout><WorkOrders /></AppLayout></MarketingRoute>} />
+                            <Route path="/sales-invoice" element={<MarketingRoute><AppLayout><Sales /></AppLayout></MarketingRoute>} />
+                            <Route path="/credit-notes" element={<MarketingRoute><AppLayout><CreditNotes /></AppLayout></MarketingRoute>} />
+                            <Route path="/inventory" element={<MarketingRoute><AppLayout><Inventory /></AppLayout></MarketingRoute>} />
+                            <Route path="/clients" element={<MarketingRoute><AppLayout><Clients /></AppLayout></MarketingRoute>} />
+                            <Route path="/reports" element={<MarketingRoute><AppLayout><Reports /></AppLayout></MarketingRoute>} />
+                            <Route path="/user-approvals" element={<SuperAdminRoute><AppLayout><UserApprovals /></AppLayout></SuperAdminRoute>} />
+                            <Route path="/admin/addresses" element={<MarketingRoute><AdminRoute><AppLayout><CompanyAddresses /></AppLayout></AdminRoute></MarketingRoute>} />
+                            <Route path="/admin/system-backup" element={<MarketingRoute><AdminRoute><AppLayout><SystemBackup /></AppLayout></AdminRoute></MarketingRoute>} />
+                            <Route path="/admin/recently-deleted" element={<MarketingRoute><AdminRoute><AppLayout><RecentlyDeleted /></AppLayout></AdminRoute></MarketingRoute>} />
+                            <Route path="/admin/application-access" element={<SuperAdminRoute><ApplicationAccessManagement /></SuperAdminRoute>} />
+                            <Route path="/admin/po-approval-settings" element={<SuperAdminRoute><POApprovalSettings /></SuperAdminRoute>} />
+                            <Route path="/store-purchase/*" element={<StorePurchaseRoute><StorePurchase /></StorePurchaseRoute>} />
                             <Route path="*" element={<NotFound />} />
                         </Routes>
                     </AuthProvider>
