@@ -190,12 +190,17 @@ export const Topbar = ({ onMenu, title = "JB Engineering Dashboard", subtitle = 
     }, [title]);
 
     const activeSessions = useMemo(() => {
-        if (!user) return apiOnline;
-        const alreadyIn = apiOnline.some((s) => s.user_id === user.id);
-        if (alreadyIn) return apiOnline;
+        if (!user) return [];
+        // Only show users who are in the same workspace
+        const filtered = apiOnline.filter(s => {
+            const ws = s.workspace || 'Marketing';
+            return ws === currentWorkspace;
+        });
+        const alreadyIn = filtered.some((s) => s.user_id === user.id);
+        if (alreadyIn) return filtered;
         return [
             { user_id: user.id, user_name: user.name, user_email: user.email, connected_at: null, is_active: true, workspace: currentWorkspace },
-            ...apiOnline,
+            ...filtered,
         ];
     }, [apiOnline, user, currentWorkspace]);
 

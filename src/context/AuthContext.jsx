@@ -20,6 +20,9 @@ export const AuthProvider = ({ children }) => {
                 parsed.is_super_admin = true;
                 parsed.application_access = { marketing: "admin", store_purchase: "admin" };
             }
+            if (parsed && (parsed.is_super_admin || parsed.application_access?.marketing === "admin")) {
+                parsed.is_admin = true;
+            }
             return parsed;
         } catch {
             return null;
@@ -42,6 +45,9 @@ export const AuthProvider = ({ children }) => {
                 const data = JSON.parse(event.data);
                 if (data.type === "LOGIN_ATTEMPT") {
                     setLoginAttempt(data);
+                } else if (data.type === "FORCE_LOGOUT") {
+                    toast.error(data.message || "Your session has been terminated by the administrator.");
+                    logout();
                 }
             };
 
@@ -77,6 +83,7 @@ export const AuthProvider = ({ children }) => {
         localStorage.removeItem("app_current_user");
         localStorage.removeItem(ACTIVE_APP_KEY);
         setActiveApplication(null);
+        window.location.href = "/login";
     };
 
     useEffect(() => {
@@ -124,21 +131,29 @@ export const AuthProvider = ({ children }) => {
     };
 
     const login = (data) => {
+        const u = data.user;
+        if (u && (u.is_super_admin || u.email?.toLowerCase() === "deepikar412003@gmail.com")) {
+            u.is_super_admin = true;
+            u.application_access = { marketing: "admin", store_purchase: "admin" };
+        }
+        if (u && (u.is_super_admin || u.application_access?.marketing === "admin")) {
+            u.is_admin = true;
+        }
         setToken(data.access_token);
-        setUser(data.user);
+        setUser(u);
         localStorage.setItem(TOKEN_KEY, data.access_token);
-        localStorage.setItem(USER_KEY, JSON.stringify(data.user));
-        localStorage.setItem("app_current_user", data.user.name);
+        localStorage.setItem(USER_KEY, JSON.stringify(u));
+        localStorage.setItem("app_current_user", u.name);
 
         // Auto-select workspace for users who only have access to one application.
         // Super admins always see the selection screen.
-        const access = data.user?.application_access ?? {};
+        const access = u?.application_access ?? {};
         const hasMarketing = access.marketing && access.marketing !== "none";
         const hasStore = access.store_purchase && access.store_purchase !== "none";
-        if (!data.user?.is_super_admin && hasMarketing && !hasStore) {
+        if (!u?.is_super_admin && hasMarketing && !hasStore) {
             setActiveApplication("marketing");
             localStorage.setItem(ACTIVE_APP_KEY, "marketing");
-        } else if (!data.user?.is_super_admin && hasStore && !hasMarketing) {
+        } else if (!u?.is_super_admin && hasStore && !hasMarketing) {
             setActiveApplication("store_purchase");
             localStorage.setItem(ACTIVE_APP_KEY, "store_purchase");
         } else {
@@ -160,6 +175,13 @@ export const AuthProvider = ({ children }) => {
         try {
             const fresh = await fetchMyAccess();
             if (fresh) {
+                if (fresh.is_super_admin || fresh.email?.toLowerCase() === "deepikar412003@gmail.com") {
+                    fresh.is_super_admin = true;
+                    fresh.application_access = { marketing: "admin", store_purchase: "admin" };
+                }
+                if (fresh.is_super_admin || fresh.application_access?.marketing === "admin") {
+                    fresh.is_admin = true;
+                }
                 setUser(fresh);
                 localStorage.setItem(USER_KEY, JSON.stringify(fresh));
                 localStorage.setItem("app_current_user", fresh.name);

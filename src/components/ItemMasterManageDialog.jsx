@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ChevronRight, Pencil, Plus, Trash2, X, Check } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -13,16 +13,11 @@ import { getCurrentUser } from "@/lib/currentUser";
 import { compareSizes } from "./ItemCombobox";
 
 // Admin-only Add/Edit/Delete for the Item Master list backing the PO Item
-// field's dropdown everywhere. The trigger for this dialog is itself
-// hidden from non-admins in PurchaseOrders.jsx — the mutations below are
-// a second line of defense: the backend independently checks the real JWT
-// role and returns 403 with "Access Denied – Only Admin can manage items."
-// regardless of what the UI shows, so this dialog can only ever be opened
-// by someone who's actually allowed to use it.
-//
-// Each item can also carry its own list of sizes (e.g. Couplers -> 16mm,
-// 20mm...) — expand a row to manage them the same way (add/delete).
+// field's dropdown everywhere.
 export const ItemMasterManageDialog = ({ open, onOpenChange, type = "PO" }) => {
+    const isStore = type === "STORE";
+    const groupTerm = isStore ? "Group" : "Item";
+    const itemTerm = isStore ? "Item Name" : "Size";
     const qc = useQueryClient();
     const [newName, setNewName] = useState("");
     const [editingId, setEditingId] = useState(null);
@@ -147,18 +142,23 @@ export const ItemMasterManageDialog = ({ open, onOpenChange, type = "PO" }) => {
             <Dialog open={open} onOpenChange={onOpenChange}>
                 <DialogContent className="sm:max-w-md max-h-[80vh] flex flex-col">
                     <DialogHeader>
-                        <DialogTitle>Manage Items</DialogTitle>
+                        <DialogTitle>{isStore ? "Manage Groups & Items" : "Manage Items"}</DialogTitle>
+                        {isStore && (
+                            <DialogDescription className="text-xs text-muted-foreground">
+                                Add Group Name (e.g. MS Plate, Bolt, Nut), then click on it to add Item Names under that group.
+                            </DialogDescription>
+                        )}
                     </DialogHeader>
 
                     <div className="flex items-center gap-2">
                         <Input
-                            placeholder="New item name..."
+                            placeholder={isStore ? "New Group Name (e.g. MS Plate, Bolt, Nut)..." : "New item name..."}
                             value={newName}
                             onChange={(e) => setNewName(e.target.value)}
                             onKeyDown={(e) => e.key === "Enter" && handleAdd()}
                         />
                         <Button type="button" onClick={handleAdd} disabled={createMutation.isPending || !newName.trim()}>
-                            <Plus className="h-4 w-4 mr-1" /> Add
+                            <Plus className="h-4 w-4 mr-1" /> Add {groupTerm}
                         </Button>
                     </div>
 
@@ -194,9 +194,11 @@ export const ItemMasterManageDialog = ({ open, onOpenChange, type = "PO" }) => {
                                                     onClick={() => toggleExpand(item.id)}
                                                 >
                                                     <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${isExpanded ? "rotate-90" : ""}`} />
-                                                    <span className="text-sm truncate">{item.name}</span>
+                                                    <span className="text-sm font-semibold truncate">{item.name}</span>
                                                     {sizes.length > 0 && (
-                                                        <span className="text-[10px] text-muted-foreground shrink-0">({sizes.length} sizes)</span>
+                                                        <span className="text-[10px] text-muted-foreground shrink-0 font-normal">
+                                                            ({sizes.length} {isStore ? (sizes.length === 1 ? "item" : "items") : (sizes.length === 1 ? "size" : "sizes")})
+                                                        </span>
                                                     )}
                                                 </button>
                                                 <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => startEdit(item)} title="Edit">
@@ -214,7 +216,7 @@ export const ItemMasterManageDialog = ({ open, onOpenChange, type = "PO" }) => {
                                             <div className="flex items-center gap-2 pt-2">
                                                 <Input
                                                     className="h-8"
-                                                    placeholder="New size (e.g. 16mm)..."
+                                                    placeholder={isStore ? `New Item Name under "${item.name}"...` : "New size (e.g. 16mm)..."}
                                                     value={newSize}
                                                     onChange={(e) => setNewSize(e.target.value)}
                                                     onKeyDown={(e) => e.key === "Enter" && handleAddSize(item.id)}
@@ -224,11 +226,13 @@ export const ItemMasterManageDialog = ({ open, onOpenChange, type = "PO" }) => {
                                                     onClick={() => handleAddSize(item.id)}
                                                     disabled={addSizeMutation.isPending || !newSize.trim()}
                                                 >
-                                                    <Plus className="h-3.5 w-3.5 mr-1" /> Add
+                                                    <Plus className="h-3.5 w-3.5 mr-1" /> Add {isStore ? "Item" : "Size"}
                                                 </Button>
                                             </div>
                                             {sizes.length === 0 ? (
-                                                <div className="text-xs text-muted-foreground">No sizes yet — add one above.</div>
+                                                <div className="text-xs text-muted-foreground">
+                                                    {isStore ? `No items under ${item.name} yet — add one above.` : "No sizes yet — add one above."}
+                                                </div>
                                             ) : (
                                                 <div className="flex flex-wrap gap-1.5">
                                                      {[...sizes].sort((a, b) => compareSizes(a.size, b.size)).map((s) => (
@@ -316,10 +320,10 @@ export const ItemMasterManageDialog = ({ open, onOpenChange, type = "PO" }) => {
             <Dialog open={!!itemToDelete} onOpenChange={(o) => !o && setItemToDelete(null)}>
                 <DialogContent className="sm:max-w-sm">
                     <DialogHeader>
-                        <DialogTitle>Delete Item</DialogTitle>
+                        <DialogTitle>Delete {groupTerm}</DialogTitle>
                     </DialogHeader>
                     <p className="text-sm text-muted-foreground">
-                        Delete <strong className="text-foreground">{itemToDelete?.name}</strong> from the Item Master? Existing Purchase Orders that already used this item are not affected.
+                        Delete <strong className="text-foreground">{itemToDelete?.name}</strong> from the {isStore ? "Group Master" : "Item Master"}? {isStore ? "All items under this group will also be deleted." : "Existing Purchase Orders that already used this item are not affected."}
                     </p>
                     <div className="flex justify-end gap-2">
                         <Button variant="outline" onClick={() => setItemToDelete(null)}>Cancel</Button>
@@ -330,3 +334,5 @@ export const ItemMasterManageDialog = ({ open, onOpenChange, type = "PO" }) => {
         </>
     );
 };
+
+export default ItemMasterManageDialog;

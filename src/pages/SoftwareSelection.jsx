@@ -6,7 +6,8 @@ import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import jbEngineeringLogo from "@/assets/jb-engineering-logo.jpg";
-import { fetchMyPendingPOApprovals, fetchOnlineUsers, openLogStream, fetchApplicationAccessUsers } from "@/lib/api";
+import { fetchMyPendingPOApprovals, fetchOnlineUsers, openLogStream, fetchApplicationAccessUsers, forceLogoutUser } from "@/lib/api";
+import { toast } from "sonner";
 
 const apps = [
     { code: "marketing", title: "Marketing", subtitle: "Marketing & Sales Management", description: "Manage customer activity, sales records, reports and business performance.", icon: Megaphone, route: "/marketing", accent: "from-violet-600 to-indigo-700", pale: "bg-violet-50", iconClass: "text-violet-700", ring: "group-hover:ring-violet-300" },
@@ -85,6 +86,21 @@ export default function SoftwareSelection() {
     }, [pendingApprovals.length]);
     const openApprovals = () => { setApprovalPopupOpen(false); selectApplication("store_purchase"); navigate("/store-purchase/approvals"); };
 
+    const [dismissedUserIds, setDismissedUserIds] = useState(() => new Set());
+
+    const handleForceLogout = async (userId, userName) => {
+        if (!window.confirm(`Force logout ${userName}? They will be immediately logged out.`)) return;
+        try {
+            await forceLogoutUser(userId);
+            setDismissedUserIds((prev) => new Set(prev).add(userId));
+            toast.success(`${userName} has been logged out.`);
+            queryClient.invalidateQueries({ queryKey: ["portal-online-users"] });
+            queryClient.invalidateQueries({ queryKey: ["online_users"] });
+        } catch (e) {
+            toast.error(e.message || "Failed to force logout user.");
+        }
+    };
+
     // The selection screen is part of the authenticated portal, so it also
     // registers the active browser in the existing live-presence service.
     useEffect(() => {
@@ -98,11 +114,12 @@ export default function SoftwareSelection() {
     }, [user?.id, queryClient]);
 
     const visibleOnlineUsers = useMemo(() => {
-        const currentAlreadyPresent = onlineUsers.some((member) => member.user_id === user?.id);
+        const filtered = onlineUsers.filter((member) => !dismissedUserIds.has(member.user_id));
+        const currentAlreadyPresent = filtered.some((member) => member.user_id === user?.id);
         return currentAlreadyPresent || !user
-            ? onlineUsers
-            : [{ user_id: user.id, user_name: user.name, user_email: user.email, is_active: true, workspace: "Software Selection" }, ...onlineUsers];
-    }, [onlineUsers, user]);
+            ? filtered
+            : [{ user_id: user.id, user_name: user.name, user_email: user.email, is_active: true, workspace: "Software Selection" }, ...filtered];
+    }, [onlineUsers, user, dismissedUserIds]);
 
     // Build a role label for each online user
     const roleMap = useMemo(() => {
@@ -217,6 +234,15 @@ export default function SoftwareSelection() {
                                             )}
                                         </div>
                                     </div>
+                                    {isSuperAdminUser && !isMe && (
+                                        <button
+                                            onClick={() => handleForceLogout(member.user_id, member.user_name || "User")}
+                                            className="shrink-0 ml-1 rounded-lg p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                            title={`Force logout ${member.user_name}`}
+                                        >
+                                            <LogOut className="h-3.5 w-3.5" />
+                                        </button>
+                                    )}
                                 </div>
                             );
                         })}

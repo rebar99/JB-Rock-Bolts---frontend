@@ -245,33 +245,48 @@ function CreditNoteForm({ saleType, editing, onClose }) {
     });
 
     const handleSubmit = () => {
-        if (!manualEntry && !selectedSaleId) return toast.error("Please select an invoice");
+        if (!manualEntry && !selectedSaleId && !editing?.invoice_number) return toast.error("Please select an invoice");
         if (manualEntry && (!manualInvoice.invoice_number.trim() || !manualInvoice.client_name.trim())) return toast.error("Manual invoice number and client name are required");
         if (!reason) return toast.error("Please select a reason");
         const activeItems = cfg.showItems
             ? items
                 .filter(it => it.credit_qty !== 0 && it.credit_qty !== undefined)
-                .map(({ source_item, original_unit_price, original_gst_rate, ...item }) => item)
+                .map(({ source_item, original_unit_price, original_gst_rate, id, credit_note_id, ...item }) => item)
             : [];
         if (cfg.showItems && activeItems.length === 0) return toast.error("At least one item must have a non-zero Credit Qty");
+
+        const effectiveClientName = manualEntry
+            ? manualInvoice.client_name
+            : (selectedSale?.client_name || editing?.client_name || "");
+        const effectiveInvoiceNumber = manualEntry
+            ? manualInvoice.invoice_number
+            : (selectedSale?.invoice_number || editing?.invoice_number || "");
+        const effectivePoNumber = manualEntry
+            ? manualInvoice.po_number
+            : (selectedSale?.po_number || selectedSale?.wo_number || editing?.po_number || "");
+        const effectiveProject = manualEntry
+            ? manualInvoice.project
+            : (selectedSale?.project || editing?.project || "");
+        const effectiveInvoiceDate = (manualEntry
+            ? manualInvoice.invoice_date
+            : (selectedSale?.invoice_date || editing?.invoice_date)) || undefined;
 
         save({
             cn_date: cnDate,
             cn_number: creditNoteNumber || undefined,
             sale_type: saleType,
-            ...(!manualEntry && (saleType === "PO" ? { sale_id: selectedSaleId } : { wo_sale_id: selectedSaleId })),
-            invoice_number: manualEntry ? manualInvoice.invoice_number : selectedSale?.invoice_number,
-            // Do not send an empty string: FastAPI correctly rejects "" as
-            // a date. A historical invoice date is optional.
-            invoice_date: (manualEntry ? manualInvoice.invoice_date : selectedSale?.invoice_date) || undefined,
-            po_number: manualEntry ? manualInvoice.po_number : (selectedSale?.po_number || selectedSale?.wo_number),
-            client_name: manualEntry ? manualInvoice.client_name : (selectedSale?.client_name || ""),
-            project: manualEntry ? manualInvoice.project : selectedSale?.project,
+            ...(!manualEntry && (saleType === "PO" ? { sale_id: selectedSaleId || editing?.sale_id } : { wo_sale_id: selectedSaleId || editing?.wo_sale_id })),
+            invoice_number: effectiveInvoiceNumber,
+            invoice_date: effectiveInvoiceDate,
+            po_number: effectivePoNumber,
+            client_name: effectiveClientName,
+            project: effectiveProject,
             reason,
             taxable_amount: cfg.showItems ? totals.taxable : 0,
             gst_amount: cfg.showItems ? totals.gst : 0,
             total_amount: cfg.showItems ? totals.total : 0,
             items: cfg.showItems ? activeItems : [],
+            updated_by: user?.username || user?.email,
             created_by: user?.username || user?.email,
         });
     };
@@ -319,17 +334,17 @@ function CreditNoteForm({ saleType, editing, onClose }) {
                     </SelectContent>
                 </Select>
 
-                {selectedSale && (
+                {(selectedSale || editing) && (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-3 border-t border-border">
                         {[
-                            ["Client", selectedSale.client_name],
-                            [saleType === "PO" ? "PO Number" : "WO Number", selectedSale.po_number || selectedSale.wo_number || "—"],
-                            ["Project", selectedSale.project || "—"],
-                            ["Invoice Date", selectedSale.invoice_date ? fmtDate(selectedSale.invoice_date) : "—"],
-                            ["Invoice Total", inr(selectedSale.grand_total)],
-                            ["GST Amount", inr(selectedSale.gst_amount)],
-                            ["Ship To", selectedSale.ship_to || "—"],
-                            ["Bill To", selectedSale.bill_to || "—"],
+                            ["Client", selectedSale?.client_name || editing?.client_name || "—"],
+                            [saleType === "PO" ? "PO Number" : "WO Number", selectedSale?.po_number || selectedSale?.wo_number || editing?.po_number || "—"],
+                            ["Project", selectedSale?.project || editing?.project || "—"],
+                            ["Invoice Date", (selectedSale?.invoice_date || editing?.invoice_date) ? fmtDate(selectedSale?.invoice_date || editing?.invoice_date) : "—"],
+                            ["Invoice Total", selectedSale ? inr(selectedSale.grand_total) : (editing?.total_amount ? inr(editing.total_amount) : "—")],
+                            ["GST Amount", selectedSale ? inr(selectedSale.gst_amount) : (editing?.gst_amount ? inr(editing.gst_amount) : "—")],
+                            ["Ship To", selectedSale?.ship_to || "—"],
+                            ["Bill To", selectedSale?.bill_to || "—"],
                         ].map(([label, val]) => (
                             <div key={label}>
                                 <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">{label}</div>
@@ -617,8 +632,8 @@ function CreditNoteView({ cn, onClose }) {
 
 // ---- Tab Panel --------------------------------------------------------------
 function CNTabPanel({ saleType }) {
-    const { user } = useAuth();
-    const isAdmin = user?.is_admin;
+    const { user, applicationRole } = useAuth();
+    const isAdmin = Boolean(user?.is_admin || user?.is_super_admin || user?.application_access?.marketing === "admin" || applicationRole?.("marketing") === "admin");
     const qc = useQueryClient();
     const [searchText, setSearchText] = useState("");
     const [formOpen, setFormOpen] = useState(false);

@@ -589,6 +589,12 @@ export const uploadStoreMaterialReceiptBill = async (file) => {
     return res.json();
 };
 
+// ── Store Vendors ─────────────────────────────────────────────────────────────
+export const fetchStoreVendors = () => get("/api/store-purchase/vendors");
+export const createStoreVendor = (body) => post("/api/store-purchase/vendors", body);
+export const updateStoreVendor = (id, body) => put(`/api/store-purchase/vendors/${id}`, body);
+export const deleteStoreVendor = (id) => del(`/api/store-purchase/vendors/${id}`);
+
 // ── User Approvals (admin only) ────────────────────────────────────────────
 export const fetchPendingUsers = () => get("/api/users/pending");
 export const approveUser = (id, workspace) => post(`/api/users/${id}/approve`, { workspace });
@@ -596,6 +602,7 @@ export const updateUserWorkspace = (id, workspace) => put(`/api/users/${id}/work
 export const rejectUser = (id) => post(`/api/users/${id}/reject`, {});
 
 export const logoutUser = () => request("/api/users/logout", { method: "POST" });
+export const forceLogoutUser = (userId) => request(`/api/users/${userId}/force-logout`, { method: "POST" });
 
 // The request() helper already reads the token from localStorage and adds
 // the Authorization header automatically — no need to pass it manually here.
