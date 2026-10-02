@@ -120,7 +120,7 @@ function PaymentDialog({ receipt, onClose, onSave, isSaving }) {
 
 function ActivityRow({ createdBy, createdAt, updatedBy, updatedAt }) {
     return (
-        <div className="mt-4 border-t pt-3 grid gap-4 sm:grid-cols-2">
+        <div className="mt-4 border-t pt-3 flex flex-wrap items-start gap-8 sm:gap-12">
             <div>
                 <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Created By</p>
                 <p className="mt-0.5 font-semibold text-slate-800">{createdBy || "—"}</p>
@@ -356,7 +356,7 @@ function ReceiptViewDialog({ receipt, onClose }) {
                     )}
 
                     {/* Created / Updated by */}
-                    <div className="rounded-lg border bg-slate-50 p-4 grid gap-4 sm:grid-cols-2">
+                    <div className="rounded-lg border bg-slate-50 p-4 flex flex-wrap items-start gap-8 sm:gap-12">
                         <div>
                             <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Created By</p>
                             <p className="mt-0.5 font-semibold text-slate-800">{receipt.created_by || "—"}</p>

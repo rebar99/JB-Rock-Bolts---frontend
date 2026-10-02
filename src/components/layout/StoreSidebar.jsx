@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 const menu = [
     ["Purchase Orders", "purchase", ShoppingCart], ["Materials Received", "materials-received", PackageCheck], ["Inventory", "items", Boxes],
-    ["Stock Operations", "operations", ArrowLeftRight], ["Vendors Name", "suppliers", Truck], ["Reports", "reports", FileBarChart2],
+    ["Stock Operations", "operations", ArrowLeftRight], ["List Approved Vendor", "suppliers", Truck], ["Reports", "reports", FileBarChart2],
 ];
 
 export default function StoreSidebar() {

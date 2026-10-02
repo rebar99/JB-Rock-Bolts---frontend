@@ -697,6 +697,7 @@ export const increaseWOQuantity = async (id, data) => {
 
 // ── Credit Notes ──────────────────────────────────────────────────────────────
 export const fetchCreditNotes = (params = {}) => get("/api/credit-notes", params);
+export const fetchNextCreditNoteNumber = (saleType) => get("/api/credit-notes/next-number", { sale_type: saleType });
 export const fetchCreditNote = (id) => get(`/api/credit-notes/${id}`);
 export const createCreditNote = (body) => post("/api/credit-notes", body);
 export const updateCreditNote = (id, body) => put(`/api/credit-notes/${id}`, body);

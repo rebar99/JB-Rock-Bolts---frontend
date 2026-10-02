@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
 import { inr, fmtDate } from "@/lib/format";
@@ -146,7 +146,7 @@ function ReasonHint({ reason }) {
 }
 
 // ---- CN Form ----------------------------------------------------------------
-function CreditNoteForm({ saleType, editing, onClose }) {
+function CreditNoteForm({ saleType, editing, suggestedCN, onClose }) {
     const { user } = useAuth();
     const qc = useQueryClient();
 
@@ -160,7 +160,13 @@ function CreditNoteForm({ saleType, editing, onClose }) {
 
     const [selectedSaleId, setSelectedSaleId] = useState(editing?.sale_id || editing?.wo_sale_id || null);
     const [manualEntry, setManualEntry] = useState(Boolean(editing && !(editing.sale_id || editing.wo_sale_id)));
-    const [creditNoteNumber, setCreditNoteNumber] = useState(editing?.cn_number || "");
+    const [creditNoteNumber, setCreditNoteNumber] = useState(editing?.cn_number || suggestedCN || "");
+
+    useEffect(() => {
+        if (!editing && suggestedCN && !creditNoteNumber) {
+            setCreditNoteNumber(suggestedCN);
+        }
+    }, [editing, suggestedCN]);
     const [manualInvoice, setManualInvoice] = useState({
         invoice_number: editing?.invoice_number || "",
         invoice_date: editing?.invoice_date || "",
@@ -357,7 +363,7 @@ function CreditNoteForm({ saleType, editing, onClose }) {
                     {[["invoice_number", "Invoice Number *"], ["invoice_date", "Invoice Date"], ["cn_number", "Credit Note Number"], ["po_number", saleType === "PO" ? "PO Number" : "WO Number"], ["client_name", "Client Name *"], ["project", "Project / Site"]].map(([field, label]) => (
                         <div key={field}>
                             <label className="text-sm font-medium mb-1 block">{label}</label>
-                            <Input type={field === "invoice_date" ? "date" : "text"} value={field === "cn_number" ? creditNoteNumber : manualInvoice[field]} onChange={e => field === "cn_number" ? setCreditNoteNumber(e.target.value) : setManualInvoice(prev => ({ ...prev, [field]: e.target.value }))} placeholder={field === "cn_number" ? "Auto-generated if blank" : undefined} />
+                            <Input type={field === "invoice_date" ? "date" : "text"} value={field === "cn_number" ? creditNoteNumber : manualInvoice[field]} onChange={e => field === "cn_number" ? setCreditNoteNumber(e.target.value) : setManualInvoice(prev => ({ ...prev, [field]: e.target.value }))} placeholder={field === "cn_number" ? (suggestedCN || "Auto-generated if blank") : undefined} />
                         </div>
                     ))}
                     <p className="md:col-span-2 text-xs text-muted-foreground">Historical invoice details system se fetch nahi hongi.</p>
@@ -370,7 +376,7 @@ function CreditNoteForm({ saleType, editing, onClose }) {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {!manualEntry && <div>
                         <label className="text-sm font-medium mb-1 block">Credit Note Number</label>
-                        <Input value={creditNoteNumber} onChange={e => setCreditNoteNumber(e.target.value)} placeholder="Auto-generated if blank" />
+                        <Input value={creditNoteNumber} onChange={e => setCreditNoteNumber(e.target.value)} placeholder={suggestedCN || "Auto-generated if blank"} />
                     </div>}
                     <div>
                         <label className="text-sm font-medium mb-1 block">Credit Note Date <span className="text-destructive">*</span></label>
@@ -652,6 +658,36 @@ function CNTabPanel({ saleType }) {
         onError: (e) => toast.error(e.message),
     });
 
+    const nextSuggestedCN = useMemo(() => {
+        const defaultPrefix = "CR-";
+        const defaultPad = 2;
+        let latestPrefix = defaultPrefix;
+        let latestPad = defaultPad;
+        for (const cn of creditNotes) {
+            const s = String(cn.cn_number || "").trim();
+            if (s.toUpperCase().startsWith(defaultPrefix.toUpperCase())) {
+                const m = s.match(/^(.*?)(\d+)$/);
+                if (m) {
+                    latestPrefix = m[1];
+                    latestPad = Math.max(defaultPad, m[2].length);
+                    break;
+                }
+            }
+        }
+        let maxNum = 0;
+        for (const cn of creditNotes) {
+            const s = String(cn.cn_number || "").trim();
+            if (s.toUpperCase().startsWith(latestPrefix.toUpperCase())) {
+                const m = s.match(/^(.*?)(\d+)$/);
+                if (m) {
+                    const num = parseInt(m[2], 10);
+                    if (num > maxNum) maxNum = num;
+                }
+            }
+        }
+        return `${latestPrefix}${String(maxNum + 1).padStart(latestPad, "0")}`;
+    }, [creditNotes, saleType]);
+
     const filtered = useMemo(() => {
         const s = searchText.toLowerCase();
         return creditNotes.filter(cn =>
@@ -660,14 +696,19 @@ function CNTabPanel({ saleType }) {
             (cn.invoice_number || "").toLowerCase().includes(s) ||
             (cn.po_number || "").toLowerCase().includes(s) ||
             (cn.reason || "").toLowerCase().includes(s)
-        );
+        ).sort((a, b) => {
+            const valA = a.cn_number || "";
+            const valB = b.cn_number || "";
+            return valA.localeCompare(valB, undefined, { numeric: true, sensitivity: "base" });
+        });
     }, [creditNotes, searchText]);
     const columnFiltered = useMemo(() => filtered.filter(cn => Object.entries(columnFilters).every(([key, allowed]) => {
         const value = CREDIT_NOTE_COLUMN_ACCESSORS[key]?.(cn);
         return !allowed || allowed.has(value == null || value === "" ? "—" : String(value));
     })), [filtered, columnFilters]);
     const { widths, startResize } = useResizableColumns(`colw:credit-notes-${saleType.toLowerCase()}`, CREDIT_NOTE_TABLE_WIDTHS);
-    const { sortedRows, sortConfig, setSort } = useSortableRows(columnFiltered);
+    const defaultSort = useMemo(() => ({ key: "cn_number", direction: "asc", accessor: CREDIT_NOTE_COLUMN_ACCESSORS.cn_number }), []);
+    const { sortedRows, sortConfig, setSort } = useSortableRows(columnFiltered, defaultSort);
     const tableWidth = Object.values(widths).reduce((total, width) => total + width, 0);
 
     return (
@@ -754,7 +795,7 @@ function CNTabPanel({ saleType }) {
                     <DialogHeader>
                         <DialogTitle>{editCN ? "Edit Credit Note — " + editCN.cn_number : "New " + (saleType === "PO" ? "Purchase Order" : "Work Order") + " Credit Note"}</DialogTitle>
                     </DialogHeader>
-                    <CreditNoteForm saleType={saleType} editing={editCN} onClose={() => setFormOpen(false)} />
+                    <CreditNoteForm saleType={saleType} editing={editCN} suggestedCN={nextSuggestedCN} onClose={() => setFormOpen(false)} />
                 </DialogContent>
             </Dialog>
 
