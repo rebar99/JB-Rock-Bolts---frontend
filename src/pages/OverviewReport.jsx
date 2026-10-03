@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { fetchProductPendingReport, exportProductPendingReport, openLogStream, fetchItemMasterList, fetchPendingPOs } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 import { round2, inr } from "@/lib/format";
 import { toast } from "sonner";
 import {
@@ -44,6 +45,8 @@ const fmtQty = (val) => {
 const OverviewReport = () => {
     const navigate = useNavigate();
     const qc = useQueryClient();
+    const { user, activeApplication } = useAuth();
+    const workspace = activeApplication === "store_purchase" ? "Store" : "Marketing";
 
     // Left sidebar selection
     const [selectedCategory, setSelectedCategory] = useState(() => sessionStorage.getItem('or_selectedCategory') || null);
@@ -120,9 +123,9 @@ const OverviewReport = () => {
             if (RELEVANT_ENTITY_TYPES.has(log.entity_type)) {
                 qc.invalidateQueries({ queryKey: ["productPendingReport"] });
             }
-        });
+        }, undefined, user, workspace);
         return () => es.close();
-    }, [qc]);
+    }, [qc, user, workspace]);
 
     const handleApplyFilter = () => {
         setAppliedProduct(filterProduct);
@@ -758,3 +761,5 @@ const OverviewReport = () => {
 };
 
 export default OverviewReport;
+
+

@@ -19,9 +19,18 @@ export default function SoftwareSelection() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const [approvalPopupOpen, setApprovalPopupOpen] = useState(false);
-    // "checking" blocks the page from rendering until we know the user has both-workspaces.
-    // This prevents the workspace selection UI from flashing for single-workspace users.
-    const [checking, setChecking] = useState(true);
+    // "checking" blocks rendering until we confirm multi-workspace access.
+    // If cached user data already shows both workspaces (or super admin), skip the
+    // network wait and render immediately — no 2-second white flash on Switch Software.
+    const hasMultiWorkspaceCached = (() => {
+        if (!user) return false;
+        if (user.is_super_admin) return true;
+        const access = user?.application_access ?? {};
+        const hasMarketing = access.marketing && access.marketing !== "none";
+        const hasStore = access.store_purchase && access.store_purchase !== "none";
+        return !!(hasMarketing && hasStore);
+    })();
+    const [checking, setChecking] = useState(!hasMultiWorkspaceCached);
     const isSuperAdminUser = Boolean(user?.is_super_admin || user?.email?.toLowerCase() === "deepikar412003@gmail.com");
     const available = isSuperAdminUser ? apps : apps.filter((app) => applicationRole(app.code) !== "none");
     const choose = (app) => { selectApplication(app.code); navigate(app.route); };
@@ -143,8 +152,16 @@ export default function SoftwareSelection() {
         }
         return map;
     }, [allUsersAccess, user]);
-    // Blank screen while we verify workspace access — prevents any flash.
-    if (checking) return null;
+    // While verifying workspace access, show a matching background — not a white flash.
+    if (checking) return (
+        <main className="relative min-h-screen overflow-hidden bg-slate-950 flex items-center justify-center">
+            <div className="absolute inset-x-0 top-0 h-[460px] bg-gradient-to-br from-slate-950 via-[#132c58] to-violet-800" />
+            <div className="relative z-10 flex flex-col items-center gap-4">
+                <div className="h-8 w-8 rounded-full border-4 border-white/20 border-t-white animate-spin" />
+                <p className="text-sm text-white/60">Loading workspace...</p>
+            </div>
+        </main>
+    );
 
     return <main className="relative min-h-screen overflow-hidden bg-slate-50 px-5 py-6 sm:px-8 lg:px-12">
         <div className="absolute inset-x-0 top-0 h-[460px] sm:h-[480px] bg-gradient-to-br from-slate-950 via-[#132c58] to-violet-800" />

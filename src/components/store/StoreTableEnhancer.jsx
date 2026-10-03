@@ -149,12 +149,34 @@ export default function StoreTableEnhancer() {
                 .map((cell, index) => ({ cell, index }))
                 .filter(({ cell }) => cell.textContent.trim().toLowerCase().startsWith("s.no"));
             serialHeaders.slice(1).reverse().forEach(({ index }) => headRow.deleteCell(index));
-            if (table.dataset.storeEnhanced) { syncTableWidth(); return; }
+            if (table.dataset.storeEnhanced) {
+                // If React replaced all tbody rows, none will have the store-sno-cell class.
+                // In that case reset the flag so the full enhance below re-injects S.No.
+                // We do NOT modify DOM here (would trigger MutationObserver → loop).
+                const hasAnySnoCell = body.rows.length > 0 &&
+                    [...body.rows].some(row => row.cells[0]?.classList.contains("store-sno-cell"));
+                if (!hasAnySnoCell && body.rows.length > 0) {
+                    // Remove injected S.No. header so it won't duplicate on re-enhance
+                    const snoTh = [...headRow.cells].find(c => c.classList.contains("store-sno-header"));
+                    if (snoTh) headRow.deleteCell([...headRow.cells].indexOf(snoTh));
+                    delete table.dataset.storeEnhanced;
+                    // Fall through to full enhance below
+                } else {
+                    syncTableWidth(); return;
+                }
+            }
             table.dataset.storeEnhanced = "true";
             const hasSerialColumn = [...headRow.cells].some(cell => cell.textContent.trim().toLowerCase().startsWith("s.no"));
             if (!hasSerialColumn && !nativeSerial) {
                 const th = document.createElement("th"); th.textContent = "S.No."; th.className = "store-sno-header"; headRow.insertBefore(th, headRow.firstChild);
-                [...body.rows].forEach((row, index) => { const cell = row.insertCell(0); cell.className = "store-sno-cell"; cell.textContent = String(index + 1); });
+                [...body.rows].forEach((row, index) => {
+                    // Guard: if first cell is already our S.No. cell, just update its number
+                    if (row.cells[0]?.classList.contains("store-sno-cell")) {
+                        row.cells[0].textContent = String(index + 1);
+                        return;
+                    }
+                    const cell = row.insertCell(0); cell.className = "store-sno-cell"; cell.textContent = String(index + 1);
+                });
             }
             ensureColumnGrid();
             const renumber = () => [...body.rows].forEach((row, index) => { const cell = row.cells[0]; if (cell?.classList.contains("store-sno-cell")) cell.textContent = String(index + 1); });
@@ -195,7 +217,17 @@ export default function StoreTableEnhancer() {
             attachStickyBar(table);
             updateStickyBars();
         };
-        const scan = () => { document.querySelectorAll("main table").forEach(enhance); updateStickyBars(); };
+        let scanning = false;
+        const scan = () => {
+            if (scanning) return;
+            scanning = true;
+            try {
+                document.querySelectorAll("main table").forEach(enhance);
+                updateStickyBars();
+            } finally {
+                scanning = false;
+            }
+        };
         scan(); const observer = new MutationObserver(scan); observer.observe(document.body, { childList: true, subtree: true }); document.addEventListener("click", closeMenus); window.addEventListener("scroll", updateStickyBars, true); window.addEventListener("resize", updateStickyBars);
         return () => { observer.disconnect(); document.removeEventListener("click", closeMenus); window.removeEventListener("scroll", updateStickyBars, true); window.removeEventListener("resize", updateStickyBars); menus.forEach(menu => menu.remove()); stickyBars.forEach(({ bar }) => bar.remove()); };
     }, []);

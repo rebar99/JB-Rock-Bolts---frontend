@@ -237,7 +237,11 @@ const Reports = () => {
         subtotal: salesFilteredRows.reduce((s, r) => s + (r.subtotal ?? 0), 0),
         gst: salesFilteredRows.reduce((s, r) => s + (r.gst_amount ?? 0), 0),
         creditNote: salesFilteredRows.reduce((s, r) => s + (r.credit_note_amount ?? 0), 0),
-        grandTotal: salesFilteredRows.reduce((s, r) => s + (r.price ?? 0), 0),
+        // Grand Total = Subtotal + GST - Credit Note.
+        // Using r.price (which clamps to 0 when CN > gross) would exclude CN
+        // deductions on zero-qty invoices. Summing sub+gst−cn per row gives
+        // the correct net total that matches what is visible in the columns.
+        grandTotal: salesFilteredRows.reduce((s, r) => s + (r.subtotal ?? 0) + (r.gst_amount ?? 0) - (r.credit_note_amount ?? 0), 0),
     };
     const { data: pendingData,     isLoading: pendingLoading }     = useQuery({ queryKey: ["pendingPOsReport"],                queryFn: fetchPendingPOs,                         enabled: tab === "pending" });
     const { data: completedData,   isLoading: completedLoading }   = useQuery({ queryKey: ["fulfillmentReport"],               queryFn: () => fetchFulfillmentReport({}),        enabled: tab === "completed" });

@@ -148,10 +148,22 @@ export const Topbar = ({ onMenu, title = "JB Engineering Dashboard", subtitle = 
     const [sseBuffer, setSseBuffer] = useState([]);
     const [newCount, setNewCount] = useState(0);
 
-    // ── Polled logs ───────────────────────────────────────────────────────────
+    // ── Derive current workspace FIRST — used by hooks below ─────────────────
+    // Must match the normalized workspace names used by the backend (notifications.py
+    // _normalize_workspace). "Store" = Store Purchase module, "Marketing" = Marketing.
+    const currentWorkspace = useMemo(() => {
+        if (typeof window !== "undefined") {
+            if (window.location.pathname.startsWith("/store-purchase") || title.includes("Store")) {
+                return "Store";
+            }
+        }
+        return "Marketing";
+    }, [title]);
+
+    // ── Polled logs (workspace-filtered to match the SSE stream) ─────────────
     const { data: queryLogs = [] } = useQuery({
-        queryKey: ["system_logs"],
-        queryFn: () => fetchLogs(100),
+        queryKey: ["system_logs", currentWorkspace],
+        queryFn: () => fetchLogs(100, currentWorkspace),
         refetchInterval: 30_000,
         staleTime: 25_000,
     });
@@ -180,14 +192,6 @@ export const Topbar = ({ onMenu, title = "JB Engineering Dashboard", subtitle = 
     // The SSE connection might not yet be indexed by the server on first render.
     // Inject the current user from AuthContext so they appear instantly, then
     // deduplicate once the API confirms the SSE connection is registered.
-    const currentWorkspace = useMemo(() => {
-        if (typeof window !== "undefined") {
-            if (window.location.pathname.startsWith("/store-purchase") || title.includes("Store")) {
-                return "Store Purchase";
-            }
-        }
-        return "Marketing";
-    }, [title]);
 
     const activeSessions = useMemo(() => {
         if (!user) return [];
@@ -204,11 +208,32 @@ export const Topbar = ({ onMenu, title = "JB Engineering Dashboard", subtitle = 
         ];
     }, [apiOnline, user, currentWorkspace]);
 
+    // ── Workspace-filtered recent logins (History tab) ────────────────────────
+    // The UserSession table has no workspace column, so we use the live SSE
+    // online-user records (which DO have workspace) to decide which user_ids
+    // belong to the current workspace. Unknown user_ids (never connected via SSE
+    // in this server session) are shown only in the Marketing workspace.
+    const filteredRecentLogins = useMemo(() => {
+        if (!recentLogins.length) return recentLogins;
+        // Build a map of user_id → workspace from the live SSE data
+        const workspaceByUserId = {};
+        for (const s of apiOnline) {
+            if (s.user_id) workspaceByUserId[s.user_id] = s.workspace || "Marketing";
+        }
+        return recentLogins.filter(s => {
+            const ws = workspaceByUserId[s.user_id] || "Marketing";
+            return ws === currentWorkspace;
+        });
+    }, [recentLogins, apiOnline, currentWorkspace]);
+
     // ── SSE connection — passing user registers this browser as "online" ──────
     // The server adds the user to its in-memory online dict when the SSE
     // connection opens, and removes them when it closes (tab close / logout).
     useEffect(() => {
         if (!user) return;
+        // Clear stale notifications from the previous workspace
+        setSseBuffer([]);
+        setNewCount(0);
 
         const es = openLogStream(
             (log) => {
@@ -236,9 +261,9 @@ export const Topbar = ({ onMenu, title = "JB Engineering Dashboard", subtitle = 
             clearTimeout(t);
             es.close();
         };
-    // Re-run when the logged-in user changes (logout → re-login with different account)
+    // Re-run when the logged-in user changes OR when workspace changes (Marketing ↔ Store)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [user?.id]);
+    }, [user?.id, currentWorkspace]);
 
     // ── Merged log list ───────────────────────────────────────────────────────
     const logs = useMemo(() => {
@@ -401,10 +426,10 @@ export const Topbar = ({ onMenu, title = "JB Engineering Dashboard", subtitle = 
                             )}
                             
                             {activeTab === "logins" && (
-                                recentLogins.length === 0
-                                    ? <div className="p-6 text-center text-sm text-muted-foreground">No recent logins.</div>
+                                filteredRecentLogins.length === 0
+                                    ? <div className="p-6 text-center text-sm text-muted-foreground">No recent logins in this workspace.</div>
                                     : <div className="flex flex-col">
-                                        {recentLogins.map((s) => (
+                                        {filteredRecentLogins.map((s) => (
                                             <OnlineUserRow key={s.id} session={s}
                                                 isCurrentUser={s.user_id === user?.id} />
                                         ))}
