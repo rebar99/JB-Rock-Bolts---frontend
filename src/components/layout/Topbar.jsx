@@ -12,12 +12,18 @@ import { relativeTimeIST, fmtDateTimeIST } from "@/lib/timezone";
 
 // ── Entity-type colour map ────────────────────────────────────────────────────
 const ENTITY_COLORS = {
-    User:          { bg: "bg-violet-500/15", text: "text-violet-600 dark:text-violet-400", dot: "bg-violet-500" },
-    Client:        { bg: "bg-blue-500/15",   text: "text-blue-600 dark:text-blue-400",   dot: "bg-blue-500"   },
-    Project:       { bg: "bg-cyan-500/15",   text: "text-cyan-600 dark:text-cyan-400",   dot: "bg-cyan-500"   },
-    PurchaseOrder: { bg: "bg-amber-500/15",  text: "text-amber-600 dark:text-amber-400", dot: "bg-amber-500"  },
-    Sale:          { bg: "bg-green-500/15",  text: "text-green-600 dark:text-green-400", dot: "bg-green-500"  },
-    Product:       { bg: "bg-orange-500/15", text: "text-orange-600 dark:text-orange-400", dot: "bg-orange-500" },
+    User:               { bg: "bg-violet-500/15",  text: "text-violet-600 dark:text-violet-400",  dot: "bg-violet-500" },
+    Client:             { bg: "bg-blue-500/15",    text: "text-blue-600 dark:text-blue-400",      dot: "bg-blue-500"   },
+    Project:            { bg: "bg-cyan-500/15",    text: "text-cyan-600 dark:text-cyan-400",      dot: "bg-cyan-500"   },
+    PurchaseOrder:      { bg: "bg-amber-500/15",   text: "text-amber-600 dark:text-amber-400",    dot: "bg-amber-500"  },
+    Sale:               { bg: "bg-green-500/15",   text: "text-green-600 dark:text-green-400",    dot: "bg-green-500"  },
+    Product:            { bg: "bg-orange-500/15",  text: "text-orange-600 dark:text-orange-400",  dot: "bg-orange-500" },
+    WorkOrder:          { bg: "bg-indigo-500/15",  text: "text-indigo-600 dark:text-indigo-400",  dot: "bg-indigo-500" },
+    WorkOrderSale:      { bg: "bg-emerald-500/15", text: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
+    CreditNote:         { bg: "bg-rose-500/15",    text: "text-rose-600 dark:text-rose-400",      dot: "bg-rose-500"   },
+    StorePurchaseOrder: { bg: "bg-amber-500/15",   text: "text-amber-600 dark:text-amber-400",    dot: "bg-amber-500"  },
+    StoreInventory:     { bg: "bg-teal-500/15",    text: "text-teal-600 dark:text-teal-400",      dot: "bg-teal-500"   },
+    StoreVendor:        { bg: "bg-purple-500/15",  text: "text-purple-600 dark:text-purple-400",  dot: "bg-purple-500" },
 };
 const entityStyle = (type) =>
     ENTITY_COLORS[type] || { bg: "bg-muted", text: "text-muted-foreground", dot: "bg-muted-foreground" };
