@@ -193,49 +193,6 @@ export default function StoreItems({ inventory = [], admin = false }) {
                                 />
                             </Field>
                         </div>
-
-                        {currentMatchedVendor && (
-                            <div className="mt-4 rounded-lg border border-cyan-200 bg-cyan-50/70 p-3 text-xs text-cyan-950 space-y-1.5">
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <span className="font-bold flex items-center gap-1.5 text-cyan-900">
-                                        <Building2 className="h-4 w-4 text-cyan-700" />
-                                        Auto-filled from Vendor Master: {currentMatchedVendor.vendor_name}
-                                    </span>
-                                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
-                                        Status: {currentMatchedVendor.status || "Active"}
-                                    </span>
-                                </div>
-                                <div className="flex flex-wrap gap-x-4 gap-y-1 text-slate-700 text-[11px]">
-                                    {currentMatchedVendor.person_name && <span><strong>Contact Person:</strong> {currentMatchedVendor.person_name}</span>}
-                                    {currentMatchedVendor.contact && <span><strong>Phone:</strong> {currentMatchedVendor.contact}</span>}
-                                    {currentMatchedVendor.vendor_gst && <span><strong>GST No:</strong> {currentMatchedVendor.vendor_gst}</span>}
-                                    {currentMatchedVendor.address && <span className="truncate max-w-sm"><strong>Address:</strong> {currentMatchedVendor.address}</span>}
-                                </div>
-                                {currentMatchedVendor.items_supplied?.length > 0 && (
-                                    <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-cyan-200/80">
-                                        <span className="text-[11px] font-bold text-cyan-900">Materials Supplied by Vendor (Click to fill):</span>
-                                        {(Array.isArray(currentMatchedVendor.items_supplied) ? currentMatchedVendor.items_supplied : []).map((mat, i) => (
-                                            <button
-                                                key={i}
-                                                type="button"
-                                                onClick={() => {
-                                                    setForm(curr => ({
-                                                        ...curr,
-                                                        name: curr.name || mat,
-                                                        stock_item: curr.name ? mat : (curr.stock_item || mat)
-                                                    }));
-                                                    toast.success(`Selected material "${mat}".`);
-                                                }}
-                                                className="rounded-md border border-cyan-300 bg-white px-2 py-0.5 text-[11px] font-medium text-cyan-800 hover:bg-cyan-100 transition-colors"
-                                                title="Click to fill Groups Name / Items Name"
-                                            >
-                                                + {mat}
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        )}
                     </section>
                     <section className="rounded-xl border bg-card p-5">
                         <div className="flex flex-wrap items-center justify-between gap-2">
