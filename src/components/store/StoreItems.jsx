@@ -3,8 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Boxes, CircleDollarSign, Eye, History, Package, Pencil, Plus, Search, Send, Trash2, Warehouse, Building2, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { createStoreItem, deleteStoreItem, fetchStoreItemHistory, issueStoreItem, updateStoreItem, fetchStoreVendors, fetchItemMasterList } from "@/lib/api";
+import { createStoreItem, deleteStoreItem, fetchStoreItemHistory, issueStoreItem, updateStoreItem, fetchStoreVendors, fetchItemMasterList, fetchUomOptions } from "@/lib/api";
 import ItemMasterManageDialog from "@/components/ItemMasterManageDialog";
+import { UomManageDialog } from "@/components/UomManageDialog";
 import { toast } from "sonner";
 
 const emptyItem = () => ({ name: "", stock_item: "", vendor_name: "", reference_no: "", receipt_date: new Date().toISOString().slice(0, 10), uom: "Nos", location: "", required_for: "", quantity: "", previous_quantity: "0", current_month_quantity: "0", reorder_level: "0", rate: "" });
@@ -47,6 +48,7 @@ export default function StoreItems({ inventory = [], admin = false }) {
     const [viewing, setViewing] = useState(null);
     const [stockItemDetails, setStockItemDetails] = useState(null);
     const [manageItemsOpen, setManageItemsOpen] = useState(false);
+    const [manageUomOpen, setManageUomOpen] = useState(false);
 
     const { data: vendorList = [] } = useQuery({
         queryKey: ["store-vendors"],
@@ -56,6 +58,11 @@ export default function StoreItems({ inventory = [], admin = false }) {
     const { data: itemMasterList = [] } = useQuery({
         queryKey: ["item-master", "STORE"],
         queryFn: () => fetchItemMasterList("STORE"),
+    });
+
+    const { data: uomOptions = [] } = useQuery({
+        queryKey: ["uom", "STORE"],
+        queryFn: () => fetchUomOptions("STORE"),
     });
 
     const groupOptions = useMemo(() => {
@@ -200,16 +207,28 @@ export default function StoreItems({ inventory = [], admin = false }) {
                                 <h2 className="font-bold">Material Details</h2>
                                 <p className="mt-1 text-xs text-muted-foreground">Select Group Name and its corresponding Item Name.</p>
                             </div>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setManageItemsOpen(true)}
-                                className="text-xs h-8 border-cyan-300 text-cyan-700 hover:bg-cyan-50"
-                            >
-                                <Settings className="mr-1.5 h-3.5 w-3.5" />
-                                Manage Items (Add Group & Item)
-                            </Button>
+                            <div className="flex gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setManageItemsOpen(true)}
+                                    className="text-xs h-8 border-cyan-300 text-cyan-700 hover:bg-cyan-50"
+                                >
+                                    <Settings className="mr-1.5 h-3.5 w-3.5" />
+                                    Manage Items (Add Group & Item)
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setManageUomOpen(true)}
+                                    className="text-xs h-8 border-cyan-300 text-cyan-700 hover:bg-cyan-50"
+                                >
+                                    <Settings className="mr-1.5 h-3.5 w-3.5" />
+                                    Manage UOM
+                                </Button>
+                            </div>
                         </div>
                         <div className="mt-4 grid items-end gap-4 md:grid-cols-2 lg:grid-cols-3">
                             <Field label="Groups Name *">
@@ -243,7 +262,10 @@ export default function StoreItems({ inventory = [], admin = false }) {
                             </Field>
 
                             <Field label="U/M">
-                                <input value={form.uom || "Nos"} onChange={e => setForm({ ...form, uom: e.target.value })} className={input} />
+                                <select value={form.uom || "Nos"} onChange={e => setForm({ ...form, uom: e.target.value })} className={input}>
+                                    <option value="">Select</option>
+                                    {uomOptions.length ? uomOptions.map(option => <option key={option.id} value={option.name}>{option.name}</option>) : <option value="Nos">Nos</option>}
+                                </select>
                             </Field>
                             <Field label="Location">
                                 <input value={form.location || ""} onChange={e => setForm({ ...form, location: e.target.value })} className={input} />
@@ -256,5 +278,5 @@ export default function StoreItems({ inventory = [], admin = false }) {
                             </Field>
                         </div>
                     </section><section className="overflow-hidden rounded-xl border bg-card"><div className="border-b p-5"><h2 className="font-bold">Quantity Planning</h2><p className="mt-1 text-xs text-muted-foreground">Amount is calculated automatically from Total Quantity × Rate.</p></div><div className="overflow-x-auto"><table className="w-full min-w-[900px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr>{["Total Quantity", "Previous Month Qty", "Current Month Qty", "Rate", "Amount"].map(x => <th key={x} className="px-4 py-3">{x}</th>)}</tr></thead><tbody><tr><td className="p-3"><input required type="number" min="0.01" step="0.01" value={form.quantity} disabled={!!editing} onChange={e => setForm({ ...form, quantity: e.target.value })} className="h-9 w-full rounded border px-2 disabled:cursor-not-allowed disabled:bg-slate-100" /></td><td className="p-3"><input type="number" min="0" step="0.01" value={form.previous_quantity} disabled={!!editing} onChange={e => setForm({ ...form, previous_quantity: e.target.value })} className="h-9 w-full rounded border px-2 disabled:cursor-not-allowed disabled:bg-slate-100" /></td><td className="p-3"><input required type="number" min="0" step="0.01" value={form.current_month_quantity} onChange={e => setForm({ ...form, current_month_quantity: e.target.value })} className="h-9 w-full rounded border px-2" /></td><td className="p-3"><input required type="number" min="0" step="0.01" value={form.rate} onChange={e => setForm({ ...form, rate: e.target.value })} className="h-9 w-full rounded border px-2" /></td><td className="p-3 text-right font-bold">{money(Number(form.quantity || 0) * Number(form.rate || 0))}</td></tr></tbody></table></div></section><DialogFooter><Button type="button" variant="outline" onClick={() => setFormOpen(false)}>Cancel</Button>{admin && <Button type="submit" disabled={save.isPending}>{save.isPending ? "Saving…" : editing ? "Save Changes" : formMode === "stock" ? "Receive New Stock" : "Save Material"}</Button>}</DialogFooter></form></DialogContent></Dialog>
-        <Dialog open={!!issuing} onOpenChange={open => !open && setIssuing(null)}><DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>Issue Material</DialogTitle><DialogDescription>Material information is auto-filled. Only enter the issue transaction details.</DialogDescription></DialogHeader>{issuing && <form noValidate onSubmit={e => { e.preventDefault(); const requested = Number(issue.quantity); if (!requested || requested <= 0) return toast.error("Enter a valid issue quantity."); if (requested > Number(issuing.available_quantity)) return toast.error(`Insufficient stock. Only ${qty(issuing.available_quantity)} units are available.`); if (!issue.issued_to?.trim() && !issue.location?.trim()) return toast.error("Select department/person or enter location."); doIssue.mutate({ ...issue, quantity: requested }); }} className="space-y-5"><div className="grid gap-3 rounded-xl border bg-slate-50 p-4 text-sm sm:grid-cols-2 lg:grid-cols-3"><div><span className="text-xs text-muted-foreground">Groups Name</span><p className="font-semibold">{issuing.name}</p></div><div><span className="text-xs text-muted-foreground">Items Name / U/M</span><p>{issuing.stock_item || "—"} · {issuing.uom}</p></div><div><span className="text-xs text-muted-foreground">Available Quantity</span><p className="font-bold text-cyan-700">{qty(issuing.available_quantity)}</p></div><div><span className="text-xs text-muted-foreground">Rate / Amount</span><p>{money(issuing.rate)} / {money(Number(issuing.available_quantity) * Number(issuing.rate))}</p></div><div><span className="text-xs text-muted-foreground">Location</span><p>{issuing.location || "—"}</p></div></div><div className="grid gap-4 md:grid-cols-2"><Field label="Issue Quantity *"><input required autoFocus type="number" min="0.01" step="0.01" value={issue.quantity} onChange={e => setIssue({ ...issue, quantity: e.target.value })} className={input} /></Field><Field label="Required For"><input value={issue.required_for} onChange={e => setIssue({ ...issue, required_for: e.target.value })} className={input} /></Field><Field label="Issued To / Department / Person"><select value={issue.issued_to} onChange={e => setIssue({ ...issue, issued_to: e.target.value })} className={input}><option value="">Select department / person</option><option value="Production Department">Production Department</option><option value="Engineering Workshop">Engineering Workshop</option><option value="Electrical Engineering">Electrical Engineering</option><option value="Administration">Administration</option><option value="Construction / Building">Construction / Building</option></select></Field><Field label="Location"><input type="text" list="storeitems-dest-locations" placeholder="Enter destination location" value={issue.location || ""} onChange={e => setIssue({ ...issue, location: e.target.value })} className={input} /><datalist id="storeitems-dest-locations">{[...new Set(inventory.map(i => i.location).filter(Boolean))].map(loc => <option key={loc} value={loc} />)}</datalist></Field><Field label="Issue Date"><input type="date" value={issue.issue_date} onChange={e => setIssue({ ...issue, issue_date: e.target.value })} className={input} /></Field></div><Field label="Remarks / Purpose"><textarea value={issue.remarks} onChange={e => setIssue({ ...issue, remarks: e.target.value })} className="mt-1.5 min-h-20 w-full rounded-md border p-3 text-sm" /></Field><DialogFooter><Button type="button" variant="outline" onClick={() => setIssuing(null)}>Cancel</Button><Button type="submit" disabled={doIssue.isPending}>{doIssue.isPending ? "Issuing…" : "Save Issue"}</Button></DialogFooter></form>}</DialogContent></Dialog><HistoryDialog item={viewing} onClose={() => setViewing(null)} /><StockItemsDialog item={stockItemDetails} onClose={() => setStockItemDetails(null)} /><ItemMasterManageDialog open={manageItemsOpen} onOpenChange={setManageItemsOpen} type="STORE" /></main>;
+        <Dialog open={!!issuing} onOpenChange={open => !open && setIssuing(null)}><DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>Issue Material</DialogTitle><DialogDescription>Material information is auto-filled. Only enter the issue transaction details.</DialogDescription></DialogHeader>{issuing && <form noValidate onSubmit={e => { e.preventDefault(); const requested = Number(issue.quantity); if (!requested || requested <= 0) return toast.error("Enter a valid issue quantity."); if (requested > Number(issuing.available_quantity)) return toast.error(`Insufficient stock. Only ${qty(issuing.available_quantity)} units are available.`); if (!issue.issued_to?.trim() && !issue.location?.trim()) return toast.error("Select department/person or enter location."); doIssue.mutate({ ...issue, quantity: requested }); }} className="space-y-5"><div className="grid gap-3 rounded-xl border bg-slate-50 p-4 text-sm sm:grid-cols-2 lg:grid-cols-3"><div><span className="text-xs text-muted-foreground">Groups Name</span><p className="font-semibold">{issuing.name}</p></div><div><span className="text-xs text-muted-foreground">Items Name / U/M</span><p>{issuing.stock_item || "—"} · {issuing.uom}</p></div><div><span className="text-xs text-muted-foreground">Available Quantity</span><p className="font-bold text-cyan-700">{qty(issuing.available_quantity)}</p></div><div><span className="text-xs text-muted-foreground">Rate / Amount</span><p>{money(issuing.rate)} / {money(Number(issuing.available_quantity) * Number(issuing.rate))}</p></div><div><span className="text-xs text-muted-foreground">Location</span><p>{issuing.location || "—"}</p></div></div><div className="grid gap-4 md:grid-cols-2"><Field label="Issue Quantity *"><input required autoFocus type="number" min="0.01" step="0.01" value={issue.quantity} onChange={e => setIssue({ ...issue, quantity: e.target.value })} className={input} /></Field><Field label="Required For"><input value={issue.required_for} onChange={e => setIssue({ ...issue, required_for: e.target.value })} className={input} /></Field><Field label="Issued To / Department / Person"><select value={issue.issued_to} onChange={e => setIssue({ ...issue, issued_to: e.target.value })} className={input}><option value="">Select department / person</option><option value="Production Department">Production Department</option><option value="Engineering Workshop">Engineering Workshop</option><option value="Electrical Engineering">Electrical Engineering</option><option value="Administration">Administration</option><option value="Construction / Building">Construction / Building</option></select></Field><Field label="Location"><input type="text" list="storeitems-dest-locations" placeholder="Enter destination location" value={issue.location || ""} onChange={e => setIssue({ ...issue, location: e.target.value })} className={input} /><datalist id="storeitems-dest-locations">{[...new Set(inventory.map(i => i.location).filter(Boolean))].map(loc => <option key={loc} value={loc} />)}</datalist></Field><Field label="Issue Date"><input type="date" value={issue.issue_date} onChange={e => setIssue({ ...issue, issue_date: e.target.value })} className={input} /></Field></div><Field label="Remarks / Purpose"><textarea value={issue.remarks} onChange={e => setIssue({ ...issue, remarks: e.target.value })} className="mt-1.5 min-h-20 w-full rounded-md border p-3 text-sm" /></Field><DialogFooter><Button type="button" variant="outline" onClick={() => setIssuing(null)}>Cancel</Button><Button type="submit" disabled={doIssue.isPending}>{doIssue.isPending ? "Issuing…" : "Save Issue"}</Button></DialogFooter></form>}</DialogContent></Dialog><HistoryDialog item={viewing} onClose={() => setViewing(null)} /><StockItemsDialog item={stockItemDetails} onClose={() => setStockItemDetails(null)} /><ItemMasterManageDialog open={manageItemsOpen} onOpenChange={setManageItemsOpen} type="STORE" /><UomManageDialog open={manageUomOpen} onOpenChange={setManageUomOpen} type="STORE" /></main>;
 }
