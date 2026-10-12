@@ -331,7 +331,8 @@ All colors MUST be HSL.
   .po-print-table td {
     border: 1px solid #64748b;
     padding: 5px 6px;
-    vertical-align: top;
+    vertical-align: middle;
+    text-align: center;
   }
 
   .po-print-table th {
