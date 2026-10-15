@@ -9,6 +9,7 @@ const AuthContext = createContext(null);
 const TOKEN_KEY = "auth_token";
 const USER_KEY = "auth_user";
 const ACTIVE_APP_KEY = "active_application";
+const LAST_WS_KEY = "last_active_workspace";
 
 export const AuthProvider = ({ children }) => {
     const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY));
@@ -70,9 +71,16 @@ export const AuthProvider = ({ children }) => {
         };
     }, [token]);
 
-    const logout = async () => {
+    const logout = async (explicitWorkspace) => {
+        const ws = explicitWorkspace || (
+            activeApplication === "store_purchase" ||
+            window.location.pathname.startsWith("/store-purchase") ||
+            localStorage.getItem(LAST_WS_KEY) === "Store"
+                ? "Store"
+                : (activeApplication === "marketing" || window.location.pathname.startsWith("/marketing") ? "Marketing" : null)
+        );
         try {
-            await logoutUser();
+            await logoutUser(ws);
         } catch {
             // Best-effort: clear local state even if API call fails
         }
@@ -82,6 +90,9 @@ export const AuthProvider = ({ children }) => {
         localStorage.removeItem(USER_KEY);
         localStorage.removeItem("app_current_user");
         localStorage.removeItem(ACTIVE_APP_KEY);
+        if (ws) {
+            localStorage.setItem(LAST_WS_KEY, ws);
+        }
         setActiveApplication(null);
         window.location.href = "/login";
     };
@@ -153,9 +164,11 @@ export const AuthProvider = ({ children }) => {
         if (!u?.is_super_admin && hasMarketing && !hasStore) {
             setActiveApplication("marketing");
             localStorage.setItem(ACTIVE_APP_KEY, "marketing");
+            localStorage.setItem(LAST_WS_KEY, "Marketing");
         } else if (!u?.is_super_admin && hasStore && !hasMarketing) {
             setActiveApplication("store_purchase");
             localStorage.setItem(ACTIVE_APP_KEY, "store_purchase");
+            localStorage.setItem(LAST_WS_KEY, "Store");
         } else {
             setActiveApplication(null);
             localStorage.removeItem(ACTIVE_APP_KEY);
@@ -164,8 +177,12 @@ export const AuthProvider = ({ children }) => {
 
     const selectApplication = (code) => {
         setActiveApplication(code);
-        if (code) localStorage.setItem(ACTIVE_APP_KEY, code);
-        else localStorage.removeItem(ACTIVE_APP_KEY);
+        if (code) {
+            localStorage.setItem(ACTIVE_APP_KEY, code);
+            localStorage.setItem(LAST_WS_KEY, code === "store_purchase" ? "Store" : "Marketing");
+        } else {
+            localStorage.removeItem(ACTIVE_APP_KEY);
+        }
     };
 
     // Fetch fresh access data from server and update localStorage/state.

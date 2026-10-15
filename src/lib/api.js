@@ -601,8 +601,14 @@ export const approveUser = (id, workspace) => post(`/api/users/${id}/approve`, {
 export const updateUserWorkspace = (id, workspace) => put(`/api/users/${id}/workspace`, { workspace });
 export const rejectUser = (id) => post(`/api/users/${id}/reject`, {});
 
-export const logoutUser = () => request("/api/users/logout", { method: "POST" });
-export const forceLogoutUser = (userId) => request(`/api/users/${userId}/force-logout`, { method: "POST" });
+export const logoutUser = (workspace) => {
+    const query = workspace ? `?workspace=${encodeURIComponent(workspace)}` : "";
+    return request(`/api/users/logout${query}`, { method: "POST" });
+};
+export const forceLogoutUser = (userId, workspace) => {
+    const query = workspace ? `?workspace=${encodeURIComponent(workspace)}` : "";
+    return request(`/api/users/${userId}/force-logout${query}`, { method: "POST" });
+};
 
 // The request() helper already reads the token from localStorage and adds
 // the Authorization header automatically — no need to pass it manually here.
@@ -615,7 +621,7 @@ export const fetchLogs = (limit = 100, workspace = "") => get("/api/logs", { lim
 
 // Returns users who currently have the app open (SSE-based, instant)
 export const fetchOnlineUsers = () => get("/api/logs/online-users");
-export const fetchRecentLogins = () => get("/api/users/recent-logins");
+export const fetchRecentLogins = (workspace = "") => get("/api/users/recent-logins", workspace ? { workspace } : {});
 
 /**
  * Open a Server-Sent Events connection to receive new log entries in real time.

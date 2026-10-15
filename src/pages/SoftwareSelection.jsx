@@ -192,7 +192,7 @@ export default function SoftwareSelection() {
                     </div>
                     <span className="hidden rounded-full bg-emerald-400/15 px-2 py-1 text-[10px] font-bold text-emerald-200 md:inline-flex"><Circle className="mr-1 h-2 w-2 fill-current" />{visibleOnlineUsers.length} online</span>
                     {isSuperAdminUser && <><Button variant="outline" onClick={() => navigate("/admin/application-access")} className="hidden border-cyan-300/35 bg-cyan-300/10 text-cyan-100 hover:bg-cyan-100 hover:text-slate-900 lg:inline-flex"><ShieldCheck className="mr-2 h-4 w-4" />Application Access</Button><Button variant="outline" onClick={() => navigate("/admin/po-approval-settings")} className="hidden border-cyan-300/35 bg-cyan-300/10 text-cyan-100 hover:bg-cyan-100 hover:text-slate-900 lg:inline-flex"><ShieldCheck className="mr-2 h-4 w-4" />PO Approval Settings</Button></>}
-                    <Button variant="outline" onClick={logout} className="border-white/25 bg-white/10 text-white hover:bg-white hover:text-slate-900"><LogOut className="mr-2 h-4 w-4" />Logout</Button>
+                    <Button variant="outline" onClick={() => logout("Software Selection")} className="border-white/25 bg-white/10 text-white hover:bg-white hover:text-slate-900"><LogOut className="mr-2 h-4 w-4" />Logout</Button>
                 </div>
             </header>
 

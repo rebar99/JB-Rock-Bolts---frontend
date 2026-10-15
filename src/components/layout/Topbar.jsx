@@ -185,52 +185,19 @@ export const Topbar = ({ onMenu, title = "JB Engineering Dashboard", subtitle = 
         enabled: !!user,
     });
 
-    // ── Recent Logins (polled every 60s) ───────────────────────────────────────
+    // ── Recent Logins (polled every 60s, workspace-filtered by backend) ─────────
+    // Backend uses system_logs to decide which workspace each user logged into.
+    // Users with BOTH workspace access (e.g. Deepika) appear in BOTH History tabs.
     const { data: recentLogins = [] } = useQuery({
-        queryKey: ["recent_logins"],
-        queryFn: fetchRecentLogins,
+        queryKey: ["recent_logins", currentWorkspace],
+        queryFn: () => fetchRecentLogins(currentWorkspace),
         refetchInterval: 60_000,
         staleTime: 30_000,
         enabled: !!user?.is_super_admin,
     });
 
-    // ── Always show current user even before server confirms ──────────────────
-    // The SSE connection might not yet be indexed by the server on first render.
-    // Inject the current user from AuthContext so they appear instantly, then
-    // deduplicate once the API confirms the SSE connection is registered.
-
-    const activeSessions = useMemo(() => {
-        if (!user) return [];
-        // Only show users who are in the same workspace
-        const filtered = apiOnline.filter(s => {
-            const ws = s.workspace || 'Marketing';
-            return ws === currentWorkspace;
-        });
-        const alreadyIn = filtered.some((s) => s.user_id === user.id);
-        if (alreadyIn) return filtered;
-        return [
-            { user_id: user.id, user_name: user.name, user_email: user.email, connected_at: null, is_active: true, workspace: currentWorkspace },
-            ...filtered,
-        ];
-    }, [apiOnline, user, currentWorkspace]);
-
-    // ── Workspace-filtered recent logins (History tab) ────────────────────────
-    // The UserSession table has no workspace column, so we use the live SSE
-    // online-user records (which DO have workspace) to decide which user_ids
-    // belong to the current workspace. Unknown user_ids (never connected via SSE
-    // in this server session) are shown only in the Marketing workspace.
-    const filteredRecentLogins = useMemo(() => {
-        if (!recentLogins.length) return recentLogins;
-        // Build a map of user_id → workspace from the live SSE data
-        const workspaceByUserId = {};
-        for (const s of apiOnline) {
-            if (s.user_id) workspaceByUserId[s.user_id] = s.workspace || "Marketing";
-        }
-        return recentLogins.filter(s => {
-            const ws = workspaceByUserId[s.user_id] || "Marketing";
-            return ws === currentWorkspace;
-        });
-    }, [recentLogins, apiOnline, currentWorkspace]);
+    // Backend already filters by workspace — just use the result directly.
+    const filteredRecentLogins = recentLogins;
 
     // ── SSE connection — passing user registers this browser as "online" ──────
     // The server adds the user to its in-memory online dict when the SSE
@@ -248,7 +215,7 @@ export const Topbar = ({ onMenu, title = "JB Engineering Dashboard", subtitle = 
                 // Refresh the online list AND history whenever any user logs in or out
                 if (log.entity_type === "User" && user?.is_super_admin) {
                     queryClient.invalidateQueries({ queryKey: ["online_users"] });
-                    queryClient.invalidateQueries({ queryKey: ["recent_logins"] });
+                    queryClient.invalidateQueries({ queryKey: ["recent_logins", currentWorkspace] });
                 }
             },
             null,
@@ -260,7 +227,7 @@ export const Topbar = ({ onMenu, title = "JB Engineering Dashboard", subtitle = 
         // (tiny delay to let the server process the new connection)
         const t = setTimeout(() => {
             queryClient.invalidateQueries({ queryKey: ["online_users"] });
-            queryClient.invalidateQueries({ queryKey: ["recent_logins"] });
+            queryClient.invalidateQueries({ queryKey: ["recent_logins", currentWorkspace] });
         }, 800);
 
         return () => {
@@ -270,6 +237,25 @@ export const Topbar = ({ onMenu, title = "JB Engineering Dashboard", subtitle = 
     // Re-run when the logged-in user changes OR when workspace changes (Marketing ↔ Store)
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user?.id, currentWorkspace]);
+
+
+    // ── Always show current user even before server confirms ──────────────────
+    // Inject the current user from AuthContext so they appear instantly, then
+    // deduplicate once the API confirms the SSE connection is registered.
+    const activeSessions = useMemo(() => {
+        if (!user) return [];
+        // Only show users who are in the same workspace
+        const filtered = apiOnline.filter(s => {
+            const ws = s.workspace || "Marketing";
+            return ws === currentWorkspace;
+        });
+        const alreadyIn = filtered.some((s) => s.user_id === user.id);
+        if (alreadyIn) return filtered;
+        return [
+            { user_id: user.id, user_name: user.name, user_email: user.email, connected_at: null, is_active: true, workspace: currentWorkspace },
+            ...filtered,
+        ];
+    }, [apiOnline, user, currentWorkspace]);
 
     // ── Merged log list ───────────────────────────────────────────────────────
     const logs = useMemo(() => {
@@ -282,7 +268,7 @@ export const Topbar = ({ onMenu, title = "JB Engineering Dashboard", subtitle = 
     const handleOpenChange = (open) => { if (open) setNewCount(0); };
 
     const handleLogout = async () => {
-        await logout();
+        await logout(currentWorkspace);
         navigate("/login", { replace: true });
     };
 

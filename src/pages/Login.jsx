@@ -24,7 +24,8 @@ export default function Login() {
         }
         setLoading(true);
         try {
-            const data = await loginUser({ email, password });
+            const lastWs = localStorage.getItem("last_active_workspace") || (localStorage.getItem("active_application") === "store_purchase" ? "Store" : null);
+            const data = await loginUser({ email, password, workspace: lastWs || undefined });
             login(data);
             navigate("/", { replace: true });
         } catch (err) {
