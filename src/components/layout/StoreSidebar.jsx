@@ -86,13 +86,6 @@ export default function StoreSidebar() {
             </nav>
 
             <div className="p-4 border-t border-sidebar-border space-y-2">
-                <button
-                    onClick={() => { selectApplication(null); navigate("/"); }}
-                    className="flex w-full items-center gap-3 rounded-lg bg-sidebar-accent/50 px-3 py-2 text-xs text-sidebar-foreground hover:bg-sidebar-accent hover:text-white transition-all"
-                >
-                    <ArrowLeftRight className="h-3.5 w-3.5" />
-                    <span>Switch Software</span>
-                </button>
                 <div className="rounded-lg bg-sidebar-accent/40 p-3">
                     <div className="text-xs font-semibold text-white">Store Purchase</div>
                     <div className="text-[11px] text-sidebar-foreground/70 mt-0.5">
