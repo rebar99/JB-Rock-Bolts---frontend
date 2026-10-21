@@ -11,6 +11,7 @@ const getToken = () => localStorage.getItem('auth_token');
 const MODULE_LABELS = {
   sale: 'PO Sales',
   purchase_order: 'Purchase Order',
+  store_purchase_order: 'Purchase Order',
   work_order: 'Work Order',
   work_order_sale: 'WO Sale',
   credit_note: 'Credit Note',
@@ -19,6 +20,7 @@ const MODULE_LABELS = {
 const MODULE_BADGE_COLORS = {
   sale: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
   purchase_order: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+  store_purchase_order: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200',
   work_order: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
   work_order_sale: 'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200',
   credit_note: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
@@ -54,13 +56,18 @@ function RemainingBadge({ hours }) {
   );
 }
 
-const TABS = [
+const MARKETING_TABS = [
   { key: 'all', label: 'All' },
   { key: 'sale', label: 'PO Sales' },
   { key: 'purchase_order', label: 'Purchase Orders' },
   { key: 'work_order', label: 'Work Orders' },
   { key: 'work_order_sale', label: 'WO Sales' },
   { key: 'credit_note', label: 'Credit Notes' },
+];
+
+const STORE_TABS = [
+  { key: 'all', label: 'All' },
+  { key: 'store_purchase_order', label: 'Purchase Orders' },
 ];
 
 async function apiRequest(path, options = {}) {
@@ -78,9 +85,12 @@ async function apiRequest(path, options = {}) {
   return res;
 }
 
-export default function RecentlyDeleted() {
+export default function RecentlyDeleted({ workspace = 'Marketing' }) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const isStore = (workspace || '').toLowerCase() === 'store';
+  const currentTabs = isStore ? STORE_TABS : MARKETING_TABS;
+
   const [activeTab, setActiveTab] = useState('all');
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -90,10 +100,12 @@ export default function RecentlyDeleted() {
   const fetchRecords = useCallback(async () => {
     setLoading(true);
     try {
-      const path = activeTab === 'all'
-        ? '/api/recently-deleted'
-        : '/api/recently-deleted?module=' + activeTab;
-      const res = await apiRequest(path);
+      const params = new URLSearchParams();
+      params.set('workspace', isStore ? 'Store' : 'Marketing');
+      if (activeTab !== 'all') {
+        params.set('module', activeTab);
+      }
+      const res = await apiRequest('/api/recently-deleted?' + params.toString());
       if (!res.ok) throw new Error('HTTP ' + res.status);
       setRecords(await res.json());
     } catch (e) {
@@ -101,7 +113,7 @@ export default function RecentlyDeleted() {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, toast]);
+  }, [activeTab, isStore, toast]);
 
   useEffect(() => { fetchRecords(); }, [fetchRecords]);
   useEffect(() => {
@@ -136,6 +148,10 @@ export default function RecentlyDeleted() {
     } finally { setActionLoading(null); }
   };
 
+  const tableHeaders = isStore
+    ? ['#', 'PO Number', 'Supplier / Vendor', 'Module', 'Deleted By', 'Deleted At', 'Expires At', 'Remaining', 'Actions']
+    : ['#', 'Record Number', 'Client', 'Module', 'Deleted By', 'Deleted At', 'Expires At', 'Remaining', 'Actions'];
+
   return (
     <div className='p-4 sm:p-6 max-w-7xl mx-auto space-y-6'>
       <div className='flex items-center gap-3'>
@@ -143,8 +159,14 @@ export default function RecentlyDeleted() {
           <Trash2 className='h-6 w-6 text-red-600 dark:text-red-400' />
         </div>
         <div>
-          <h1 className='text-2xl font-bold text-foreground'>Recently Deleted</h1>
-          <p className='text-sm text-muted-foreground'>Deleted records are kept here for 24 hours and then permanently removed.</p>
+          <h1 className='text-2xl font-bold text-foreground'>
+            {isStore ? 'Store Purchase — Recently Deleted' : 'Recently Deleted'}
+          </h1>
+          <p className='text-sm text-muted-foreground'>
+            {isStore
+              ? 'Deleted Store Purchase Orders are kept here for 24 hours and then permanently removed.'
+              : 'Deleted records are kept here for 24 hours and then permanently removed.'}
+          </p>
         </div>
       </div>
 
@@ -156,7 +178,7 @@ export default function RecentlyDeleted() {
       </div>
 
       <div className='flex gap-1 p-1 bg-muted rounded-lg w-fit'>
-        {TABS.map((tab) => (
+        {currentTabs.map((tab) => (
           <button key={tab.key} onClick={() => setActiveTab(tab.key)}
             className={'px-4 py-2 rounded-md text-sm font-medium transition-all ' + (activeTab === tab.key ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
           >
@@ -178,14 +200,18 @@ export default function RecentlyDeleted() {
           <div className='flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground'>
             <Trash2 className='h-12 w-12 opacity-20' />
             <p className='text-lg font-medium'>No deleted records found</p>
-            <p className='text-sm'>{activeTab === 'all' ? 'No records have been deleted yet.' : 'No deleted ' + MODULE_LABELS[activeTab] + ' records found.'}</p>
+            <p className='text-sm'>
+              {isStore
+                ? 'No Store Purchase Orders have been deleted yet.'
+                : (activeTab === 'all' ? 'No records have been deleted yet.' : 'No deleted ' + (MODULE_LABELS[activeTab] || activeTab) + ' records found.')}
+            </p>
           </div>
         ) : (
           <div className='overflow-x-auto'>
             <table className='w-full text-sm'>
               <thead>
                 <tr className='border-b bg-muted/50'>
-                  {['#','Record Number','Client','Module','Deleted By','Deleted At','Expires At','Remaining','Actions'].map(h => (
+                  {tableHeaders.map(h => (
                     <th key={h} className={'px-4 py-3 text-left font-semibold text-muted-foreground' + (h==='Actions' ? ' text-center' : '')}>{h}</th>
                   ))}
                 </tr>
@@ -200,7 +226,7 @@ export default function RecentlyDeleted() {
                       <td className='px-4 py-3 text-foreground max-w-[160px] truncate'>{rec.client_name}</td>
                       <td className='px-4 py-3'>
                         <span className={'px-2 py-0.5 rounded-full text-xs font-medium ' + (MODULE_BADGE_COLORS[rec.record_type] || '')}>
-                          {MODULE_LABELS[rec.record_type] || rec.record_type}
+                          {isStore && rec.record_type === 'store_purchase_order' ? 'Purchase Order' : (MODULE_LABELS[rec.record_type] || rec.record_type)}
                         </span>
                       </td>
                       <td className='px-4 py-3 text-muted-foreground'>{rec.deleted_by || '-'}</td>

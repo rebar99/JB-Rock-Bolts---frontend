@@ -8,7 +8,8 @@ import { Download, Upload, AlertTriangle, ShieldCheck } from "lucide-react";
 
 const BASE = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/+$/, "");
 
-export default function SystemBackup() {
+export default function SystemBackup({ workspace = "Marketing" }) {
+    const isStore = (workspace || "").toLowerCase() === "store";
     const [isExporting, setIsExporting] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
     const [fileToImport, setFileToImport] = useState(null);
@@ -21,7 +22,8 @@ export default function SystemBackup() {
         try {
             setIsExporting(true);
             const token = localStorage.getItem("token") || localStorage.getItem("auth_token");
-            const res = await fetch(`${BASE}/api/system/backup/export`, {
+            const scopeParam = isStore ? "store" : "marketing";
+            const res = await fetch(`${BASE}/api/system/backup/export?scope=${scopeParam}`, {
                 headers: {
                     Authorization: `Bearer ${token}`
                 }
@@ -38,9 +40,8 @@ export default function SystemBackup() {
             const a = document.createElement("a");
             a.href = url;
             
-            // Try to extract filename from content-disposition header if possible
             const disposition = res.headers.get("Content-Disposition");
-            let filename = "database_backup.json";
+            let filename = isStore ? "store_backup.json" : "marketing_backup.json";
             if (disposition && disposition.indexOf("filename=") !== -1) {
                 const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
                 if (filenameMatch && filenameMatch.length === 2) {
@@ -54,7 +55,7 @@ export default function SystemBackup() {
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
             
-            toast.success("Database exported successfully!");
+            toast.success(isStore ? "Store backup exported successfully!" : "Marketing backup exported successfully!");
         } catch (error) {
             toast.error(error.message || "Export failed");
         } finally {
@@ -79,6 +80,7 @@ export default function SystemBackup() {
             const formData = new FormData();
             formData.append("file", fileToImport);
             formData.append("import_type", importMode);
+            formData.append("scope", isStore ? "store" : "marketing");
             
             const token = localStorage.getItem("token") || localStorage.getItem("auth_token");
             const res = await fetch(`${BASE}/api/system/backup/import`, {
@@ -96,7 +98,7 @@ export default function SystemBackup() {
             }
             
             if (importMode === "replace") {
-                toast.success("Database replaced successfully!", { duration: 5000 });
+                toast.success(isStore ? "Store database replaced successfully!" : "Database replaced successfully!", { duration: 5000 });
             } else if (data.records_inserted !== undefined) {
                 toast.success(`Merge Complete! ${data.records_inserted} new records imported. ${data.records_skipped} existing records skipped.`, {
                     duration: 5000,
@@ -137,7 +139,9 @@ export default function SystemBackup() {
     return (
         <div className="flex-1 space-y-4 p-8 pt-6">
             <div className="flex items-center justify-between space-y-2">
-                <h2 className="text-3xl font-bold tracking-tight">System Backup & Restore</h2>
+                <h2 className="text-3xl font-bold tracking-tight">
+                    {isStore ? "Store Purchase Backup & Restore" : "Marketing & Sales Backup & Restore"}
+                </h2>
             </div>
             
             <div className="grid gap-6 md:grid-cols-2">
@@ -146,9 +150,13 @@ export default function SystemBackup() {
                         <Download className="h-10 w-10 text-primary" />
                     </div>
                     <div>
-                        <h3 className="text-xl font-bold">Export Database</h3>
-                        <p className="text-muted-foreground mt-2 max-w-[300px]">
-                            Download a complete JSON backup of the entire database. Includes all Purchase Orders, Work Orders, Sales, Items, and Activity Logs.
+                        <h3 className="text-xl font-bold">
+                            {isStore ? "Export Store Database" : "Export Marketing Database"}
+                        </h3>
+                        <p className="text-muted-foreground mt-2 max-w-[320px]">
+                            {isStore
+                                ? "Download a complete JSON backup of Store Purchase data. Includes all Purchase Orders, Materials Received, Stock Operations, Vendors, and Store Items."
+                                : "Download a complete JSON backup of Marketing & Sales. Includes all Purchase Orders, Work Orders, Sales, Line Items, Dispatches, and Credit Notes."}
                         </p>
                     </div>
                     <Button 
@@ -157,7 +165,7 @@ export default function SystemBackup() {
                         onClick={handleExport}
                         disabled={isExporting}
                     >
-                        {isExporting ? "Exporting..." : "Export Full Backup"}
+                        {isExporting ? "Exporting..." : (isStore ? "Export Store Backup" : "Export Marketing Backup")}
                     </Button>
                 </Card>
                 
@@ -166,10 +174,15 @@ export default function SystemBackup() {
                         <ShieldCheck className="h-10 w-10 text-primary" />
                     </div>
                     <div>
-                        <h3 className="text-xl font-bold">Merge Database Backup</h3>
-                        <p className="text-muted-foreground mt-2 max-w-[300px]">
-                            Restore the system from a previous JSON backup file. <br/>
-                            <strong className="text-primary">This is a safe merge. Existing data will not be deleted.</strong>
+                        <h3 className="text-xl font-bold">
+                            {isStore ? "Merge Store Database Backup" : "Merge Marketing Database Backup"}
+                        </h3>
+                        <p className="text-muted-foreground mt-2 max-w-[320px]">
+                            {isStore
+                                ? "Restore Store Purchase from a previous JSON backup file. Existing Store data will not be deleted."
+                                : "Restore Marketing & Sales from a previous JSON backup file. Existing data will not be deleted."}
+                            <br/>
+                            <strong className="text-primary">This is a safe merge. Existing records will be preserved.</strong>
                         </p>
                     </div>
                     
@@ -187,7 +200,9 @@ export default function SystemBackup() {
                             onClick={() => { setImportMode("merge"); fileInputRef.current?.click(); }}
                             disabled={isImporting}
                         >
-                            {isImporting && importMode === "merge" ? "Merging..." : "Merge Backup File"}
+                            {isImporting && importMode === "merge"
+                                ? "Merging..."
+                                : (isStore ? "Merge Store Backup" : "Merge Marketing Backup")}
                         </Button>
                         <Button 
                             variant="destructive"
@@ -195,7 +210,9 @@ export default function SystemBackup() {
                             onClick={() => { setImportMode("replace"); fileInputRef.current?.click(); }}
                             disabled={isImporting}
                         >
-                            {isImporting && importMode === "replace" ? "Importing..." : "Import data"}
+                            {isImporting && importMode === "replace"
+                                ? "Importing..."
+                                : (isStore ? "Replace Store Data" : "Replace Marketing Data")}
                         </Button>
                     </div>
                 </Card>
@@ -207,17 +224,21 @@ export default function SystemBackup() {
                     <DialogHeader>
                         <DialogTitle className={`flex items-center ${importMode === "replace" ? "text-destructive" : "text-primary"}`}>
                             {importMode === "replace" ? <AlertTriangle className="mr-2 h-5 w-5" /> : <ShieldCheck className="mr-2 h-5 w-5" />}
-                            {importMode === "replace" ? "DANGER: REPLACE DATABASE" : "SAFE DATABASE MERGE"}
+                            {importMode === "replace"
+                                ? (isStore ? "DANGER: REPLACE STORE DATA" : "DANGER: REPLACE MARKETING DATA")
+                                : (isStore ? "SAFE STORE DATA MERGE" : "SAFE MARKETING DATA MERGE")}
                         </DialogTitle>
                         <DialogDescription className="pt-4 text-base space-y-4">
                             <p>
-                                You are about to {importMode === "replace" ? "replace" : "merge"} the database with the file: <br/>
+                                You are about to {importMode === "replace" ? "replace" : "merge"} {isStore ? "Store Purchase" : "Marketing"} data with the file: <br/>
                                 <strong className="text-foreground">{fileToImport?.name}</strong>
                             </p>
                             <p>
                                 {importMode === "replace" 
-                                    ? <span className="text-destructive font-bold">WARNING: This will permanently DELETE all existing data in the system and replace it entirely with the backup file. This cannot be undone!</span>
-                                    : "This backup will be safely merged with your existing data. Existing data will not be deleted. Duplicate records will be skipped and new records will be added."}
+                                    ? <span className="text-destructive font-bold">
+                                        WARNING: This will permanently DELETE all existing {isStore ? "Store Purchase" : "Marketing"} data and replace it entirely with the backup file. {isStore ? "Marketing & Sales data will remain untouched." : "Store Purchase data will remain untouched."}
+                                      </span>
+                                    : `This backup will be safely merged with your existing ${isStore ? "Store" : "Marketing"} data. Existing records will not be deleted. Duplicate records will be skipped and new records will be added.`}
                             </p>
                             <div className="flex items-center space-x-2 mt-4 p-4 border rounded bg-muted/50">
                                 <Checkbox 
@@ -230,7 +251,7 @@ export default function SystemBackup() {
                                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                                 >
                                     {importMode === "replace"
-                                        ? "I understand that ALL CURRENT DATA WILL BE DELETED."
+                                        ? `I understand that ALL CURRENT ${isStore ? "STORE" : "MARKETING"} DATA WILL BE DELETED.`
                                         : "I understand that my existing data will be kept safe and not deleted."}
                                 </label>
                             </div>
@@ -243,7 +264,9 @@ export default function SystemBackup() {
                             disabled={!understood || isImporting} 
                             onClick={handleConfirmImport}
                         >
-                            {isImporting ? (importMode === "replace" ? "Importing..." : "Merging...") : (importMode === "replace" ? "Import data" : "Merge & Restore")}
+                            {isImporting
+                                ? (importMode === "replace" ? "Importing..." : "Merging...")
+                                : (importMode === "replace" ? (isStore ? "Replace Store Data" : "Replace Marketing Data") : "Merge & Restore")}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

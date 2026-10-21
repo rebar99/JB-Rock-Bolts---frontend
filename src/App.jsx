@@ -100,8 +100,8 @@ const App = () => (
                             <Route path="/reports" element={<MarketingRoute><AppLayout><Reports /></AppLayout></MarketingRoute>} />
                             <Route path="/user-approvals" element={<SuperAdminRoute><AppLayout><UserApprovals /></AppLayout></SuperAdminRoute>} />
                             <Route path="/admin/addresses" element={<MarketingRoute><AdminRoute><AppLayout><CompanyAddresses /></AppLayout></AdminRoute></MarketingRoute>} />
-                            <Route path="/admin/system-backup" element={<MarketingRoute><AdminRoute><AppLayout><SystemBackup /></AppLayout></AdminRoute></MarketingRoute>} />
-                            <Route path="/admin/recently-deleted" element={<MarketingRoute><AdminRoute><AppLayout><RecentlyDeleted /></AppLayout></AdminRoute></MarketingRoute>} />
+                            <Route path="/admin/system-backup" element={<MarketingRoute><AdminRoute><AppLayout><SystemBackup workspace="Marketing" /></AppLayout></AdminRoute></MarketingRoute>} />
+                            <Route path="/admin/recently-deleted" element={<MarketingRoute><AdminRoute><AppLayout><RecentlyDeleted workspace="Marketing" /></AppLayout></AdminRoute></MarketingRoute>} />
                             <Route path="/admin/application-access" element={<SuperAdminRoute><ApplicationAccessManagement /></SuperAdminRoute>} />
                             <Route path="/admin/po-approval-settings" element={<SuperAdminRoute><POApprovalSettings /></SuperAdminRoute>} />
                             <Route path="/store-purchase/*" element={<StorePurchaseRoute><StorePurchase /></StorePurchaseRoute>} />
