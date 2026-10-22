@@ -49,6 +49,7 @@ const empty = () => ({
     poDate: new Date().toISOString().slice(0, 10),
     validityDate: new Date().toISOString().slice(0, 10),
     gst: "18", freight: 0,
+    freight_gst_type: "Without GST",
     project: "",
     paymentTerms: "",
     fileUrl: "",
@@ -473,6 +474,7 @@ const PurchaseOrders = () => {
             uom: o.uom || "Nos",
             totalQuantity: o.total_quantity, deliveredQuantity: o.delivered_quantity,
             unitPrice: o.unit_price, gst: o.gst || "", freight: o.freight,
+            freight_gst_type: o.freight_gst_type || "Without GST",
             project: o.project || "",
             paymentTerms: o.payment_terms || "",
             validityDate: isoToDateInput(o.validity_date),
@@ -582,9 +584,31 @@ const PurchaseOrders = () => {
         }
     }, 0);
 
-    const gstAmount = form.gst ? globalGstAmount : itemsGstAmount;
+    let applicableGstPercent = 0;
+    if (form.gst && !isGlobalGstAmount) {
+        applicableGstPercent = parseFloat((form.gst || "0").toString().replace("%", "")) || 0;
+    }
+    if (applicableGstPercent === 0 && (form.lineItems || []).length > 0) {
+        for (const li of form.lineItems) {
+            const p = parseFloat((li.gst || "0").toString().replace("%", "")) || 0;
+            if (p > 0) {
+                applicableGstPercent = p;
+                break;
+            }
+        }
+    }
+    if (applicableGstPercent === 0) {
+        applicableGstPercent = 18;
+    }
+
+    const freightVal = Number(form.freight) || 0;
+    const isFreightWithGst = (form.freight_gst_type || "Without GST") === "With GST";
+    const freightGstAmount = isFreightWithGst ? (freightVal * applicableGstPercent / 100) : 0;
+
+    const baseGstAmount = form.gst ? globalGstAmount : itemsGstAmount;
+    const gstAmount = baseGstAmount + freightGstAmount;
     const itemsFreight = (form.lineItems || []).reduce((s, li) => s + (Number(li.freight) || 0), 0);
-    const grandTotal = subtotal + gstAmount + (Number(form.freight) || 0) + itemsFreight;
+    const grandTotal = subtotal + gstAmount + freightVal + itemsFreight;
 
     const handleFileUpload = async (e) => {
         const file = e.target.files[0];
@@ -655,6 +679,7 @@ const PurchaseOrders = () => {
             project: form.project || null,
             gst: form.gst || "0",
             freight: Number(form.freight) || 0,
+            freight_gst_type: form.freight_gst_type || "Without GST",
             payment_terms: form.paymentTerms || null,
             validity_date: form.validityDate ? new Date(form.validityDate).toISOString() : null,
             file_url: form.fileUrl || null,
@@ -979,7 +1004,7 @@ const PurchaseOrders = () => {
                                             />
                                             <span className="bg-slate-100 px-1.5 py-1 h-full text-xs font-bold text-slate-700 select-none flex items-center justify-center">%</span>
                                         </div>
-                                        <span className="text-sm font-bold text-slate-900 ml-1">({inr(globalGstAmount)})</span>
+                                        <span className="text-sm font-bold text-slate-900 ml-1">({inr(gstAmount)})</span>
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <span className="text-sm font-medium text-slate-600">Freight:</span>
@@ -988,8 +1013,17 @@ const PurchaseOrders = () => {
                                             min="0" 
                                             value={form.freight || ""} 
                                             onChange={(e) => set("freight", e.target.value)} 
+                                            placeholder="0"
                                             className="h-8 w-24 text-right bg-white border-slate-300 font-bold"
                                         />
+                                        <select
+                                            value={form.freight_gst_type || "Without GST"}
+                                            onChange={(e) => set("freight_gst_type", e.target.value)}
+                                            className="h-8 px-2 text-xs font-semibold rounded-md border border-slate-300 bg-white text-slate-700 outline-none focus:border-primary shadow-sm cursor-pointer"
+                                        >
+                                            <option value="Without GST">Without GST</option>
+                                            <option value="With GST">With GST</option>
+                                        </select>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 bg-primary/10 px-3 py-1.5 rounded-md border border-primary/20">
@@ -1342,7 +1376,14 @@ const PurchaseOrders = () => {
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <span className="text-sm font-medium text-slate-600">Freight:</span>
-                                        <span className="text-sm font-bold text-slate-900">{inr(viewing.freight || 0)}</span>
+                                        <span className="text-sm font-bold text-slate-900">
+                                            {inr(viewing.freight || 0)}
+                                            {Number(viewing.freight || 0) > 0 && (
+                                                <span className="ml-1.5 text-xs font-semibold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700">
+                                                    {viewing.freight_gst_type || "Without GST"}
+                                                </span>
+                                            )}
+                                        </span>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 bg-primary/10 px-3 py-1.5 rounded-md border border-primary/20">

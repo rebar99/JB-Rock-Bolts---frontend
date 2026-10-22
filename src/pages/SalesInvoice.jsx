@@ -144,6 +144,7 @@ const SalesInvoice = () => {
     const [manualUnitPrice, setManualUnitPrice] = useState("");
     const [manualGstRate, setManualGstRate] = useState("18");
     const [manualFreight, setManualFreight] = useState("");
+    const [manualFreightGstType, setManualFreightGstType] = useState("Without GST");
     const [dispatchQty, setDispatchQty] = useState("");
     const [manualUom, setManualUom] = useState("Nos");
     const [paymentStatus, setPaymentStatus] = useState("Pending");
@@ -200,6 +201,7 @@ const SalesInvoice = () => {
     const [editEWayBillUrl, setEditEWayBillUrl] = useState("");
     const [editPaymentStatus, setEditPaymentStatus] = useState("Pending");
     const [editManualFreight, setEditManualFreight] = useState("");
+    const [editManualFreightGstType, setEditManualFreightGstType] = useState("Without GST");
     const [editManualTotalGstRate, setEditManualTotalGstRate] = useState("");
     const [editHsnCode, setEditHsnCode] = useState("");
 
@@ -333,6 +335,7 @@ const SalesInvoice = () => {
         }
         setManualGstRate(parsedGst);
         setManualFreight(po?.freight?.toString() || "0");
+        setManualFreightGstType(po?.freight_gst_type || "Without GST");
 
         setPaymentStatus("Pending");
         setPaymentNote("");
@@ -693,7 +696,17 @@ const SalesInvoice = () => {
         }
 
         const freight = Number(manualFreight) || 0;
-        const grand_total = subtotal + gst_amount + freight;
+        let applicableFreightGstRate = 18;
+        if (manualTotalGstRate !== "") {
+            applicableFreightGstRate = Number(manualTotalGstRate) || 18;
+        } else if (dispatchItems.length > 0) {
+            const itemWithGst = dispatchItems.find(it => (Number(it.gst_rate) || 0) > 0);
+            applicableFreightGstRate = itemWithGst ? Number(itemWithGst.gst_rate) : 18;
+        }
+        const isFreightWithGst = (manualFreightGstType || "Without GST") === "With GST";
+        const freightGst = isFreightWithGst ? Math.round(freight * (applicableFreightGstRate / 100)) : 0;
+        const total_gst = gst_amount + freightGst;
+        const grand_total = subtotal + total_gst + freight;
 
         try {
             await createMutation.mutateAsync({
@@ -703,8 +716,9 @@ const SalesInvoice = () => {
                 project: poData.project,
                 items: dispatchItems,
                 subtotal,
-                gst_amount,
+                gst_amount: total_gst,
                 freight,
+                freight_gst_type: manualFreightGstType || "Without GST",
                 grand_total,
                 payment_status: paymentStatus,
                 payment_note: paymentNote || null,
@@ -956,6 +970,7 @@ const SalesInvoice = () => {
         setEditEWayBillUrl(sale.e_way_bill_url || "");
         setEditHsnCode(sale.hsn_code || "");
         setEditManualFreight(round2(sale.freight || 0).toFixed(2));
+        setEditManualFreightGstType(sale.freight_gst_type || "Without GST");
         setEditManualTotalGstRate("");
 
         // Load and recalculate all items to ensure UI consistency. Rounded to
@@ -1014,10 +1029,21 @@ const SalesInvoice = () => {
             finalGst = round2(sub * (Number(editManualTotalGstRate) / 100));
         }
 
+        let applicableFreightGstRate = 18;
+        if (editManualTotalGstRate !== "") {
+            applicableFreightGstRate = Number(editManualTotalGstRate) || 18;
+        } else if (editItems.length > 0) {
+            const itemWithGst = editItems.find(it => (Number(it.gst_rate) || 0) > 0);
+            applicableFreightGstRate = itemWithGst ? Number(itemWithGst.gst_rate) : 18;
+        }
+        const isFreightWithGst = (editManualFreightGstType || "Without GST") === "With GST";
+        const freightGst = isFreightWithGst ? round2(fr * (applicableFreightGstRate / 100)) : 0;
+        const totalGst = round2(finalGst + freightGst);
+
         setEditSubtotal(sub);
-        setEditGstAmount(finalGst);
-        setEditGrandTotal(round2(sub + finalGst + fr));
-    }, [editItems, editManualFreight, editManualTotalGstRate]);
+        setEditGstAmount(totalGst);
+        setEditGrandTotal(round2(sub + totalGst + fr));
+    }, [editItems, editManualFreight, editManualFreightGstType, editManualTotalGstRate]);
 
     const handleUpdateSale = async () => {
         if (!editingSale) return;
@@ -1026,6 +1052,7 @@ const SalesInvoice = () => {
                 id: Number(editingSale.id),
                 body: {
                     freight: Number(editManualFreight),
+                    freight_gst_type: editManualFreightGstType || "Without GST",
                     subtotal: editSubtotal,
                     gst_amount: editGstAmount,
                     grand_total: editGrandTotal,
@@ -1576,11 +1603,23 @@ const SalesInvoice = () => {
                                                             finalGstAmt = Math.round(subtotal * (Number(manualTotalGstRate) / 100));
                                                         }
 
+                                                        let applicableFreightGstRate = 18;
+                                                        if (manualTotalGstRate !== "") {
+                                                            applicableFreightGstRate = Number(manualTotalGstRate) || 18;
+                                                        } else if (dispatchItems.length > 0) {
+                                                            const itemWithGst = dispatchItems.find(it => (Number(it.gst_rate) || 0) > 0);
+                                                            applicableFreightGstRate = itemWithGst ? Number(itemWithGst.gst_rate) : 18;
+                                                        }
+                                                        const isFreightWithGst = (manualFreightGstType || "Without GST") === "With GST";
+                                                        const freightGstAmt = isFreightWithGst ? Math.round(freight * (applicableFreightGstRate / 100)) : 0;
+                                                        const totalGst = finalGstAmt + freightGstAmt;
+                                                        const totalPayable = subtotal + totalGst + freight;
+
                                                         return (
                                                             <>
                                                                 <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
                                                                     <span className="text-muted-foreground">Total Basic: <b className="text-foreground">{inr(subtotal)}</b></span>
-                                                                    <span className="text-muted-foreground">Total GST: <b className="text-foreground">{inr(finalGstAmt)}</b></span>
+                                                                    <span className="text-muted-foreground">Total GST: <b className="text-foreground">{inr(totalGst)}</b></span>
                                                                     <div className="flex items-center gap-2">
                                                                         <span className="text-muted-foreground whitespace-nowrap">Freight:</span>
                                                                         <Input
@@ -1590,10 +1629,18 @@ const SalesInvoice = () => {
                                                                             value={manualFreight}
                                                                             onChange={(e) => setManualFreight(e.target.value)}
                                                                         />
+                                                                        <select
+                                                                            value={manualFreightGstType || "Without GST"}
+                                                                            onChange={(e) => setManualFreightGstType(e.target.value)}
+                                                                            className="h-7 px-1.5 text-[11px] font-semibold rounded-md border border-input bg-background text-foreground outline-none focus:border-primary shadow-sm cursor-pointer"
+                                                                        >
+                                                                            <option value="Without GST">Without GST</option>
+                                                                            <option value="With GST">With GST</option>
+                                                                        </select>
                                                                     </div>
                                                                 </div>
                                                                 <div className="font-bold text-primary text-sm">
-                                                                    Total Payable: {inr(subtotal + finalGstAmt + (Number(manualFreight) || 0))}
+                                                                    Total Payable: {inr(totalPayable)}
                                                                 </div>
                                                             </>
                                                         );
@@ -1741,6 +1788,14 @@ const SalesInvoice = () => {
                                                         value={editManualFreight}
                                                         onChange={(e) => setEditManualFreight(e.target.value)}
                                                     />
+                                                    <select
+                                                        value={editManualFreightGstType || "Without GST"}
+                                                        onChange={(e) => setEditManualFreightGstType(e.target.value)}
+                                                        className="h-7 px-1.5 text-[11px] font-semibold rounded-md border border-input bg-background text-foreground outline-none focus:border-primary shadow-sm cursor-pointer"
+                                                    >
+                                                        <option value="Without GST">Without GST</option>
+                                                        <option value="With GST">With GST</option>
+                                                    </select>
                                                 </div>
                                                 <span className="text-muted-foreground">Without GST Amount: <b className="text-foreground">{inr(editSubtotal)}</b></span>
                                                 <div className="flex items-center gap-2">
@@ -2103,7 +2158,14 @@ const SalesInvoice = () => {
                                             </tr>
                                             <tr>
                                                 <td colSpan="4" className="p-2 text-right">Freight:</td>
-                                                <td className="p-2 text-right">{inr(viewSale.freight)}</td>
+                                                <td className="p-2 text-right">
+                                                    {inr(viewSale.freight)}
+                                                    {Number(viewSale.freight || 0) > 0 && (
+                                                        <span className="ml-1.5 text-xs font-semibold px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                                                            {viewSale.freight_gst_type || "Without GST"}
+                                                        </span>
+                                                    )}
+                                                </td>
                                             </tr>
                                             <tr className="text-primary bg-primary/5 text-sm">
                                                 <td colSpan="4" className="p-2 text-right">Grand Total:</td>
