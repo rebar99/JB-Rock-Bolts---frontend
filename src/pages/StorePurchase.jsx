@@ -26,8 +26,8 @@ export default function StorePurchase() {
     const { data: orders = [] } = useQuery({ queryKey: ["store-orders"], queryFn: fetchStoreOrders });
     const metrics = useMemo(() => {
         const quantity = inventory.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
-        const low = inventory.filter(item => Number(item.quantity || 0) <= Number(item.reorder_level || 0) && Number(item.quantity || 0) > 0).length;
-        const out = inventory.filter(item => Number(item.quantity || 0) <= 0).length;
+        const low = inventory.filter(item => item.status === "Low Stock").length;
+        const out = inventory.filter(item => item.status === "Out of Stock").length;
         return { quantity, low, out, reorder: low + out };
     }, [inventory]);
     const movement = [{ name: "Mon", in: 0, out: 0 }, { name: "Tue", in: 0, out: 0 }, { name: "Wed", in: 0, out: 0 }, { name: "Thu", in: 0, out: 0 }, { name: "Fri", in: 0, out: 0 }, { name: "Sat", in: 0, out: 0 }];

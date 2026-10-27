@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import {
     ShieldCheck, UserCheck, UserX, Mail, Clock, Megaphone,
-    Warehouse, LayoutGrid, ArrowLeft, Users, ClipboardList,
+    Warehouse, LayoutGrid, ArrowLeft, Users, ClipboardList, PenLine,
 } from "lucide-react";
 import { fmtDateTime } from "@/lib/format";
 

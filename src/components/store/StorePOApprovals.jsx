@@ -25,6 +25,7 @@ export default function StorePOApprovals() {
 
     const [selected, setSelected] = useState(null);
     const [reason, setReason] = useState("");
+    const [confirmDialog, setConfirmDialog] = useState(null);
 
     useEffect(() => {
         if (location.state?.order) {
@@ -54,22 +55,29 @@ export default function StorePOApprovals() {
             toast.error("Rejection reason is required before rejecting.");
             return;
         }
-        if (window.confirm(`Are you sure you want to REJECT Purchase Order ${selected?.order_number}?`)) {
-            action.mutate({
-                id: selected.id,
-                action: "Rejected",
-                rejection_reason: reason.trim(),
-            });
-        }
+        setConfirmDialog({
+            title: "Reject Purchase Order",
+            message: `Are you sure you want to reject Purchase Order ${selected?.order_number}? This action cannot be undone.`,
+            confirmLabel: "Yes, Reject",
+            confirmClass: "bg-rose-600 hover:bg-rose-700 text-white",
+            onConfirm: () => {
+                action.mutate({ id: selected.id, action: "Rejected", rejection_reason: reason.trim() });
+                setConfirmDialog(null);
+            },
+        });
     };
 
     const handleApprove = () => {
-        if (window.confirm(`Are you sure you want to APPROVE Purchase Order ${selected?.order_number} for ${money(selected?.grand_total)}?`)) {
-            action.mutate({
-                id: selected.id,
-                action: "Approved",
-            });
-        }
+        setConfirmDialog({
+            title: "Approve Purchase Order",
+            message: `Are you sure you want to approve Purchase Order ${selected?.order_number} for ${money(selected?.grand_total)}?`,
+            confirmLabel: "Yes, Approve",
+            confirmClass: "bg-emerald-600 hover:bg-emerald-700 text-white",
+            onConfirm: () => {
+                action.mutate({ id: selected.id, action: "Approved" });
+                setConfirmDialog(null);
+            },
+        });
     };
 
     return (
@@ -271,6 +279,33 @@ export default function StorePOApprovals() {
                             </div>
                         </div>
                     )}
+                </DialogContent>
+            </Dialog>
+            {/* Confirm Dialog — uses Radix Dialog so it portals above the PO review dialog */}
+            <Dialog open={!!confirmDialog} onOpenChange={open => !open && setConfirmDialog(null)}>
+                <DialogContent className="max-w-sm rounded-2xl p-6">
+                    <DialogHeader>
+                        <DialogTitle className="text-base font-bold text-slate-900">
+                            {confirmDialog?.title}
+                        </DialogTitle>
+                        <DialogDescription className="mt-1.5 text-sm text-slate-600 leading-relaxed">
+                            {confirmDialog?.message}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="mt-4 flex justify-end gap-3">
+                        <Button
+                            variant="outline"
+                            onClick={() => setConfirmDialog(null)}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            className={confirmDialog?.confirmClass}
+                            onClick={confirmDialog?.onConfirm}
+                        >
+                            {confirmDialog?.confirmLabel}
+                        </Button>
+                    </div>
                 </DialogContent>
             </Dialog>
         </main>

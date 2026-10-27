@@ -550,6 +550,9 @@ export const updateApplicationAccess = (id, body) => put(`/api/application-acces
 export const deleteApplicationAccessUser = (id) => del(`/api/application-access/users/${id}`);
 export const fetchStoreDashboard = () => get("/api/store-purchase/dashboard");
 export const fetchStoreInventory = () => get("/api/store-purchase/inventory");
+export const fetchStockStatusList = () => get("/api/store-purchase/stock-status");
+export const updateItemStockLimit = (id, payload) => put(`/api/store-purchase/stock-status/${id}`, typeof payload === "object" ? payload : { out_of_stock_limit: Number(payload) });
+export const batchUpdateStockLimits = (items) => put("/api/store-purchase/stock-status/batch", { items });
 export const fetchStoreOrders = () => get("/api/store-purchase/purchase-orders");
 export const createStoreItem = (body) => post("/api/store-purchase/inventory", body);
 export const updateStoreItem = (id, body) => put(`/api/store-purchase/inventory/${id}`, body);
@@ -586,6 +589,33 @@ export const uploadStoreMaterialReceiptBill = async (file) => {
         const err = await res.json().catch(() => ({ detail: "Bill upload failed" }));
         throw new Error(err.detail || "Bill upload failed");
     }
+    return res.json();
+};
+
+// ── PO Signature & Approval Configuration ─────────────────────────────────────
+export const fetchPOSignatureConfig = () => get("/api/store-purchase/po-signature-config");
+export const addPOPreparedBy = (body) => post("/api/store-purchase/po-signature-config/prepared-by/add", body);
+export const removePOPreparedBy = (entryId) => del(`/api/store-purchase/po-signature-config/prepared-by/${entryId}`);
+export const uploadPOPreparedBySignature = async (entryId, file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const token = getToken();
+    const res = await fetch(`${BASE}/api/store-purchase/po-signature-config/prepared-by/${entryId}/signature`, {
+        method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {}, body: formData,
+    });
+    if (!res.ok) { const err = await res.json().catch(() => ({ detail: "Upload failed" })); throw new Error(err.detail || "Upload failed"); }
+    return res.json();
+};
+export const updatePOSlabCheckedBy = (levelId, body) => put(`/api/store-purchase/po-signature-config/levels/${levelId}/checked-by`, body);
+export const updatePOSlabApprovedBy = (levelId, body) => put(`/api/store-purchase/po-signature-config/levels/${levelId}/approved-by`, body);
+export const uploadPOSlabSignature = async (levelId, sigType, file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const token = getToken();
+    const res = await fetch(`${BASE}/api/store-purchase/po-signature-config/levels/${levelId}/signature?sig_type=${sigType}`, {
+        method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {}, body: formData,
+    });
+    if (!res.ok) { const err = await res.json().catch(() => ({ detail: "Upload failed" })); throw new Error(err.detail || "Upload failed"); }
     return res.json();
 };
 

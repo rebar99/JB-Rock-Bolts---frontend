@@ -1,8 +1,30 @@
 import jbEngineeringLogo from "@/assets/jb-engineering-logo.jpg";
+import { resolveFileUrl } from "@/lib/api";
 
 export const formatNumber = value => Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 export const formatDate = value => value ? new Date(value).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 export const escapeHtml = value => String(value ?? "—").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[char]));
+
+export function amountInWords(amount) {
+    const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
+        "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+    const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+    function words(n) {
+        if (n === 0) return "";
+        if (n < 20) return ones[n] + " ";
+        if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? " " + ones[n % 10] : "") + " ";
+        if (n < 1000) return ones[Math.floor(n / 100)] + " Hundred " + words(n % 100);
+        if (n < 100000) return words(Math.floor(n / 1000)) + "Thousand " + words(n % 1000);
+        if (n < 10000000) return words(Math.floor(n / 100000)) + "Lakh " + words(n % 100000);
+        return words(Math.floor(n / 10000000)) + "Crore " + words(n % 10000000);
+    }
+    const rounded = Math.round(amount * 100) / 100;
+    const rupees = Math.floor(rounded);
+    const paisa = Math.round((rounded - rupees) * 100);
+    let result = words(rupees).trim();
+    if (paisa > 0) result += " and " + words(paisa).trim() + " Paisa";
+    return result.replace(/\s+/g, " ").trim();
+}
 
 export function getItemOnlyName(description, itemMasters = []) {
     if (!description) return "—";
@@ -39,7 +61,42 @@ export function printPurchaseOrder(order, itemMasterList = []) {
         return `<tr><td>${index + 1}</td><td>${escapeHtml(displayName)}</td><td>${formatNumber(item.quantity)}</td><td>${escapeHtml(item.uom)}</td><td>&#8377;${formatNumber(item.unit_rate)}</td><td>&#8377;${formatNumber(item.amount)}</td></tr>`;
     }).join("");
 
-    const html = `<!doctype html><html><head><title>PO ${escapeHtml(order.order_number)}</title><style>@page{size:A4 portrait;margin:12mm 12mm 12mm 15mm}*{box-sizing:border-box}html,body{width:100%;min-height:100%;background:#fff}body{margin:0;padding:0 2px;font-family:Arial,Helvetica,sans-serif;color:#0c2348;font-size:11px;line-height:1.35}.sheet{width:100%;min-height:273mm}.company{display:flex;align-items:center;gap:14px;padding:4px 0 9px;border-bottom:2px solid #12386c}.logo{width:70px;height:54px;border:1px solid #d2dbe8;object-fit:contain;border-radius:2px}.company h1{margin:0;color:#e5222b;font-size:20px;line-height:1.1}.company p{margin:2px 0;font-size:10px;font-weight:600}.title{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #365780;padding:8px 0}.title strong{font-size:18px;letter-spacing:.2px}.meta{display:grid;grid-template-columns:1.65fr 1fr;gap:12px;border-bottom:1px solid #9aacca;padding:10px 0;line-height:1.55}.meta p{margin:0}.intro{margin:8px 0;font-size:10px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #6480a4;padding:6px;vertical-align:middle;text-align:center}th{background:#e8eff8;font-size:9px}.right{text-align:right}.totals{width:43%;margin-left:auto;border-top:none;border-right:1px solid #6480a4;border-bottom:1px solid #6480a4;border-left:1px solid #6480a4}.totals div{display:flex;justify-content:space-between;padding:6px;border-top:1px solid #b5c3d5}.totals .grand{background:#d8e9ff;font-weight:bold}.terms-container{margin-top:12px;border:1px solid #6480a4;width:100%}.terms-body{padding:7px 9px;line-height:1.55}.terms-body h3{margin:0 0 4px;font-size:11px}.terms-body p{margin:1px 0}.remark-red{color:#e5222b !important;font-weight:bold !important}.sign-block{border-top:1px solid #6480a4;padding:8px 12px 10px;font-size:10px}.sign-block .company-for{text-align:right;font-weight:bold;font-size:11px}.sign-block .sign-row{display:flex;justify-content:space-between;align-items:flex-end;margin-top:48px;font-weight:bold;font-size:10px;padding:0 5px}@media print{body{print-color-adjust:exact;-webkit-print-color-adjust:exact}.remark-red, .remark-red font{color:#e5222b !important;font-weight:bold !important}.totals{border-left:1px solid #6480a4 !important}.terms-container{border-left:1px solid #6480a4 !important}}</style></head><body><main class="sheet"><section class="company"><img class="logo" src="${jbEngineeringLogo}" alt="JB Engineering"/><div><h1>RE-Bar Couplers India Private Limited</h1><p>VPO Palkwaha, Tehsil Haroli, District Una, Himachal Pradesh - 177220</p><p>HO: 10 A&amp;B, Block 23, Industrial Area, Nangal Jarialan, Distt. Una, Himachal Pradesh - 177212</p><p>Cell No. +91 9888603791 &middot; seema@jbengineeringcorporation.com</p><p>www.jbengineeringcorporation.com &middot; GST No. 02AAFCR5621L1ZG</p></div></section><section class="title"><span>Vendor Code: ${escapeHtml(order.vendor_code)}</span><strong>PURCHASE ORDER</strong></section><section class="meta"><div><p><b>Vendor Name:</b> ${escapeHtml(order.supplier)}</p><p><b>Vendor Address:</b> ${escapeHtml(order.vendor_address || "Vendor address not provided").replace(/\n/g, "<br/>")}</p><p><b>Contact Person / Phone:</b> ${escapeHtml(order.vendor_contact)}</p><p><b>Vendor GST No.:</b> ${escapeHtml(order.vendor_gst)}</p></div><div><p><b>PO No:</b> ${escapeHtml(order.order_number)}</p><p><b>PO Date:</b> ${formatDate(order.po_date || order.created_at)}</p><p><b>Reference:</b> ${escapeHtml(order.reference)}</p><p><b>Status:</b> ${escapeHtml(order.status)}</p>${order.delivery_address ? `<p><b>Delivery Address:</b> ${escapeHtml(order.delivery_address).replace(/\n/g, "<br/>")}</p>` : ""}</div></section><p class="intro">Please supply the following goods subject to the terms and conditions mentioned herein.</p><table><thead><tr><th>Sr. No.</th><th>Item Description</th><th>Quantity</th><th>U/M</th><th>Unit Rate (INR)</th><th>Amount (INR)</th></tr></thead><tbody>${items}</tbody></table><section class="totals" style="border-left:1px solid #6480a4"><div><span>Total</span><b>&#8377;${formatNumber(order.subtotal)}</b></div><div><span>IGST (${order.gst_rate || 0}%)</span><b>&#8377;${formatNumber(order.gst_amount)}</b></div><div><span>Rounded off</span><b>&#8377;${formatNumber(order.round_off)}</b></div><div class="grand"><span>Total Amount Including Taxes</span><b>&#8377;${formatNumber(order.grand_total)}</b></div></section><section class="terms-container"><div class="terms-body"><h3>Terms and Conditions</h3><p><b>Price:</b> ${escapeHtml(order.price_basis)}</p><p><b>Packing &amp; Forwarding:</b> ${escapeHtml(order.packing_terms)}</p><p><b>Freight &amp; Transportation:</b> ${escapeHtml(order.freight_terms)}</p><p><b>Insurance:</b> ${escapeHtml(order.insurance_terms)}</p><p><b>Delivery:</b> ${escapeHtml(order.delivery_terms)}</p><p><b>Inspection:</b> ${escapeHtml(order.inspection_terms)}</p><p><b>Guarantee / Warranty:</b> ${escapeHtml(order.warranty_terms)}</p><p><b>Payment Terms:</b> ${escapeHtml(order.payment_terms)}</p><p><b>Quantity Variance:</b> ${escapeHtml(order.quantity_variance)}</p>${order.notes ? `<p><b>Notes:</b> ${escapeHtml(order.notes)}</p>` : ""}${order.remark_1 ? `<p style="margin-top:3px;"><b>Remarks:</b> ${escapeHtml(order.remark_1)}</p>` : ""}${order.remark_2 ? `<p class="remark-red" style="color:#e5222b !important;font-weight:bold !important;margin-top:3px;"><font color="#e5222b"><b>Remarks:</b> ${escapeHtml(order.remark_2)}</font></p>` : ""}</div><div class="sign-block"><div class="company-for">For RE-Bar Couplers India Private Limited</div><div class="sign-row"><span>Prepared By</span><span>Checked By</span><span>Approved By</span></div></div></section></main></body></html>`;
+    // ── Build dynamic sign block ──────────────────────────────────────────────
+    const sc = order.signature_config || {};
+    const BASE_URL = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
+    const resolveUrl = (url) => {
+        if (!url) return null;
+        if (/^https?:\/\//.test(url)) return url;
+        return `${BASE_URL}${url.startsWith("/") ? url : "/" + url}`;
+    };
+    const sigImg = (url, alt) => url ? `<img src="${resolveUrl(url)}" alt="${alt}" style="max-height:44px;max-width:90px;object-fit:contain;display:block;margin:0 auto 3px"/>` : `<div style="height:48px"></div>`;
+
+    // Multiple Prepared By
+    const preparedByList = Array.isArray(sc.prepared_by_list) ? sc.prepared_by_list : (sc.prepared_by ? [sc.prepared_by] : []);
+    const preparedByHtmlParts = preparedByList.map(pb => `
+        <div style="flex:1;text-align:center;min-width:80px">
+            ${sigImg(pb.signature_url, pb.user_name || 'Prepared By')}
+            <div style="border-top:1px solid #365780;padding-top:3px;font-weight:bold;font-size:10px">Prepared By</div>
+            ${pb.user_name ? `<div style="font-size:9px;color:#444;margin-top:1px">${escapeHtml(pb.user_name)}</div>` : ''}
+        </div>`);
+    // Fallback if none configured
+    if (preparedByHtmlParts.length === 0) preparedByHtmlParts.push(`<div style="flex:1;text-align:center;min-width:80px"><div style="height:48px"></div><div style="border-top:1px solid #365780;padding-top:3px;font-weight:bold;font-size:10px">Prepared By</div></div>`);
+
+    const checkedByHtml = `
+        <div style="flex:1;text-align:center;min-width:80px">
+            ${sc.checked_by?.approved ? sigImg(sc.checked_by?.signature_url, "Checked By") : `<div style="height:48px"></div>`}
+            <div style="border-top:1px solid #365780;padding-top:3px;font-weight:bold;font-size:10px">Checked By</div>
+            ${sc.checked_by?.approved && sc.checked_by?.user_name ? `<div style="font-size:9px;color:#444;margin-top:1px">${escapeHtml(sc.checked_by.user_name)}</div>` : ''}
+        </div>`;
+    const approvedByHtml = `
+        <div style="flex:1;text-align:center;min-width:80px">
+            ${sc.approved_by?.approved ? sigImg(sc.approved_by?.signature_url, "Approved By") : `<div style="height:48px"></div>`}
+            <div style="border-top:1px solid #365780;padding-top:3px;font-weight:bold;font-size:10px">Approved By</div>
+            ${sc.approved_by?.approved && sc.approved_by?.user_name ? `<div style="font-size:9px;color:#444;margin-top:1px">${escapeHtml(sc.approved_by.user_name)}</div>` : ''}
+        </div>`;
+    const signBlockHtml = `<div class="sign-block"><div class="company-for">For RE-Bar Couplers India Private Limited</div><div class="sign-row" style="align-items:flex-end;gap:8px">${preparedByHtmlParts.join('')}${checkedByHtml}${approvedByHtml}</div></div>`;
+
+    const html = `<!doctype html><html><head><title>PO ${escapeHtml(order.order_number)}</title><style>@page{size:A4 portrait;margin:8mm 8mm 8mm 10mm}*{box-sizing:border-box}html,body{width:100%;min-height:100%;background:#fff}body{margin:0;padding:4px;font-family:Arial,Helvetica,sans-serif;color:#0c2348;font-size:11px;line-height:1.35}.sheet{width:100%;min-height:273mm;border:2px solid #12386c;padding:8px 10px}.company{display:flex;align-items:center;gap:14px;padding:4px 0 9px;border-bottom:2px solid #12386c}.logo{width:70px;height:54px;border:1px solid #d2dbe8;object-fit:contain;border-radius:2px}.company h1{margin:0;color:#e5222b;font-size:20px;line-height:1.1}.company p{margin:2px 0;font-size:10px;font-weight:600}.title{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #365780;padding:6px 10px;margin:0 -10px}.title span{font-size:11px;font-weight:600;color:#0c2348}.title strong{font-size:17px;letter-spacing:.3px;color:#0c2348}.meta{display:grid;grid-template-columns:1.65fr 1fr;gap:12px;border-bottom:1px solid #9aacca;padding:8px 10px;margin:0 -10px;line-height:1.6}.meta p{margin:0}.intro{margin:8px 0 5px;font-size:10px;font-style:italic;color:#365780}table{width:100%;border-collapse:collapse;margin-top:2px}th,td{border:1px solid #6480a4;padding:5px 6px;vertical-align:middle;text-align:center}th{background:#e8eff8;color:#0c2348;font-size:9.5px;font-weight:bold}tbody tr:nth-child(even){background:#f0f5ff}.right{text-align:right}.totals{width:46%;margin-left:auto;border:1px solid #6480a4;margin-top:0}.totals div{display:flex;justify-content:space-between;padding:5px 8px;border-top:1px solid #c5d2e8}.totals .grand{background:#d8e9ff;color:#0c2348;font-weight:bold;font-size:11.5px}.totals .grand b{color:#0c2348}.totals .words{border-top:2px dashed #6480a4;font-size:10px;padding:5px 8px;display:flex;gap:6px;background:#f7faff}.terms-container{margin-top:10px;border:1px solid #6480a4;width:100%}.terms-body{padding:7px 9px;line-height:1.55}.terms-body h3{margin:0 0 4px;font-size:11px;color:#12386c;border-bottom:1px solid #9aacca;padding-bottom:3px}.terms-body p{margin:1px 0}.remark-red{color:#e5222b !important;font-weight:bold !important}.sign-block{border-top:1px solid #6480a4;padding:8px 12px 10px;font-size:10px}.sign-block .company-for{text-align:right;font-weight:bold;font-size:11px;color:#0c2348}.sign-block .sign-row{display:flex;justify-content:space-around;align-items:flex-end;margin-top:12px;padding:0 5px;gap:8px}@media print{body{print-color-adjust:exact;-webkit-print-color-adjust:exact}.remark-red, .remark-red font{color:#e5222b !important;font-weight:bold !important}.sheet{border:2px solid #12386c !important}.totals{border:1px solid #6480a4 !important}.terms-container{border:1px solid #6480a4 !important}th{background:#e8eff8 !important;color:#0c2348 !important}.totals .grand{background:#d8e9ff !important;color:#0c2348 !important}.totals .grand b{color:#0c2348 !important}}</style></head><body><main class="sheet"><section class="company"><img class="logo" src="${jbEngineeringLogo}" alt="JB Engineering"/><div><h1>RE-Bar Couplers India Private Limited</h1><p>VPO Palkwaha, Tehsil Haroli, District Una, Himachal Pradesh - 177220</p><p>HO: 10 A&amp;B, Block 23, Industrial Area, Nangal Jarialan, Distt. Una, Himachal Pradesh - 177212</p><p>Cell No. +91 9888603791 &middot; seema@jbengineeringcorporation.com</p><p>www.jbengineeringcorporation.com &middot; GST No. 02AAFCR5621L1ZG</p></div></section><section class="title"><span>Vendor Code: ${escapeHtml(order.vendor_code)}</span><strong>PURCHASE ORDER</strong></section><section class="meta"><div><p><b>Vendor Name:</b> ${escapeHtml(order.supplier)}</p><p><b>Vendor Address:</b> ${escapeHtml(order.vendor_address || "Vendor address not provided").replace(/\n/g, "<br/>")}</p><p><b>Contact Person / Phone:</b> ${escapeHtml(order.vendor_contact)}</p><p><b>Vendor GST No.:</b> ${escapeHtml(order.vendor_gst)}</p></div><div><p><b>PO No:</b> ${escapeHtml(order.order_number)}</p><p><b>PO Date:</b> ${formatDate(order.po_date || order.created_at)}</p><p><b>Reference:</b> ${escapeHtml(order.reference)}</p><p><b>Status:</b> ${escapeHtml(order.status)}</p>${order.delivery_address ? `<p><b>Delivery Address:</b> ${escapeHtml(order.delivery_address).replace(/\n/g, "<br/>")}</p>` : ""}</div></section><p class="intro">Please supply the following goods subject to the terms and conditions mentioned herein.</p><table><thead><tr><th>Sr. No.</th><th>Item Description</th><th>Quantity</th><th>U/M</th><th>Unit Rate (INR)</th><th>Amount (INR)</th></tr></thead><tbody>${items}</tbody></table><section class="totals" style="border-left:1px solid #6480a4"><div><span>Total</span><b>&#8377;${formatNumber(order.subtotal)}</b></div><div><span>IGST (${order.gst_rate || 0}%)</span><b>&#8377;${formatNumber(order.gst_amount)}</b></div><div><span>Rounded off</span><b>&#8377;${formatNumber(order.round_off)}</b></div><div class="grand"><span>Total Amount Including Taxes</span><b>&#8377;${formatNumber(order.grand_total)}</b></div><div class="words"><b style="white-space:nowrap">Indian Rupees :-</b> <i>${amountInWords(order.grand_total || 0)} Only</i></div></section><section class="terms-container"><div class="terms-body"><h3>Terms and Conditions</h3><p><b>Price:</b> ${escapeHtml(order.price_basis)}</p><p><b>Packing &amp; Forwarding:</b> ${escapeHtml(order.packing_terms)}</p><p><b>Freight &amp; Transportation:</b> ${escapeHtml(order.freight_terms)}</p><p><b>Insurance:</b> ${escapeHtml(order.insurance_terms)}</p><p><b>Delivery:</b> ${escapeHtml(order.delivery_terms)}</p><p><b>Inspection:</b> ${escapeHtml(order.inspection_terms)}</p><p><b>Guarantee / Warranty:</b> ${escapeHtml(order.warranty_terms)}</p><p><b>Payment Terms:</b> ${escapeHtml(order.payment_terms)}</p><p><b>Quantity Variance:</b> ${escapeHtml(order.quantity_variance)}</p>${order.notes ? `<p><b>Notes:</b> ${escapeHtml(order.notes)}</p>` : ""}${order.remark_1 ? `<p style="margin-top:3px;"><b>Remarks:</b> ${escapeHtml(order.remark_1)}</p>` : ""}${order.remark_2 ? `<p class="remark-red" style="color:#e5222b !important;font-weight:bold !important;margin-top:3px;"><font color="#e5222b"><b>Remarks:</b> ${escapeHtml(order.remark_2)}</font></p>` : ""}</div>${signBlockHtml}</section></main></body></html>`;
 
     let iframe = document.getElementById("_po_print_iframe");
     if (!iframe) {
@@ -67,11 +124,12 @@ export default function PurchaseOrderSheet({ order, itemMasterList = [] }) {
     if (!order) return null;
 
     return (
-        <div className="mx-auto rounded-xl border border-slate-300 bg-white p-6 shadow-sm text-xs text-[#0c2348]">
+        <div className="mx-auto border-2 border-[#12386c] bg-white text-xs text-[#0c2348] shadow-lg">
+
             {/* Company Header */}
-            <div className="flex items-center gap-4 border-b-2 border-[#12386c] pb-3">
+            <div className="flex items-center gap-4 border-b-2 border-[#12386c] px-4 py-3">
                 <img
-                    className="h-14 w-20 object-contain rounded border border-slate-200"
+                    className="h-14 w-20 shrink-0 object-contain rounded border border-slate-200"
                     src={jbEngineeringLogo}
                     alt="JB Engineering"
                 />
@@ -92,13 +150,13 @@ export default function PurchaseOrderSheet({ order, itemMasterList = [] }) {
             </div>
 
             {/* Title Bar */}
-            <div className="flex justify-between items-center border-b border-[#365780] py-2 font-bold text-sm">
-                <span>Vendor Code: {order.vendor_code || "—"}</span>
+            <div className="flex justify-between items-center border-b border-[#365780] px-4 py-2 font-bold text-sm text-[#0c2348]">
+                <span className="text-xs font-semibold">Vendor Code: {order.vendor_code || "—"}</span>
                 <span className="text-base tracking-wide">PURCHASE ORDER</span>
             </div>
 
             {/* Vendor & PO Metadata */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-b border-[#9aacca] py-3 text-xs leading-relaxed">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-b border-[#9aacca] px-4 py-3 text-xs leading-relaxed">
                 <div>
                     <p><b>Vendor Name:</b> {order.supplier || "—"}</p>
                     <p className="whitespace-pre-line"><b>Vendor Address:</b> {order.vendor_address || "Vendor address not provided"}</p>
@@ -123,39 +181,41 @@ export default function PurchaseOrderSheet({ order, itemMasterList = [] }) {
                 </div>
             </div>
 
-            <p className="py-2 text-[11px] text-slate-600">
+            {/* Intro line */}
+            <p className="px-4 py-2 text-[10.5px] italic text-[#365780]">
                 Please supply the following goods subject to the terms and conditions mentioned herein.
             </p>
 
             {/* Line Items Table */}
-            <div className="overflow-x-auto">
-                <table className="w-full border-collapse border border-[#6480a4] text-xs">
-                    <thead className="bg-[#e8eff8] text-center font-bold">
+            <div className="overflow-x-auto border-t border-[#6480a4]">
+                <table className="w-full border-collapse text-xs">
+                    <thead className="bg-[#e8eff8] text-center font-bold text-[10px]">
                         <tr>
-                            <th className="border border-[#6480a4] px-2 py-1.5 w-12 text-center">Sr. No.</th>
-                            <th className="border border-[#6480a4] px-3 py-1.5 text-center">Item Description</th>
-                            <th className="border border-[#6480a4] px-2 py-1.5 w-20 text-center">Quantity</th>
-                            <th className="border border-[#6480a4] px-2 py-1.5 w-16 text-center">U/M</th>
-                            <th className="border border-[#6480a4] px-2 py-1.5 w-24 text-center">Unit Rate (INR)</th>
-                            <th className="border border-[#6480a4] px-2 py-1.5 w-24 text-center">Amount (INR)</th>
+                            <th className="border border-[#6480a4] px-2 py-1.5 w-12">Sr. No.</th>
+                            <th className="border border-[#6480a4] px-3 py-1.5">Item Description</th>
+                            <th className="border border-[#6480a4] px-2 py-1.5 w-20">Quantity</th>
+                            <th className="border border-[#6480a4] px-2 py-1.5 w-16">U/M</th>
+                            <th className="border border-[#6480a4] px-2 py-1.5 w-28">Unit Rate (INR)</th>
+                            <th className="border border-[#6480a4] px-2 py-1.5 w-28">Amount (INR)</th>
                         </tr>
                     </thead>
                     <tbody>
                         {(order.items || []).map((item, index) => (
-                            <tr key={item.id || item.line_number || index} className="border-t border-[#6480a4]">
-                                <td className="border border-[#6480a4] px-2 py-1.5 text-center">{index + 1}</td>
-                                <td className="border border-[#6480a4] px-3 py-1.5 font-medium text-center">
+                            <tr key={item.id || item.line_number || index}
+                                className={index % 2 === 0 ? "bg-white" : "bg-[#f0f5ff]"}>
+                                <td className="border border-[#c5d2e8] px-2 py-1.5 text-center">{index + 1}</td>
+                                <td className="border border-[#c5d2e8] px-3 py-1.5 font-medium text-center">
                                     {item.item_name || getItemOnlyName(item.item_description, itemMasterList)}
                                 </td>
-                                <td className="border border-[#6480a4] px-2 py-1.5 text-center">{formatNumber(item.quantity)}</td>
-                                <td className="border border-[#6480a4] px-2 py-1.5 text-center">{item.uom}</td>
-                                <td className="border border-[#6480a4] px-2 py-1.5 text-center">₹{formatNumber(item.unit_rate)}</td>
-                                <td className="border border-[#6480a4] px-2 py-1.5 text-center font-semibold">₹{formatNumber(item.amount)}</td>
+                                <td className="border border-[#c5d2e8] px-2 py-1.5 text-center">{formatNumber(item.quantity)}</td>
+                                <td className="border border-[#c5d2e8] px-2 py-1.5 text-center">{item.uom}</td>
+                                <td className="border border-[#c5d2e8] px-2 py-1.5 text-center">₹{formatNumber(item.unit_rate)}</td>
+                                <td className="border border-[#c5d2e8] px-2 py-1.5 text-center font-semibold">₹{formatNumber(item.amount)}</td>
                             </tr>
                         ))}
                         {(!order.items || order.items.length === 0) && (
                             <tr>
-                                <td colSpan={6} className="border border-[#6480a4] p-3 text-center text-muted-foreground">
+                                <td colSpan={6} className="border border-[#c5d2e8] p-3 text-center text-muted-foreground">
                                     No line items in this purchase order.
                                 </td>
                             </tr>
@@ -165,29 +225,35 @@ export default function PurchaseOrderSheet({ order, itemMasterList = [] }) {
             </div>
 
             {/* Totals Section */}
-            <div className="ml-auto w-full sm:w-1/2 border border-t-0 border-[#6480a4] text-xs">
-                <div className="flex justify-between border-t border-[#b5c3d5] p-1.5 px-2.5">
+            <div className="ml-auto w-full sm:w-[46%] border-l border-r border-b border-[#6480a4] text-xs">
+                <div className="flex justify-between border-t border-[#c5d2e8] px-3 py-1.5">
                     <span>Total</span>
                     <b>₹{formatNumber(order.subtotal)}</b>
                 </div>
-                <div className="flex justify-between border-t border-[#b5c3d5] p-1.5 px-2.5">
+                <div className="flex justify-between border-t border-[#c5d2e8] px-3 py-1.5">
                     <span>IGST ({order.gst_rate || 0}%)</span>
                     <b>₹{formatNumber(order.gst_amount)}</b>
                 </div>
-                <div className="flex justify-between border-t border-[#b5c3d5] p-1.5 px-2.5">
+                <div className="flex justify-between border-t border-[#c5d2e8] px-3 py-1.5">
                     <span>Rounded off</span>
                     <b>₹{formatNumber(order.round_off)}</b>
                 </div>
-                <div className="flex justify-between border-t border-[#6480a4] bg-[#d8e9ff] p-2 px-2.5 text-sm font-bold text-[#0c2348]">
+                <div className="flex justify-between border-t border-[#6480a4] bg-[#d8e9ff] px-3 py-2 font-bold text-[#0c2348] text-sm">
                     <span>Total Amount Including Taxes</span>
-                    <b>₹{formatNumber(order.grand_total)}</b>
+                    <span>₹{formatNumber(order.grand_total)}</span>
+                </div>
+                <div className="flex gap-2 border-t border-dashed border-[#6480a4] px-3 py-2 text-xs text-[#0c2348]">
+                    <span className="shrink-0 font-bold whitespace-nowrap">Indian Rupees :-</span>
+                    <span className="italic font-medium">{amountInWords(order.grand_total || 0)} Only</span>
                 </div>
             </div>
 
             {/* Terms and Conditions */}
-            <div className="mt-4 border border-[#6480a4] text-xs">
-                <div className="p-2.5 leading-relaxed">
-                    <h3 className="font-bold text-[11px] mb-1">Terms and Conditions</h3>
+            <div className="mt-3 border border-[#6480a4] text-xs mx-0">
+                <div className="px-3 py-1.5 border-b border-[#9aacca]">
+                    <h3 className="font-bold text-[11px] text-[#0c2348]">Terms and Conditions</h3>
+                </div>
+                <div className="px-3 py-2 leading-relaxed grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0.5">
                     <p><b>Price:</b> {order.price_basis || "—"}</p>
                     <p><b>Packing &amp; Forwarding:</b> {order.packing_terms || "—"}</p>
                     <p><b>Freight &amp; Transportation:</b> {order.freight_terms || "—"}</p>
@@ -197,16 +263,51 @@ export default function PurchaseOrderSheet({ order, itemMasterList = [] }) {
                     <p><b>Guarantee / Warranty:</b> {order.warranty_terms || "—"}</p>
                     <p><b>Payment Terms:</b> {order.payment_terms || "—"}</p>
                     <p><b>Quantity Variance:</b> {order.quantity_variance || "—"}</p>
-                    {order.notes && <p><b>Notes:</b> {order.notes}</p>}
-                    {order.remark_1 && <p className="mt-1 font-medium"><b>Remarks:</b> {order.remark_1}</p>}
-                    {order.remark_2 && <p className="mt-1 font-bold text-red-600"><b>Remarks:</b> {order.remark_2}</p>}
+                    {order.notes && <p className="sm:col-span-2"><b>Notes:</b> {order.notes}</p>}
+                    {order.remark_1 && <p className="sm:col-span-2 mt-0.5 font-medium"><b>Remarks:</b> {order.remark_1}</p>}
+                    {order.remark_2 && <p className="sm:col-span-2 mt-0.5 font-bold text-red-600"><b>Remarks:</b> {order.remark_2}</p>}
                 </div>
-                <div className="border-t border-[#6480a4] p-3 text-[11px]">
-                    <div className="text-right font-bold">For RE-Bar Couplers India Private Limited</div>
-                    <div className="mt-10 flex justify-between font-bold text-slate-700">
-                        <span>Prepared By</span>
-                        <span>Checked By</span>
-                        <span>Approved By</span>
+                <div className="border-t border-[#6480a4] px-4 pb-4 pt-2 text-[11px]">
+                    <div className="text-right font-bold text-[#0c2348]">For RE-Bar Couplers India Private Limited</div>
+                    <div className="mt-4 flex flex-wrap justify-around gap-4 px-2">
+                        {/* Prepared By — multiple */}
+                        {(() => {
+                            const list = Array.isArray(order.signature_config?.prepared_by_list)
+                                ? order.signature_config.prepared_by_list
+                                : (order.signature_config?.prepared_by ? [order.signature_config.prepared_by] : []);
+                            return list.length > 0 ? list.map((pb) => (
+                                <div key={pb.user_id} className="flex flex-col items-center gap-1 flex-1 min-w-[70px]">
+                                    {pb.signature_url
+                                        ? <img src={resolveFileUrl(pb.signature_url)} alt={pb.user_name} className="max-h-12 max-w-[90px] object-contain mb-1" />
+                                        : <div className="h-12" />}
+                                    <span className="border-t border-[#365780] pt-1 w-full text-center font-bold">Prepared By</span>
+                                    <span className="text-[10px] text-slate-500">{pb.user_name}</span>
+                                </div>
+                            )) : (
+                                <div className="flex flex-col items-center gap-1 flex-1 min-w-[70px]">
+                                    <div className="h-12" />
+                                    <span className="border-t border-[#365780] pt-1 w-full text-center font-bold">Prepared By</span>
+                                </div>
+                            );
+                        })()}
+                        {/* Checked By */}
+                        <div className="flex flex-col items-center gap-1 flex-1 min-w-[70px]">
+                            {order.signature_config?.checked_by?.approved && order.signature_config?.checked_by?.signature_url
+                                ? <img src={resolveFileUrl(order.signature_config.checked_by.signature_url)} alt="Checked By" className="max-h-12 max-w-[90px] object-contain mb-1" />
+                                : <div className="h-12" />}
+                            <span className="border-t border-[#365780] pt-1 w-full text-center font-bold">Checked By</span>
+                            {order.signature_config?.checked_by?.approved && order.signature_config?.checked_by?.user_name &&
+                                <span className="text-[10px] text-slate-500">{order.signature_config.checked_by.user_name}</span>}
+                        </div>
+                        {/* Approved By */}
+                        <div className="flex flex-col items-center gap-1 flex-1 min-w-[70px]">
+                            {order.signature_config?.approved_by?.approved && order.signature_config?.approved_by?.signature_url
+                                ? <img src={resolveFileUrl(order.signature_config.approved_by.signature_url)} alt="Approved By" className="max-h-12 max-w-[90px] object-contain mb-1" />
+                                : <div className="h-12" />}
+                            <span className="border-t border-[#365780] pt-1 w-full text-center font-bold">Approved By</span>
+                            {order.signature_config?.approved_by?.approved && order.signature_config?.approved_by?.user_name &&
+                                <span className="text-[10px] text-slate-500">{order.signature_config.approved_by.user_name}</span>}
+                        </div>
                     </div>
                 </div>
             </div>

@@ -26,6 +26,7 @@ import SoftwareSelection from "./pages/SoftwareSelection";
 import StorePurchase from "./pages/StorePurchase";
 import ApplicationAccessManagement from "./pages/ApplicationAccessManagement";
 import POApprovalSettings from "./pages/POApprovalSettings";
+import POSignatureConfig from "./pages/POSignatureConfig";
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -104,6 +105,7 @@ const App = () => (
                             <Route path="/admin/recently-deleted" element={<MarketingRoute><AdminRoute><AppLayout><RecentlyDeleted workspace="Marketing" /></AppLayout></AdminRoute></MarketingRoute>} />
                             <Route path="/admin/application-access" element={<SuperAdminRoute><ApplicationAccessManagement /></SuperAdminRoute>} />
                             <Route path="/admin/po-approval-settings" element={<SuperAdminRoute><POApprovalSettings /></SuperAdminRoute>} />
+                            <Route path="/admin/po-signature-config" element={<SuperAdminRoute><POSignatureConfig /></SuperAdminRoute>} />
                             <Route path="/store-purchase/*" element={<StorePurchaseRoute><StorePurchase /></StorePurchaseRoute>} />
                             <Route path="*" element={<NotFound />} />
                         </Routes>
