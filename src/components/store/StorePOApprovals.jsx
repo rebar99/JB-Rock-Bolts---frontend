@@ -26,21 +26,29 @@ export default function StorePOApprovals() {
     const [selected, setSelected] = useState(null);
     const [reason, setReason] = useState("");
     const [confirmDialog, setConfirmDialog] = useState(null);
+    const [justActioned, setJustActioned] = useState(false);
+    const [initialStateHandled, setInitialStateHandled] = useState(false);
 
     useEffect(() => {
-        if (location.state?.order) {
+        // After an action (approve/reject), don't auto-select anything
+        if (justActioned) return;
+
+        if (location.state?.order && !initialStateHandled) {
             setSelected(location.state.order);
-        } else if (location.state?.poId && orders.length > 0) {
+            setInitialStateHandled(true);
+        } else if (location.state?.poId && orders.length > 0 && !initialStateHandled) {
             const found = orders.find(o => o.id === location.state.poId);
             if (found) setSelected(found);
-        } else if (orders.length === 1 && !selected) {
+            setInitialStateHandled(true);
+        } else if (orders.length === 1 && !selected && !initialStateHandled) {
             setSelected(orders[0]);
         }
-    }, [location.state, orders]);
+    }, [location.state, orders, justActioned]);
 
     const action = useMutation({
         mutationFn: ({ id, action, rejection_reason }) => actOnPOApproval(id, { action, rejection_reason }),
         onSuccess: (_, args) => {
+            setJustActioned(true);
             qc.invalidateQueries({ queryKey: ["my-pending-po-approvals"] });
             qc.invalidateQueries({ queryKey: ["store-orders"] });
             setSelected(null);
