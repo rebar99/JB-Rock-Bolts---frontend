@@ -77,7 +77,7 @@ export function printPurchaseOrder(order, itemMasterList = []) {
         <div style="flex:1;text-align:center;min-width:80px">
             ${sigImg(pb.signature_url, pb.user_name || 'Prepared By')}
             <div style="border-top:1px solid #365780;padding-top:3px;font-weight:bold;font-size:10px">Prepared By</div>
-            ${pb.user_name ? `<div style="font-size:9px;color:#444;margin-top:1px">${escapeHtml(pb.user_name)}</div>` : ''}
+
         </div>`);
     // Fallback if none configured
     if (preparedByHtmlParts.length === 0) preparedByHtmlParts.push(`<div style="flex:1;text-align:center;min-width:80px"><div style="height:48px"></div><div style="border-top:1px solid #365780;padding-top:3px;font-weight:bold;font-size:10px">Prepared By</div></div>`);
@@ -86,13 +86,13 @@ export function printPurchaseOrder(order, itemMasterList = []) {
         <div style="flex:1;text-align:center;min-width:80px">
             ${sc.checked_by?.approved ? sigImg(sc.checked_by?.signature_url, "Checked By") : `<div style="height:48px"></div>`}
             <div style="border-top:1px solid #365780;padding-top:3px;font-weight:bold;font-size:10px">Checked By</div>
-            ${sc.checked_by?.approved && sc.checked_by?.user_name ? `<div style="font-size:9px;color:#444;margin-top:1px">${escapeHtml(sc.checked_by.user_name)}</div>` : ''}
+
         </div>`;
     const approvedByHtml = `
         <div style="flex:1;text-align:center;min-width:80px">
             ${sc.approved_by?.approved ? sigImg(sc.approved_by?.signature_url, "Approved By") : `<div style="height:48px"></div>`}
             <div style="border-top:1px solid #365780;padding-top:3px;font-weight:bold;font-size:10px">Approved By</div>
-            ${sc.approved_by?.approved && sc.approved_by?.user_name ? `<div style="font-size:9px;color:#444;margin-top:1px">${escapeHtml(sc.approved_by.user_name)}</div>` : ''}
+
         </div>`;
     const signBlockHtml = `<div class="sign-block"><div class="company-for">For RE-Bar Couplers India Private Limited</div><div class="sign-row" style="align-items:flex-end;gap:8px">${preparedByHtmlParts.join('')}${checkedByHtml}${approvedByHtml}</div></div>`;
 
@@ -281,7 +281,7 @@ export default function PurchaseOrderSheet({ order, itemMasterList = [] }) {
                                         ? <img src={resolveFileUrl(pb.signature_url)} alt={pb.user_name} className="max-h-12 max-w-[90px] object-contain mb-1" />
                                         : <div className="h-12" />}
                                     <span className="border-t border-[#365780] pt-1 w-full text-center font-bold">Prepared By</span>
-                                    <span className="text-[10px] text-slate-500">{pb.user_name}</span>
+
                                 </div>
                             )) : (
                                 <div className="flex flex-col items-center gap-1 flex-1 min-w-[70px]">
@@ -296,8 +296,7 @@ export default function PurchaseOrderSheet({ order, itemMasterList = [] }) {
                                 ? <img src={resolveFileUrl(order.signature_config.checked_by.signature_url)} alt="Checked By" className="max-h-12 max-w-[90px] object-contain mb-1" />
                                 : <div className="h-12" />}
                             <span className="border-t border-[#365780] pt-1 w-full text-center font-bold">Checked By</span>
-                            {order.signature_config?.checked_by?.approved && order.signature_config?.checked_by?.user_name &&
-                                <span className="text-[10px] text-slate-500">{order.signature_config.checked_by.user_name}</span>}
+
                         </div>
                         {/* Approved By */}
                         <div className="flex flex-col items-center gap-1 flex-1 min-w-[70px]">
@@ -305,8 +304,7 @@ export default function PurchaseOrderSheet({ order, itemMasterList = [] }) {
                                 ? <img src={resolveFileUrl(order.signature_config.approved_by.signature_url)} alt="Approved By" className="max-h-12 max-w-[90px] object-contain mb-1" />
                                 : <div className="h-12" />}
                             <span className="border-t border-[#365780] pt-1 w-full text-center font-bold">Approved By</span>
-                            {order.signature_config?.approved_by?.approved && order.signature_config?.approved_by?.user_name &&
-                                <span className="text-[10px] text-slate-500">{order.signature_config.approved_by.user_name}</span>}
+
                         </div>
                     </div>
                 </div>
