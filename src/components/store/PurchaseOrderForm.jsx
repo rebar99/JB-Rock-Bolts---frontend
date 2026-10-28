@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Plus, Printer, Settings, ShoppingCart, Trash2, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -86,6 +86,16 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
     }, [form.items, form.gst_rate, form.round_off]);
     const change = (key, value) => setForm(current => ({ ...current, [key]: value }));
 
+    // Track if form has changed from original (only for edit mode)
+    const initialFormRef = useMemo(() => editingOrder ? JSON.stringify({
+        ...editingOrder,
+        po_type: editingOrder.po_type || "Approval Vendor PO",
+        status: editingOrder.status === "Draft" ? "Pending Approval" : editingOrder.status,
+        po_date: editingOrder.po_date || new Date().toISOString().slice(0, 10),
+        items: (editingOrder.items || []).map(item => ({ item_description: item.item_description, quantity: item.quantity, uom: item.uom, unit_rate: item.unit_rate })),
+    }) : null, [editingOrder]);
+    const isDirty = !editingOrder || JSON.stringify(form) !== initialFormRef;
+
     const applyVendorToPO = (vendor) => {
         if (!vendor) return;
         const contactParts = [vendor.person_name, vendor.contact].filter(Boolean);
@@ -122,6 +132,7 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
     const submit = event => {
         event.preventDefault();
         if (!admin) return toast.error("Only Store Admin can save a Purchase Order.");
+        if (editingOrder && !isDirty) return toast.info("No changes made. Please update something before saving.");
         if (form.items.some(item => !item.item_description.trim() || Number(item.quantity) <= 0)) return toast.error("Enter an item description and quantity for every line.");
         save.mutate({ ...form, gst_rate: Number(form.gst_rate), round_off: Number(form.round_off), items: form.items.map(item => ({ ...item, quantity: Number(item.quantity), unit_rate: Number(item.unit_rate) })) });
     };
