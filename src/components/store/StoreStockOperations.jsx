@@ -110,12 +110,12 @@ export default function StoreStockOperations({ inventory = [], admin = false }) 
                         <div className="overflow-x-auto">
                             <table className="w-full min-w-[900px] text-sm">
                                 <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
-                                    <tr>{["S.No.", "Groups Name", "Location", "Available Qty", "Rate", "Value", "Status", "Operation"].map(x => <th key={x} className="border-b px-4 py-3">{x}</th>)}</tr>
+                                    <tr>{["S.No.", "Groups Name", "Location", "Available Qty", "Rate", "Value", "Status", "Operation"].map((x, i) => <th key={x} className={`border-b px-4 py-3${i === 0 ? " w-16 text-center" : i === 7 ? " w-28" : ""}`}>{x}</th>)}</tr>
                                 </thead>
                                 <tbody>
                                     {rows.length ? rows.map((item, i) => (
                                         <tr key={item.id} className="border-b hover:bg-slate-50">
-                                             <td className="px-4 py-4 text-muted-foreground">{i + 1}</td>
+                                             <td className="px-4 py-4 text-center text-muted-foreground w-16">{i + 1}</td>
                                             <td className="px-4 py-4 font-semibold">{item.name}<p className="mt-1 text-xs font-normal text-muted-foreground">{item.stock_item || "—"} · {item.uom || "Nos"}</p></td>
                                             <td className="px-4 py-4">{item.location || "—"}</td>
                                             <td className="px-4 py-4 font-bold text-emerald-700">{qty(item.available_quantity)}</td>
@@ -155,23 +155,10 @@ export default function StoreStockOperations({ inventory = [], admin = false }) 
                             {txLoading ? (
                                 <p className="p-8 text-center text-sm text-muted-foreground">Loading transactions…</p>
                             ) : (
-                                <table className="w-full min-w-[1200px] table-fixed text-sm">
-                                    <colgroup>
-                                        <col style={{width:"55px"}} />
-                                        <col style={{width:"100px"}} />
-                                        <col style={{width:"100px"}} />
-                                        <col style={{width:"180px"}} />
-                                        <col style={{width:"70px"}} />
-                                        <col style={{width:"100px"}} />
-                                        <col style={{width:"110px"}} />
-                                        <col style={{width:"140px"}} />
-                                        <col style={{width:"130px"}} />
-                                        <col style={{width:"110px"}} />
-                                        <col style={{width:"130px"}} />
-                                    </colgroup>
+                                <table className="w-full min-w-[1200px] text-sm">
                                     <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500">
                                         <tr>
-                                            <th className="border-b px-4 py-3 text-left">S.No.</th>
+                                            <th className="border-b px-4 py-3 text-left w-16">S.No.</th>
                                             <th className="border-b px-4 py-3 text-left">Date</th>
                                             <th className="border-b px-4 py-3 text-left">Type</th>
                                             <th className="border-b px-4 py-3 text-left">Material Name</th>
@@ -187,7 +174,7 @@ export default function StoreStockOperations({ inventory = [], admin = false }) 
                                     <tbody>
                                         {filteredTx.length ? filteredTx.map((tx, i) => (
                                             <tr key={tx.id} className="border-b hover:bg-slate-50">
-                                                <td className="px-4 py-3 text-muted-foreground">{i + 1}</td>
+                                                <td className="px-4 py-3 text-center text-muted-foreground">{i + 1}</td>
                                                 <td className="px-4 py-3 whitespace-nowrap">{fmtDate(tx.date)}</td>
                                                 <td className="px-4 py-3">
                                                     <span className={`rounded-full px-2 py-1 text-xs font-semibold whitespace-nowrap ${tx.type === "ISSUE" ? "bg-amber-50 text-amber-700" : tx.type === "TRANSFER" ? "bg-blue-50 text-blue-700" : "bg-emerald-50 text-emerald-700"}`}>{tx.type}</span>
