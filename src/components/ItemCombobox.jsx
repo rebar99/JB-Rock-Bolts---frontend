@@ -47,15 +47,16 @@ export const ItemCombobox = ({ value, onChange, items = [], placeholder = "Selec
     const selectItem = (item) => {
         const sizes = item.sizes || [];
         if (sizes.length === 0) {
-            onChange(item.name);
+            onChange(item.name, item, null);
             setOpen(false);
         } else {
             setActiveItem(item);
         }
     };
 
-    const selectSize = (sizeLabel) => {
-        onChange(`${activeItem.name} ${sizeLabel}`);
+    const selectSize = (sizeArg) => {
+        const sizeObj = typeof sizeArg === "object" ? sizeArg : (activeItem?.sizes || []).find(x => x.size === sizeArg) || { size: sizeArg };
+        onChange(`${activeItem.name} ${sizeObj.size}`, activeItem, sizeObj);
         setOpen(false);
     };
 
@@ -91,6 +92,7 @@ export const ItemCombobox = ({ value, onChange, items = [], placeholder = "Selec
                                     >
                                         <Check className={cn("mr-2 h-4 w-4", value === item.name ? "opacity-100" : "opacity-0")} />
                                         <span className="truncate flex-1">{item.name}</span>
+
                                         {(item.sizes || []).length > 0 && (
                                             <span className="text-[10px] text-muted-foreground ml-2 shrink-0">{item.sizes.length} sizes</span>
                                         )}
@@ -115,10 +117,11 @@ export const ItemCombobox = ({ value, onChange, items = [], placeholder = "Selec
                                     <CommandItem
                                         key={s.id}
                                         value={s.size}
-                                        onSelect={() => selectSize(s.size)}
+                                        onSelect={() => selectSize(s)}
                                     >
                                         <Check className={cn("mr-2 h-4 w-4", value === `${activeItem.name} ${s.size}` ? "opacity-100" : "opacity-0")} />
-                                        <span className="truncate">{s.size}</span>
+                                        <span className="truncate flex-1">{s.size}</span>
+
                                     </CommandItem>
                                 ))}
                             </CommandGroup>

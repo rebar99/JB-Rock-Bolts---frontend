@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { fetchLogs, openLogStream, fetchOnlineUsers, fetchRecentLogins } from "@/lib/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { relativeTimeIST, fmtDateTimeIST } from "@/lib/timezone";
+import { toast } from "sonner";
 
 // ── Entity-type colour map ────────────────────────────────────────────────────
 const ENTITY_COLORS = {
@@ -210,6 +211,12 @@ export const Topbar = ({ onMenu, title = "JB Engineering Dashboard", subtitle = 
 
         const es = openLogStream(
             (log) => {
+                if (log.type === "PO_NOTIFICATION") {
+                    toast(log.title || "Purchase Order Update", { description: log.message, duration: 10000 });
+                    queryClient.invalidateQueries({ queryKey: ["store-orders"] });
+                    queryClient.invalidateQueries({ queryKey: ["my-pending-po-approvals"] });
+                    return;
+                }
                 setSseBuffer((prev) => [log, ...prev].slice(0, 100));
                 setNewCount((n) => n + 1);
                 // Refresh the online list AND history whenever any user logs in or out

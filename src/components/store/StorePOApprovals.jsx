@@ -25,6 +25,7 @@ export default function StorePOApprovals() {
 
     const [selected, setSelected] = useState(null);
     const [reason, setReason] = useState("");
+    const [remarks, setRemarks] = useState("");
     const [confirmDialog, setConfirmDialog] = useState(null);
     const [justActioned, setJustActioned] = useState(false);
     const [initialStateHandled, setInitialStateHandled] = useState(false);
@@ -46,13 +47,14 @@ export default function StorePOApprovals() {
     }, [location.state, orders, justActioned]);
 
     const action = useMutation({
-        mutationFn: ({ id, action, rejection_reason }) => actOnPOApproval(id, { action, rejection_reason }),
+        mutationFn: ({ id, action, rejection_reason, remarks }) => actOnPOApproval(id, { action, rejection_reason, remarks }),
         onSuccess: (_, args) => {
             setJustActioned(true);
             qc.invalidateQueries({ queryKey: ["my-pending-po-approvals"] });
             qc.invalidateQueries({ queryKey: ["store-orders"] });
             setSelected(null);
             setReason("");
+            setRemarks("");
             toast.success(`Purchase Order ${args.action.toLowerCase()} successfully.`);
         },
         onError: e => toast.error(e.message || "Failed to process approval action."),
@@ -69,7 +71,7 @@ export default function StorePOApprovals() {
             confirmLabel: "Yes, Reject",
             confirmClass: "bg-rose-600 hover:bg-rose-700 text-white",
             onConfirm: () => {
-                action.mutate({ id: selected.id, action: "Rejected", rejection_reason: reason.trim() });
+                action.mutate({ id: selected.id, action: "Rejected", rejection_reason: reason.trim(), remarks });
                 setConfirmDialog(null);
             },
         });
@@ -82,7 +84,7 @@ export default function StorePOApprovals() {
             confirmLabel: "Yes, Approve",
             confirmClass: "bg-emerald-600 hover:bg-emerald-700 text-white",
             onConfirm: () => {
-                action.mutate({ id: selected.id, action: "Approved" });
+                action.mutate({ id: selected.id, action: "Approved", remarks });
                 setConfirmDialog(null);
             },
         });
@@ -204,7 +206,7 @@ export default function StorePOApprovals() {
                                     {(selected.approval_history || []).map(row => (
                                         <div key={row.id} className="rounded-lg border border-slate-200 p-3 bg-slate-50/70">
                                             <div className="flex items-center justify-between">
-                                                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">{row.level}</span>
+                                                <p className="font-semibold text-slate-900 text-sm">{row.approver_name}</p>
                                                 <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                                                     row.action === 'Approved' ? 'bg-emerald-100 text-emerald-800' :
                                                     row.action === 'Rejected' ? 'bg-rose-100 text-rose-800' :
@@ -213,7 +215,7 @@ export default function StorePOApprovals() {
                                                     {row.action}
                                                 </span>
                                             </div>
-                                            <p className="font-semibold text-slate-900 text-sm mt-1">{row.approver_name}</p>
+                                            <p className="text-[11px] text-slate-600 mt-1">{row.workflow_role === "approved_by" ? "Final Approved By" : row.workflow_role === "checked_by" ? "Approved By" : row.level}</p>
                                             {row.action_at && (
                                                 <p className="text-[11px] text-muted-foreground mt-0.5">
                                                     Actioned: {formatDate(row.action_at)}
@@ -224,6 +226,7 @@ export default function StorePOApprovals() {
                                                     <b>Reason:</b> {row.rejection_reason}
                                                 </p>
                                             )}
+                                            {row.remarks && <p className="text-xs text-slate-700 mt-1"><b>Remarks:</b> {row.remarks}</p>}
                                         </div>
                                     ))}
                                     {(!selected.approval_history || selected.approval_history.length === 0) && (
@@ -255,6 +258,10 @@ export default function StorePOApprovals() {
                                         rows={3}
                                         className="w-full rounded-lg border border-slate-300 p-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 bg-slate-50"
                                     />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-800 mb-1.5">Approval Remarks <span className="font-normal text-slate-500">(Optional)</span></label>
+                                    <textarea value={remarks} onChange={e => setRemarks(e.target.value)} placeholder="Add your review remarks..." rows={2} className="w-full rounded-lg border border-slate-300 p-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 bg-slate-50" />
                                 </div>
 
                                 <div className="flex flex-wrap items-center justify-end gap-3 pt-3 border-t border-slate-100">

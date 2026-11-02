@@ -4,7 +4,7 @@ import { Building2, Check, Pencil, Plus, Search, Trash2, X, Tag, Phone, MapPin, 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { fetchStoreVendors, createStoreVendor, updateStoreVendor, deleteStoreVendor, fetchItemMasterList } from "@/lib/api";
+import { fetchStoreVendors, createStoreVendor, updateStoreVendor, deleteStoreVendor, fetchItemMasterList, fetchUomOptions, createUomOption, deleteUomOption } from "@/lib/api";
 import { toast } from "sonner";
 
 export default function StoreVendorManageDialog({ open, onOpenChange }) {
@@ -21,9 +21,13 @@ export default function StoreVendorManageDialog({ open, onOpenChange }) {
         contact: "",
         address: "",
         items_supplied: [],
+        uoms_supplied: [],
         status: "Active",
     });
     const [itemInput, setItemInput] = useState("");
+    const [uomInput, setUomInput] = useState("");
+    const [uomToDelete, setUomToDelete] = useState(null);
+    const [vendorToDelete, setVendorToDelete] = useState(null);
 
     // Queries
     const { data: vendors = [], isLoading } = useQuery({
@@ -37,6 +41,14 @@ export default function StoreVendorManageDialog({ open, onOpenChange }) {
         queryFn: () => fetchItemMasterList("STORE"),
         enabled: open && viewMode === "form",
     });
+
+    const { data: uomOptions = [] } = useQuery({
+        queryKey: ["uom", "STORE"],
+        queryFn: () => fetchUomOptions("STORE"),
+        enabled: open && viewMode === "form",
+    });
+
+
 
     // Mutations
     const saveMutation = useMutation({
@@ -61,6 +73,42 @@ export default function StoreVendorManageDialog({ open, onOpenChange }) {
         onError: (err) => toast.error(err.message || "Failed to delete vendor."),
     });
 
+    const createUomMutation = useMutation({
+        mutationFn: (name) => createUomOption({ name }, "STORE"),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["uom", "STORE"] });
+            toast.success("UOM added.");
+            setUomInput("");
+        },
+        onError: (err) => toast.error(err.message || "Failed to add UOM."),
+    });
+
+    const deleteUomMutation = useMutation({
+        mutationFn: (id) => deleteUomOption(id, "STORE"),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["uom", "STORE"] });
+            toast.success("UOM deleted.");
+        },
+        onError: (err) => toast.error(err.message || "Failed to delete UOM."),
+    });
+
+    const handleAddUom = () => {
+        const trimmed = uomInput.trim();
+        if (!trimmed) return;
+        if (!(formData.uoms_supplied || []).some(u => u.toLowerCase() === trimmed.toLowerCase())) {
+            setFormData(prev => ({
+                ...prev,
+                uoms_supplied: [...(prev.uoms_supplied || []), trimmed]
+            }));
+        }
+        if (!uomOptions.some(u => u.name.toLowerCase() === trimmed.toLowerCase())) {
+            createUomMutation.mutate(trimmed);
+        }
+        setUomInput("");
+    };
+
+
+
     const openCreateForm = () => {
         setEditingVendor(null);
         setFormData({
@@ -70,6 +118,7 @@ export default function StoreVendorManageDialog({ open, onOpenChange }) {
             contact: "",
             address: "",
             items_supplied: [],
+            uoms_supplied: [],
             status: "Active",
         });
         setItemInput("");
@@ -85,6 +134,7 @@ export default function StoreVendorManageDialog({ open, onOpenChange }) {
             contact: vendor.contact || "",
             address: vendor.address || "",
             items_supplied: Array.isArray(vendor.items_supplied) ? [...vendor.items_supplied] : [],
+            uoms_supplied: Array.isArray(vendor.uoms_supplied) ? [...vendor.uoms_supplied] : [],
             status: vendor.status || "Active",
         });
         setItemInput("");
@@ -139,6 +189,7 @@ export default function StoreVendorManageDialog({ open, onOpenChange }) {
     });
 
     return (
+    <>
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto p-6 sm:p-7">
                 <DialogHeader className="border-b pb-4">
@@ -347,6 +398,127 @@ export default function StoreVendorManageDialog({ open, onOpenChange }) {
                                 )}
                             </div>
                         </div>
+{/* UOM Supplied */}
+                        <div className="space-y-3 sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <label className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                                        <Tag className="h-3.5 w-3.5 text-cyan-600" />
+                                        UOM (Units of Measure) Supplied
+                                    </label>
+                                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                                        Select which UOM(s) this vendor uses (e.g. Nos, Kg, MT).
+                                    </p>
+                                </div>
+                                <span className="rounded-full bg-cyan-100 px-2.5 py-0.5 text-[11px] font-bold text-cyan-800">
+                                    {(formData.uoms_supplied || []).length} uom{(formData.uoms_supplied || []).length === 1 ? "" : "s"} selected
+                                </span>
+                            </div>
+
+                            {/* Currently Selected UOMs for this Vendor */}
+                            {(formData.uoms_supplied || []).length > 0 ? (
+                                <div>
+                                    <span className="text-[11px] font-semibold text-slate-700">Selected for this Vendor:</span>
+                                    <div className="flex flex-wrap gap-1.5 pt-1.5">
+                                        {(formData.uoms_supplied || []).map((uomName, idx) => (
+                                            <span
+                                                key={idx}
+                                                className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-300 bg-cyan-50 px-2.5 py-1 text-xs font-bold text-cyan-900 shadow-2xs"
+                                            >
+                                                {uomName}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setFormData(prev => ({
+                                                        ...prev,
+                                                        uoms_supplied: (prev.uoms_supplied || []).filter((_, i) => i !== idx)
+                                                    }))}
+                                                    className="rounded-full hover:bg-cyan-200 p-0.5 text-cyan-700 hover:text-rose-600 transition-colors cursor-pointer"
+                                                    title={`Remove "${uomName}" from this vendor`}
+                                                >
+                                                    <X className="h-3 w-3" />
+                                                </button>
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : (
+                                <p className="text-xs italic text-slate-400">No UOM selected yet for this vendor — click buttons below to select.</p>
+                            )}
+
+                            {/* Master UOM Buttons with select & delete */}
+                            {uomOptions.length > 0 && (
+                                <div className="pt-2 border-t border-slate-200/70">
+                                    <span className="text-[11px] font-semibold text-slate-600">Click to add/remove for this vendor:</span>
+                                    <div className="flex flex-wrap gap-1.5 pt-1.5">
+                                        {uomOptions.map((uom) => {
+                                            const isSelected = (formData.uoms_supplied || []).some(x => x.toLowerCase() === uom.name.toLowerCase());
+                                            return (
+                                                <span
+                                                    key={uom.id}
+                                                    className={`inline-flex items-center gap-1 rounded-lg border text-xs font-semibold transition-all ${
+                                                        isSelected
+                                                            ? "border-cyan-600 bg-cyan-50 text-cyan-900"
+                                                            : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                                                    }`}
+                                                >
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setFormData(prev => ({
+                                                                ...prev,
+                                                                uoms_supplied: isSelected
+                                                                    ? (prev.uoms_supplied || []).filter(u => u.toLowerCase() !== uom.name.toLowerCase())
+                                                                    : [...(prev.uoms_supplied || []), uom.name],
+                                                            }));
+                                                        }}
+                                                        className="px-2.5 py-1 cursor-pointer outline-none font-medium"
+                                                    >
+                                                        {isSelected ? `✓ ${uom.name}` : `+ ${uom.name}`}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setUomToDelete(uom);
+                                                        }}
+                                                        className="pr-1.5 text-slate-300 hover:text-rose-600 transition-colors cursor-pointer"
+                                                        title={`Delete "${uom.name}" from master`}
+                                                    >
+                                                        <X className="h-3 w-3" />
+                                                    </button>
+                                                </span>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Add Custom UOM inline */}
+                            <div className="flex gap-2 pt-2 items-center">
+                                <Input
+                                    value={uomInput}
+                                    onChange={(e) => setUomInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                            e.preventDefault();
+                                            handleAddUom();
+                                        }
+                                    }}
+                                    placeholder="Add custom UOM (e.g. MT, Kg)..."
+                                    className="bg-white h-8 text-xs max-w-xs"
+                                />
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={handleAddUom}
+                                    disabled={!uomInput.trim()}
+                                    className="h-8 text-xs font-semibold shrink-0"
+                                >
+                                    <Plus className="mr-1 h-3.5 w-3.5" /> Add to Vendor
+                                </Button>
+                            </div>
+                        </div>
 
                         {/* Footer buttons */}
                         <div className="flex justify-end gap-2.5 pt-4 border-t">
@@ -454,6 +626,16 @@ export default function StoreVendorManageDialog({ open, onOpenChange }) {
                                                         ) : (
                                                             <span className="text-slate-400 italic">None specified</span>
                                                         )}
+                                                        {Array.isArray(vendor.uoms_supplied) && vendor.uoms_supplied.length > 0 && (
+                                                            <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                                                                <span className="text-[10px] text-slate-500 font-semibold">UOM:</span>
+                                                                {vendor.uoms_supplied.map((u, i) => (
+                                                                    <span key={i} className="rounded bg-cyan-50 border border-cyan-200 px-1.5 py-0.5 text-[10px] font-bold text-cyan-800">
+                                                                        {u}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        )}
                                                     </td>
                                                     <td className="px-3 py-3.5 text-center">
                                                         <span
@@ -480,12 +662,8 @@ export default function StoreVendorManageDialog({ open, onOpenChange }) {
                                                             <Button
                                                                 variant="ghost"
                                                                 size="icon"
-                                                                className="h-8 w-8 text-rose-500 hover:text-rose-700 hover:bg-rose-50"
-                                                                onClick={() => {
-                                                                    if (window.confirm(`Delete vendor "${vendor.vendor_name}"?`)) {
-                                                                        deleteMutation.mutate(vendor.id);
-                                                                    }
-                                                                }}
+                                                                className="h-8 w-8 text-rose-500 hover:text-rose-700 hover:bg-rose-50 cursor-pointer"
+                                                                onClick={() => setVendorToDelete(vendor)}
                                                                 title="Delete Vendor"
                                                             >
                                                                 <Trash2 className="h-3.5 w-3.5" />
@@ -503,5 +681,70 @@ export default function StoreVendorManageDialog({ open, onOpenChange }) {
                 )}
             </DialogContent>
         </Dialog>
+
+                {/* Custom Confirmation Dialog for Deleting UOM */}
+        <Dialog open={!!uomToDelete} onOpenChange={(open) => !open && setUomToDelete(null)}>
+            <DialogContent className="sm:max-w-sm">
+                <DialogHeader>
+                    <DialogTitle className="text-base font-bold">Delete UOM Option</DialogTitle>
+                </DialogHeader>
+                <p className="text-sm text-slate-600 mt-1">
+                    Are you sure you want to delete <strong className="text-slate-900 font-semibold">"{uomToDelete?.name}"</strong> from master?
+                </p>
+                <div className="flex justify-end gap-2 mt-4 pt-2">
+                    <Button variant="outline" size="sm" onClick={() => setUomToDelete(null)}>
+                        Cancel
+                    </Button>
+                    <Button
+                        variant="destructive"
+                        size="sm"
+                        disabled={deleteUomMutation.isPending}
+                        onClick={() => {
+                            if (uomToDelete) {
+                                deleteUomMutation.mutate(uomToDelete.id);
+                                setFormData(prev => ({
+                                    ...prev,
+                                    uoms_supplied: (prev.uoms_supplied || []).filter(u => u !== uomToDelete.name)
+                                }));
+                                setUomToDelete(null);
+                            }
+                        }}
+                    >
+                        {deleteUomMutation.isPending ? "Deleting..." : "Delete"}
+                    </Button>
+                </div>
+            </DialogContent>
+        </Dialog>
+
+        {/* Custom Confirmation Dialog for Deleting Vendor */}
+        <Dialog open={!!vendorToDelete} onOpenChange={(open) => !open && setVendorToDelete(null)}>
+            <DialogContent className="sm:max-w-sm">
+                <DialogHeader>
+                    <DialogTitle className="text-base font-bold">Delete Vendor</DialogTitle>
+                </DialogHeader>
+                <p className="text-sm text-slate-600 mt-1">
+                    Are you sure you want to delete vendor <strong className="text-slate-900 font-semibold">"{vendorToDelete?.vendor_name}"</strong>?
+                </p>
+                <div className="flex justify-end gap-2 mt-4 pt-2">
+                    <Button variant="outline" size="sm" onClick={() => setVendorToDelete(null)}>
+                        Cancel
+                    </Button>
+                    <Button
+                        variant="destructive"
+                        size="sm"
+                        disabled={deleteMutation.isPending}
+                        onClick={() => {
+                            if (vendorToDelete) {
+                                deleteMutation.mutate(vendorToDelete.id);
+                                setVendorToDelete(null);
+                            }
+                        }}
+                    >
+                        {deleteMutation.isPending ? "Deleting..." : "Delete"}
+                    </Button>
+                </div>
+            </DialogContent>
+        </Dialog>
+    </>
     );
 }

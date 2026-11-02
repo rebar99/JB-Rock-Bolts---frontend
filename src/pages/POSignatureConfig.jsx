@@ -163,7 +163,7 @@ export default function POSignatureConfig() {
             const fn = role === "checked_by" ? updatePOSlabCheckedBy : updatePOSlabApprovedBy;
             const updated = await fn(levelId, { user_id: Number(userId) });
             setData((d) => ({ ...d, levels: d.levels.map((lv) => lv.level_id === levelId ? { ...lv, ...updated } : lv) }));
-            showToast(`${role === "checked_by" ? "Checked By" : "Approved By"} saved`);
+            showToast(`${role === "checked_by" ? "Approved By" : "Final Approved By"} saved`);
         } catch (e) { showToast(e.message, "error"); }
         finally { setSlabField(levelId, "saving", false); }
     };
@@ -178,7 +178,7 @@ export default function POSignatureConfig() {
                 ...d,
                 levels: d.levels.map((lv) => lv.level_id === levelId ? { ...lv, [urlKey]: res.signature_url } : lv),
             }));
-            showToast(`${sigType === "checked_by" ? "Checked By" : "Approved By"} signature uploaded`);
+            showToast(`${sigType === "checked_by" ? "Approved By" : "Final Approved By"} signature uploaded`);
         } catch (e) { showToast(e.message, "error"); }
         finally { setSlabField(levelId, uploadKey, false); }
     };
@@ -301,13 +301,13 @@ export default function POSignatureConfig() {
                     </div>
                 </section>
 
-                {/* ── Section 2: Amount-Slab Checked By & Approved By ── */}
+                {/* ── Section 2: Amount-Slab Approved By & Final Approved By ── */}
                 <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
                     <div className="border-b border-slate-100 px-6 py-4">
                         <div className="flex items-center gap-2">
                             <span className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-100 text-xs font-bold text-amber-700">2</span>
                             <div>
-                                <h2 className="font-semibold text-slate-900">Amount-wise Checked By &amp; Approved By</h2>
+                                <h2 className="font-semibold text-slate-900">Amount-wise Approved By &amp; Final Approved By</h2>
                                 <p className="text-xs text-slate-500">Slab is auto-selected from PO Approval Settings based on PO grand total.</p>
                             </div>
                         </div>
@@ -328,15 +328,15 @@ export default function POSignatureConfig() {
                                         <span className="ml-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">{lv.level_name}</span>
                                     </div>
                                     <div className="grid gap-6 sm:grid-cols-2">
-                                        {/* Checked By */}
+                                        {/* Approved By */}
                                         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
-                                            <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Checked By</p>
+                                            <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Approved By</p>
                                             <Select value={st.cbUserId || ""} onValueChange={(v) => setSlabField(lv.level_id, "cbUserId", v)}>
                                                 <SelectTrigger className="bg-white text-sm"><SelectValue placeholder="— Select —" /></SelectTrigger>
                                                 <SelectContent>{users.map((u) => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}</SelectContent>
                                             </Select>
                                             <div className="flex items-center gap-3">
-                                                <SigPreview url={lv.checked_by_signature_url} label={lv.checked_by_user_name || "Checked By"} />
+                                                <SigPreview url={lv.checked_by_signature_url} label={lv.checked_by_user_name || "Approved By"} />
                                                 <div className="flex flex-col gap-2">
                                                     <UploadBtn onFile={(f) => uploadSlabSig(lv.level_id, "checked_by", f)} loading={st.cbUploading} label="Upload Sig" />
                                                     <Button size="sm" disabled={st.saving || !st.cbUserId}
@@ -349,15 +349,15 @@ export default function POSignatureConfig() {
                                             </div>
                                             {lv.checked_by_user_name && <p className="text-xs text-slate-500">Current: <strong>{lv.checked_by_user_name}</strong></p>}
                                         </div>
-                                        {/* Approved By */}
+                                        {/* Final Approved By */}
                                         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
-                                            <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Approved By</p>
+                                            <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Final Approved By</p>
                                             <Select value={st.abUserId || ""} onValueChange={(v) => setSlabField(lv.level_id, "abUserId", v)}>
                                                 <SelectTrigger className="bg-white text-sm"><SelectValue placeholder="— Select —" /></SelectTrigger>
                                                 <SelectContent>{users.map((u) => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}</SelectContent>
                                             </Select>
                                             <div className="flex items-center gap-3">
-                                                <SigPreview url={lv.approved_by_signature_url} label={lv.approved_by_user_name || "Approved By"} />
+                                                <SigPreview url={lv.approved_by_signature_url} label={lv.approved_by_user_name || "Final Approved By"} />
                                                 <div className="flex flex-col gap-2">
                                                     <UploadBtn onFile={(f) => uploadSlabSig(lv.level_id, "approved_by", f)} loading={st.abUploading} label="Upload Sig" />
                                                     <Button size="sm" disabled={st.saving || !st.abUserId}
@@ -408,26 +408,26 @@ export default function POSignatureConfig() {
                                         <div className="w-full border-t border-slate-400 pt-1 text-center text-[11px] font-semibold text-slate-400">Prepared By</div>
                                     </div>
                                 )}
-                                {/* Checked By */}
-                                <div className="flex flex-col items-center gap-1 min-w-[80px]">
-                                    {levels[0]?.checked_by_signature_url
-                                        ? <img src={resolveFileUrl(levels[0].checked_by_signature_url)} alt="Checked By" className="max-h-12 object-contain" />
-                                        : <div className="h-12 w-20 rounded border border-dashed border-slate-300 bg-slate-50 flex items-center justify-center"><User className="h-4 w-4 text-slate-300" /></div>}
-                                    <div className="w-full border-t border-slate-400 pt-1 text-center text-[11px] font-semibold text-slate-700">Checked By</div>
-                                    {levels[0]?.checked_by_user_name && <p className="text-[10px] text-slate-500">{levels[0].checked_by_user_name}</p>}
-                                </div>
                                 {/* Approved By */}
                                 <div className="flex flex-col items-center gap-1 min-w-[80px]">
-                                    {levels[0]?.approved_by_signature_url
-                                        ? <img src={resolveFileUrl(levels[0].approved_by_signature_url)} alt="Approved By" className="max-h-12 object-contain" />
+                                    {levels[0]?.checked_by_signature_url
+                                        ? <img src={resolveFileUrl(levels[0].checked_by_signature_url)} alt="Approved By" className="max-h-12 object-contain" />
                                         : <div className="h-12 w-20 rounded border border-dashed border-slate-300 bg-slate-50 flex items-center justify-center"><User className="h-4 w-4 text-slate-300" /></div>}
                                     <div className="w-full border-t border-slate-400 pt-1 text-center text-[11px] font-semibold text-slate-700">Approved By</div>
+                                    {levels[0]?.checked_by_user_name && <p className="text-[10px] text-slate-500">{levels[0].checked_by_user_name}</p>}
+                                </div>
+                                {/* Final Approved By */}
+                                <div className="flex flex-col items-center gap-1 min-w-[80px]">
+                                    {levels[0]?.approved_by_signature_url
+                                        ? <img src={resolveFileUrl(levels[0].approved_by_signature_url)} alt="Final Approved By" className="max-h-12 object-contain" />
+                                        : <div className="h-12 w-20 rounded border border-dashed border-slate-300 bg-slate-50 flex items-center justify-center"><User className="h-4 w-4 text-slate-300" /></div>}
+                                    <div className="w-full border-t border-slate-400 pt-1 text-center text-[11px] font-semibold text-slate-700">Final Approved By</div>
                                     {levels[0]?.approved_by_user_name && <p className="text-[10px] text-slate-500">{levels[0].approved_by_user_name}</p>}
                                 </div>
                             </div>
                         </div>
                         <p className="mt-3 text-xs text-slate-400">
-                            * Checked By &amp; Approved By signatures appear only after the respective approver approves the PO.
+                            * Approved By &amp; Final Approved By signatures appear only after the respective approver approves the PO.
                         </p>
                     </div>
                 </section>

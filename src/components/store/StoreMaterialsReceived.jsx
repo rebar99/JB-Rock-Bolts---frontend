@@ -396,7 +396,7 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
     const freightAmount = Number(freightCharge || 0);
     const gstRate       = Number(selected?.gst_rate || 0);
     const gstAmount     = (taxableAmount + freightAmount) * gstRate / 100;
-    const approvedOrders = useMemo(() => orders.filter(o => o.status === "Approved"), [orders]);
+    const approvedOrders = useMemo(() => orders.filter(o => ["Approved", "Final Approved", "Finally Approved"].includes(o.status)), [orders]);
     const vendors        = useMemo(() => [...new Set(approvedOrders.map(o => o.supplier).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [approvedOrders]);
     const vendorOrders   = useMemo(() => approvedOrders.filter(o => o.supplier === vendorName), [approvedOrders, vendorName]);
 
@@ -411,13 +411,26 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
         const order = orders.find(row => String(row.id) === String(id));
         setVendorName(order?.supplier || vendorName); setFreightCharge("0");
         const receivedByItem = (receipts || []).filter(r => String(r.order_id) === String(id)).reduce((totals, r) => {
-            (r.lines || []).forEach(line => { const key = String(line.item_description || "").trim().toLowerCase(); totals[key] = (totals[key] || 0) + Number(line.received_quantity || 0); });
+            (r.lines || []).forEach(line => {
+                // Use description + rate as key so same-name items with different rates are tracked separately
+                const key = `${String(line.item_description || "").trim().toLowerCase()}||${Number(line.unit_rate || 0)}`;
+                totals[key] = (totals[key] || 0) + Number(line.received_quantity || 0);
+            });
             return totals;
         }, {});
         setLines((order?.items || []).map(line => {
             const ordered   = Number(line.quantity || 0);
-            const remaining = Math.max(0, ordered - (receivedByItem[String(line.item_description || "").trim().toLowerCase()] || 0));
-            return { item_description: line.item_description, ordered_quantity: ordered, received_quantity: remaining, uom: line.uom || "Nos", unit_rate: Number(line.unit_rate || 0) };
+            const key = `${String(line.item_description || "").trim().toLowerCase()}||${Number(line.unit_rate || 0)}`;
+            const alreadyReceived = receivedByItem[key] || 0;
+            const remaining = Math.max(0, ordered - alreadyReceived);
+            return {
+                item_description: line.item_description,
+                ordered_quantity: ordered,
+                received_quantity: 0,
+                remaining_quantity: remaining,
+                uom: line.uom || "Nos",
+                unit_rate: Number(line.unit_rate || 0)
+            };
         }));
     };
 
@@ -453,7 +466,7 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
 
     const removeReceipt = useMutation({
         mutationFn: deleteStoreMaterialReceipt,
-        onSuccess: () => { invalidate(); toast.success("Material Received and linked Purchase Order deleted."); },
+        onSuccess: () => { invalidate(); toast.success("Material receipt deleted successfully."); },
         onError: e => toast.error(e.message),
     });
 
@@ -480,7 +493,7 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
                 onView={setViewingReceipt} onEdit={openEdit}
                 onUploadBill={(receipt, file) => replaceBill.mutate({ receipt, file })}
                 onPayment={setPaymentReceipt}
-                onDelete={receipt => { if (window.confirm(`Delete Material Received for invoice ${receipt.invoice_number}? Its linked Purchase Order and all receipts against that PO will also be deleted.`)) removeReceipt.mutate(receipt.id); }}
+                onDelete={receipt => { if (window.confirm(`Delete Material Received for invoice ${receipt.invoice_number}? The linked Purchase Order will remain safe.`)) removeReceipt.mutate(receipt.id); }}
                 receipts={receipts}
             />
             <ReceiptViewDialog receipt={viewingReceipt} onClose={() => setViewingReceipt(null)} />
@@ -556,7 +569,29 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
                                         <td className="px-4 py-3 text-center text-muted-foreground">{idx + 1}</td>
                                         <td className="px-4 py-3 font-medium">{line.item_description}</td>
                                         <td className="px-4 py-3 text-right">{line.ordered_quantity}</td>
-                                        <td className="px-4 py-2"><input disabled={!admin} type="number" min="0" step="0.01" max={line.ordered_quantity} value={line.received_quantity} onChange={e => updateLine(idx, e.target.value)} className="h-9 w-full rounded border border-slate-200 px-2 text-right" /></td>
+                                        <td className="px-4 py-2">
+                                            {(() => {
+                                                const pending = line.remaining_quantity != null ? line.remaining_quantity : line.ordered_quantity;
+                                                return (
+                                                    <div className="flex flex-col gap-0.5">
+                                                        <span className="text-right text-xs font-semibold text-red-600">
+                                                            Pending: {Number(pending).toFixed(2)}
+                                                        </span>
+                                                        <input
+                                                            disabled={!admin}
+                                                            type="number"
+                                                            min="0"
+                                                            step="0.01"
+                                                            max={pending}
+                                                            value={line.received_quantity}
+                                                            onFocus={e => e.target.select()}
+                                                            onChange={e => updateLine(idx, e.target.value)}
+                                                            className="h-9 w-full rounded border border-slate-200 px-2 text-right focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none"
+                                                        />
+                                                    </div>
+                                                );
+                                            })()}
+                                        </td>
                                         <td className="px-4 py-3">{line.uom}</td>
                                         <td className="px-4 py-3 text-right">{money(line.unit_rate)}</td>
                                         <td className="px-4 py-3 text-right font-semibold">{money(Number(line.received_quantity || 0) * Number(line.unit_rate || 0))}</td>

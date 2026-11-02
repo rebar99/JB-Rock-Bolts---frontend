@@ -1,5 +1,7 @@
 import jbEngineeringLogo from "@/assets/jb-engineering-logo.jpg";
-import { resolveFileUrl } from "@/lib/api";
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { resolveFileUrl, fetchStoreOrders } from "@/lib/api";
 
 export const formatNumber = value => Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 export const formatDate = value => value ? new Date(value).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
@@ -84,14 +86,14 @@ export function printPurchaseOrder(order, itemMasterList = []) {
 
     const checkedByHtml = `
         <div style="flex:1;text-align:center;min-width:80px">
-            ${sc.checked_by?.approved ? sigImg(sc.checked_by?.signature_url, "Checked By") : `<div style="height:48px"></div>`}
-            <div style="border-top:1px solid #365780;padding-top:3px;font-weight:bold;font-size:10px">Checked By</div>
+            ${sc.checked_by?.approved ? sigImg(sc.checked_by?.signature_url, "Approved By") : `<div style="height:48px"></div>`}
+            <div style="border-top:1px solid #365780;padding-top:3px;font-weight:bold;font-size:10px">Approved By</div>
 
         </div>`;
     const approvedByHtml = `
         <div style="flex:1;text-align:center;min-width:80px">
-            ${sc.approved_by?.approved ? sigImg(sc.approved_by?.signature_url, "Approved By") : `<div style="height:48px"></div>`}
-            <div style="border-top:1px solid #365780;padding-top:3px;font-weight:bold;font-size:10px">Approved By</div>
+            ${["Final Approved", "Finally Approved", "Completed"].includes(order.status) && sc.approved_by?.approved ? sigImg(sc.approved_by?.signature_url, "Final Approved By") : `<div style="height:48px"></div>`}
+            <div style="border-top:1px solid #365780;padding-top:3px;font-weight:bold;font-size:10px">Final Approved By</div>
 
         </div>`;
     const signBlockHtml = `<div class="sign-block"><div class="company-for">For RE-Bar Couplers India Private Limited</div><div class="sign-row" style="align-items:flex-end;gap:8px">${preparedByHtmlParts.join('')}${checkedByHtml}${approvedByHtml}</div></div>`;
@@ -122,6 +124,56 @@ export function printPurchaseOrder(order, itemMasterList = []) {
 
 export default function PurchaseOrderSheet({ order, itemMasterList = [] }) {
     if (!order) return null;
+
+    const { data: allOrders = [] } = useQuery({
+        queryKey: ["store-orders"],
+        queryFn: fetchStoreOrders,
+    });
+
+    const isApproved = Boolean(order && ["Approved", "Final Approved", "Finally Approved", "Completed"].includes(order.status));
+    const showLastPoPrice = !isApproved;
+
+    const candidateOrders = useMemo(() => {
+        if (!Array.isArray(allOrders) || allOrders.length === 0) return [];
+        return allOrders
+            .filter(o => !order || Number(o.id) !== Number(order.id))
+            .sort((a, b) => {
+                const getMs = (o) => {
+                    if (o.po_date) {
+                        const ms = new Date(`${o.po_date}T00:00:00`).getTime();
+                        if (!isNaN(ms)) return ms;
+                    }
+                    if (o.created_at) {
+                        const ms = new Date(o.created_at).getTime();
+                        if (!isNaN(ms)) return ms;
+                    }
+                    return 0;
+                };
+                const diff = getMs(b) - getMs(a);
+                if (diff !== 0) return diff;
+                return (Number(b.id) || 0) - (Number(a.id) || 0);
+            });
+    }, [allOrders, order]);
+
+    const findLastPoPrice = (itemDescription) => {
+        if (!itemDescription || !String(itemDescription).trim()) return null;
+        const norm = (str) => String(str || "").toLowerCase().replace(/\s*,\s*/g, ", ").replace(/\s+/g, " ").trim();
+        const target = norm(itemDescription);
+        if (!target) return null;
+
+        for (const ord of candidateOrders) {
+            const lines = ord.items || ord.line_items || [];
+            for (const line of lines) {
+                if (norm(line.item_description) === target) {
+                    const rate = Number(line.unit_rate);
+                    if (!isNaN(rate) && rate > 0) {
+                        return rate;
+                    }
+                }
+            }
+        }
+        return null;
+    };
 
     return (
         <div className="mx-auto border-2 border-[#12386c] bg-white text-xs text-[#0c2348] shadow-lg">
@@ -173,7 +225,6 @@ export default function PurchaseOrderSheet({ order, itemMasterList = [] }) {
                             {order.status}
                         </span>
                     </p>
-
                 </div>
             </div>
 
@@ -191,27 +242,40 @@ export default function PurchaseOrderSheet({ order, itemMasterList = [] }) {
                             <th className="border border-[#6480a4] px-3 py-1.5">Item Description</th>
                             <th className="border border-[#6480a4] px-2 py-1.5 w-20">Quantity</th>
                             <th className="border border-[#6480a4] px-2 py-1.5 w-16">U/M</th>
+                            {showLastPoPrice && (
+                                <th className="border border-[#6480a4] px-2 py-1.5 w-28 text-red-600 font-bold whitespace-nowrap">
+                                    Last PO Price (INR)
+                                </th>
+                            )}
                             <th className="border border-[#6480a4] px-2 py-1.5 w-28">Unit Rate (INR)</th>
                             <th className="border border-[#6480a4] px-2 py-1.5 w-28">Amount (INR)</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {(order.items || []).map((item, index) => (
-                            <tr key={item.id || item.line_number || index}
-                                className={index % 2 === 0 ? "bg-white" : "bg-[#f0f5ff]"}>
-                                <td className="border border-[#c5d2e8] px-2 py-1.5 text-center">{index + 1}</td>
-                                <td className="border border-[#c5d2e8] px-3 py-1.5 font-medium text-center">
-                                    {item.item_name || getItemOnlyName(item.item_description, itemMasterList)}
-                                </td>
-                                <td className="border border-[#c5d2e8] px-2 py-1.5 text-center">{formatNumber(item.quantity)}</td>
-                                <td className="border border-[#c5d2e8] px-2 py-1.5 text-center">{item.uom}</td>
-                                <td className="border border-[#c5d2e8] px-2 py-1.5 text-center">₹{formatNumber(item.unit_rate)}</td>
-                                <td className="border border-[#c5d2e8] px-2 py-1.5 text-center font-semibold">₹{formatNumber(item.amount)}</td>
-                            </tr>
-                        ))}
+                        {(order.items || []).map((item, index) => {
+                            const lastPrice = showLastPoPrice ? findLastPoPrice(item.item_description) : null;
+                            return (
+                                <tr key={item.id || item.line_number || index}
+                                    className={index % 2 === 0 ? "bg-white" : "bg-[#f0f5ff]"}>
+                                    <td className="border border-[#c5d2e8] px-2 py-1.5 text-center">{index + 1}</td>
+                                    <td className="border border-[#c5d2e8] px-3 py-1.5 font-medium text-center">
+                                        {item.item_name || getItemOnlyName(item.item_description, itemMasterList)}
+                                    </td>
+                                    <td className="border border-[#c5d2e8] px-2 py-1.5 text-center">{formatNumber(item.quantity)}</td>
+                                    <td className="border border-[#c5d2e8] px-2 py-1.5 text-center">{item.uom}</td>
+                                    {showLastPoPrice && (
+                                        <td className="border border-[#c5d2e8] px-2 py-1.5 text-center font-bold text-red-600 bg-red-50/60">
+                                            {lastPrice != null ? `₹${formatNumber(lastPrice)}` : "N/A"}
+                                        </td>
+                                    )}
+                                    <td className="border border-[#c5d2e8] px-2 py-1.5 text-center">₹{formatNumber(item.unit_rate)}</td>
+                                    <td className="border border-[#c5d2e8] px-2 py-1.5 text-center font-semibold">₹{formatNumber(item.amount)}</td>
+                                </tr>
+                            );
+                        })}
                         {(!order.items || order.items.length === 0) && (
                             <tr>
-                                <td colSpan={6} className="border border-[#c5d2e8] p-3 text-center text-muted-foreground">
+                                <td colSpan={showLastPoPrice ? 7 : 6} className="border border-[#c5d2e8] p-3 text-center text-muted-foreground">
                                     No line items in this purchase order.
                                 </td>
                             </tr>
@@ -286,20 +350,20 @@ export default function PurchaseOrderSheet({ order, itemMasterList = [] }) {
                                 </div>
                             );
                         })()}
-                        {/* Checked By */}
-                        <div className="flex flex-col items-center gap-1 flex-1 min-w-[70px]">
-                            {order.signature_config?.checked_by?.approved && order.signature_config?.checked_by?.signature_url
-                                ? <img src={resolveFileUrl(order.signature_config.checked_by.signature_url)} alt="Checked By" className="max-h-12 max-w-[90px] object-contain mb-1" />
-                                : <div className="h-12" />}
-                            <span className="border-t border-[#365780] pt-1 w-full text-center font-bold">Checked By</span>
-
-                        </div>
                         {/* Approved By */}
                         <div className="flex flex-col items-center gap-1 flex-1 min-w-[70px]">
-                            {order.signature_config?.approved_by?.approved && order.signature_config?.approved_by?.signature_url
-                                ? <img src={resolveFileUrl(order.signature_config.approved_by.signature_url)} alt="Approved By" className="max-h-12 max-w-[90px] object-contain mb-1" />
+                            {order.signature_config?.checked_by?.approved && order.signature_config?.checked_by?.signature_url
+                                ? <img src={resolveFileUrl(order.signature_config.checked_by.signature_url)} alt="Approved By" className="max-h-12 max-w-[90px] object-contain mb-1" />
                                 : <div className="h-12" />}
                             <span className="border-t border-[#365780] pt-1 w-full text-center font-bold">Approved By</span>
+
+                        </div>
+                        {/* Final Approved By */}
+                        <div className="flex flex-col items-center gap-1 flex-1 min-w-[70px]">
+                            {["Final Approved", "Finally Approved", "Completed"].includes(order.status) && order.signature_config?.approved_by?.approved && order.signature_config?.approved_by?.signature_url
+                                ? <img src={resolveFileUrl(order.signature_config.approved_by.signature_url)} alt="Final Approved By" className="max-h-12 max-w-[90px] object-contain mb-1" />
+                                : <div className="h-12" />}
+                            <span className="border-t border-[#365780] pt-1 w-full text-center font-bold">Final Approved By</span>
 
                         </div>
                     </div>

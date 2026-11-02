@@ -554,6 +554,11 @@ export const fetchStockStatusList = () => get("/api/store-purchase/stock-status"
 export const updateItemStockLimit = (id, payload) => put(`/api/store-purchase/stock-status/${id}`, typeof payload === "object" ? payload : { out_of_stock_limit: Number(payload) });
 export const batchUpdateStockLimits = (items) => put("/api/store-purchase/stock-status/batch", { items });
 export const fetchStoreOrders = () => get("/api/store-purchase/purchase-orders");
+export const fetchLastPoPrice = (itemDescription, excludeOrderId = null) => {
+    const params = new URLSearchParams({ item_description: itemDescription });
+    if (excludeOrderId) params.append("exclude_order_id", excludeOrderId);
+    return get(`/api/store-purchase/purchase-orders/last-po-price?${params.toString()}`);
+};
 export const createStoreItem = (body) => post("/api/store-purchase/inventory", body);
 export const updateStoreItem = (id, body) => put(`/api/store-purchase/inventory/${id}`, body);
 export const deleteStoreItem = (id) => del(`/api/store-purchase/inventory/${id}`);
@@ -571,6 +576,8 @@ export const updatePOApprovalLevel = (id, body) => put(`/api/store-purchase/appr
 export const deletePOApprovalLevel = (id) => del(`/api/store-purchase/approval-settings/levels/${id}`);
 export const removePOApprovalLevelApprover = (levelId, userId) => del(`/api/store-purchase/approval-settings/levels/${levelId}/approvers/${userId}`);
 export const fetchMyPendingPOApprovals = () => get("/api/store-purchase/purchase-orders/pending-approvals");
+export const fetchMyPONotifications = () => get("/api/store-purchase/my-po-notifications");
+export const markPONotificationsRead = (ids) => post("/api/store-purchase/my-po-notifications/mark-read", { ids });
 export const actOnPOApproval = (id, body) => post(`/api/store-purchase/purchase-orders/${id}/approval`, body);
 export const fetchStoreMaterialReceipts = () => get("/api/store-purchase/materials-received");
 export const createStoreMaterialReceipt = (body) => post("/api/store-purchase/materials-received", body);
