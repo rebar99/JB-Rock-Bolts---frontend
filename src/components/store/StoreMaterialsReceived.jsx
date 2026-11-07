@@ -10,7 +10,7 @@ import { getCurrentUser } from "@/lib/currentUser";
 const today = () => new Date().toISOString().slice(0, 10);
 const money = value => `₹${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const input = "mt-1.5 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100";
-const Field = ({ label, children }) => <label className="block text-sm font-medium text-slate-700"><span>{label}</span>{children}</label>;
+const Field = ({ label, children }) => <div className="block text-sm font-medium text-slate-700"><span>{label}</span>{children}</div>;
 
 function fmtDateTime(val) {
     if (!val) return "—";
@@ -594,16 +594,33 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
                         <Field label="Bill Upload">
                             {bill ? (
                                 <div className={`${input} flex items-center justify-between gap-2 border-emerald-300 bg-emerald-50/50`}>
-                                    <span className="flex items-center gap-1.5 truncate text-xs font-medium text-emerald-800">
+                                    <button
+                                        type="button"
+                                        title="Click to preview selected bill"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            try {
+                                                const objUrl = URL.createObjectURL(bill);
+                                                window.open(objUrl, "_blank");
+                                            } catch (err) {
+                                                // ignore
+                                            }
+                                        }}
+                                        className="flex items-center gap-1.5 min-w-0 truncate text-xs font-semibold text-emerald-800 hover:underline text-left cursor-pointer"
+                                    >
                                         <FileText className="h-4 w-4 shrink-0 text-emerald-600" />
                                         <span className="truncate">{bill.name}</span>
-                                    </span>
+                                    </button>
                                     {admin && (
                                         <button
                                             type="button"
-                                            title="Clear selected file"
-                                            onClick={() => setBill(null)}
-                                            className="p-1 text-slate-400 hover:text-rose-600 transition"
+                                            title="Delete / Remove bill"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                e.preventDefault();
+                                                setBill(null);
+                                            }}
+                                            className="p-1 rounded text-rose-500 hover:text-rose-700 hover:bg-rose-100 transition shrink-0 cursor-pointer"
                                         >
                                             <X className="h-4 w-4" />
                                         </button>
@@ -615,15 +632,16 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
                                         href={resolveFileUrl(existingBillUrl)}
                                         target="_blank"
                                         rel="noreferrer"
-                                        title="View currently attached bill"
-                                        className="flex items-center gap-1.5 truncate text-xs font-medium text-cyan-700 hover:underline"
+                                        title="Click to view attached bill"
+                                        className="flex items-center gap-1.5 min-w-0 truncate text-xs font-semibold text-cyan-700 hover:underline cursor-pointer"
+                                        onClick={(e) => e.stopPropagation()}
                                     >
                                         <FileText className="h-4 w-4 shrink-0 text-emerald-600" />
                                         <span className="truncate">Attached Bill</span>
                                     </a>
                                     {admin && (
-                                        <div className="flex items-center gap-2">
-                                            <label title="Replace attached bill" className="cursor-pointer text-xs font-semibold text-cyan-700 hover:text-cyan-800">
+                                        <div className="flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
+                                            <label title="Replace attached bill" className="cursor-pointer text-xs font-semibold text-cyan-700 hover:text-cyan-800 hover:underline">
                                                 Change
                                                 <input
                                                     type="file"
@@ -634,9 +652,13 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
                                             </label>
                                             <button
                                                 type="button"
-                                                title="Remove attached bill"
-                                                onClick={() => setExistingBillUrl(null)}
-                                                className="p-1 text-slate-400 hover:text-rose-600 transition"
+                                                title="Delete / Remove bill"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    e.preventDefault();
+                                                    setExistingBillUrl(null);
+                                                }}
+                                                className="p-1 rounded text-rose-500 hover:text-rose-700 hover:bg-rose-100 transition cursor-pointer"
                                             >
                                                 <X className="h-4 w-4" />
                                             </button>
