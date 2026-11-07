@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Eye, FileUp, PackageCheck, Pencil, Plus, Save, Trash2, Upload, CreditCard } from "lucide-react";
+import { ArrowLeft, Eye, FileText, FileUp, PackageCheck, Pencil, Plus, Save, Trash2, Upload, CreditCard, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createStoreMaterialReceipt, deleteStoreMaterialReceipt, fetchStoreMaterialReceipts, patchStoreMaterialReceiptBill, patchStoreMaterialReceiptPayment, resolveFileUrl, updateStoreMaterialReceipt, uploadStoreMaterialReceiptBill } from "@/lib/api";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -144,7 +144,7 @@ function Metric({ label, value }) {
     );
 }
 
-function MaterialsReceivedList({ admin, isLoading, onAdd, onBack, onDelete, onEdit, onUploadBill, onView, onPayment, receipts }) {
+function MaterialsReceivedList({ admin, isLoading, onAdd, onBack, onDelete, onEdit, onDeleteBill, onView, onPayment, receipts }) {
     return (
         <main className="min-h-[calc(100vh-4rem)] w-full bg-slate-50 px-4 py-7 sm:px-6 lg:px-8">
             <div className="w-full">
@@ -196,13 +196,18 @@ function MaterialsReceivedList({ admin, isLoading, onAdd, onBack, onDelete, onEd
                                         <PaymentBadge status={receipt.payment_status} />
                                         <Button type="button" variant="ghost" size="icon" title="View material receipt" onClick={() => onView(receipt)}><Eye className="h-4 w-4" /></Button>
                                         {admin && <Button type="button" variant="ghost" size="icon" title="Edit material receipt" onClick={() => onEdit(receipt)}><Pencil className="h-4 w-4" /></Button>}
-                                        {admin && (
-                                            <label title="Upload or replace bill" className="grid h-9 w-9 cursor-pointer place-items-center rounded-md text-cyan-700 hover:bg-cyan-50">
-                                                <Upload className="h-4 w-4" />
-                                                <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls" onChange={event => { const file = event.target.files?.[0]; if (file) onUploadBill(receipt, file); event.target.value = ""; }} />
-                                            </label>
+                                        {/* Bill View action: only show green icon when bill is uploaded */}
+                                        {receipt.bill_file_url && (
+                                            <a
+                                                title="View Bill"
+                                                className="grid h-9 w-9 place-items-center rounded-md border border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-800 transition-colors"
+                                                href={resolveFileUrl(receipt.bill_file_url)}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                            >
+                                                <FileText className="h-4 w-4" />
+                                            </a>
                                         )}
-                                        {receipt.bill_file_url && <a title="View bill" className="grid h-9 w-9 place-items-center rounded-md text-primary hover:bg-primary/5" href={resolveFileUrl(receipt.bill_file_url)} target="_blank" rel="noreferrer"><FileUp className="h-4 w-4" /></a>}
                                         {admin && (
                                             <Button type="button" variant="ghost" size="icon" title="Update payment status" className="text-cyan-700 hover:text-cyan-800" onClick={() => onPayment(receipt)}>
                                                 <CreditCard className="h-4 w-4" />
@@ -347,6 +352,27 @@ function ReceiptViewDialog({ receipt, onClose }) {
                         )}
                     </div>
 
+                    {/* Attached Bill section */}
+                    {receipt.bill_file_url && (
+                        <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50/60 p-4">
+                            <div className="flex items-center gap-2">
+                                <FileText className="h-5 w-5 text-emerald-600" />
+                                <div>
+                                    <p className="font-semibold text-slate-800">Attached Bill / Invoice</p>
+                                    <p className="text-xs text-muted-foreground">Original invoice document uploaded for this receipt</p>
+                                </div>
+                            </div>
+                            <a
+                                href={resolveFileUrl(receipt.bill_file_url)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 transition"
+                            >
+                                <Eye className="h-4 w-4" /> View Bill
+                            </a>
+                        </div>
+                    )}
+
                     {/* Remarks */}
                     {receipt.remarks && (
                         <div className="rounded-lg border p-4">
@@ -442,14 +468,23 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
             if (!invoiceNumber.trim())  throw new Error("Invoice number is required.");
             if (!lines.length)          throw new Error("Selected PO has no item lines.");
             const uploaded = bill ? await uploadBill.mutateAsync(bill) : null;
-            const payload  = { order_id: selected.id, invoice_date: invoiceDate, invoice_number: invoiceNumber.trim(), freight_charge: freightAmount, bill_file_url: uploaded?.file_url || existingBillUrl || null, remarks, lines: lines.map(l => ({ ...l, ordered_quantity: Number(l.ordered_quantity || 0), received_quantity: Number(l.received_quantity || 0), unit_rate: Number(l.unit_rate || 0) })) };
+            const finalBillUrl = uploaded ? uploaded.file_url : (existingBillUrl || null);
+            const payload  = { 
+                order_id: selected.id, 
+                invoice_date: invoiceDate, 
+                invoice_number: invoiceNumber.trim(), 
+                freight_charge: freightAmount, 
+                bill_file_url: finalBillUrl, 
+                remarks, 
+                lines: lines.map(l => ({ ...l, ordered_quantity: Number(l.ordered_quantity || 0), received_quantity: Number(l.received_quantity || 0), unit_rate: Number(l.unit_rate || 0) })) 
+            };
             return editingReceipt ? updateStoreMaterialReceipt(editingReceipt.id, payload) : createStoreMaterialReceipt(payload);
         },
         onSuccess: () => {
             invalidate();
             client.invalidateQueries({ queryKey: ["store-inventory"] });
             client.invalidateQueries({ queryKey: ["store-dashboard"] });
-            toast.success("Materials received saved. Inventory and PO received quantities were updated.");
+            toast.success(editingReceipt ? "Material receipt updated successfully." : "Materials received saved. Inventory and PO received quantities were updated.");
             setEntryMode(false); setEditingReceipt(null); setExistingBillUrl(null); setVendorName(""); setSelectedId(""); setInvoiceDate(today()); setInvoiceNumber(""); setBill(null); setFreightCharge("0"); setLines([]); setRemarks("");
         },
         onError: e => toast.error(e.message),
@@ -467,6 +502,14 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
     const removeReceipt = useMutation({
         mutationFn: deleteStoreMaterialReceipt,
         onSuccess: () => { invalidate(); toast.success("Material receipt deleted successfully."); },
+        onError: e => toast.error(e.message),
+    });
+
+    const removeBill = useMutation({
+        mutationFn: async receipt => {
+            return patchStoreMaterialReceiptBill(receipt.id, { file_url: null, updated_by: getCurrentUser() });
+        },
+        onSuccess: () => { invalidate(); toast.success("Bill deleted successfully."); },
         onError: e => toast.error(e.message),
     });
 
@@ -489,9 +532,14 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
         <>
             <MaterialsReceivedList
                 admin={admin} isLoading={isLoading}
-                onAdd={() => setEntryMode(true)} onBack={onBack}
+                onAdd={() => {
+                    setEditingReceipt(null); setExistingBillUrl(null); setVendorName(""); setSelectedId("");
+                    setInvoiceDate(today()); setInvoiceNumber(""); setBill(null); setFreightCharge("0"); setLines([]); setRemarks("");
+                    setEntryMode(true);
+                }}
+                onBack={onBack}
                 onView={setViewingReceipt} onEdit={openEdit}
-                onUploadBill={(receipt, file) => replaceBill.mutate({ receipt, file })}
+                onDeleteBill={receipt => removeBill.mutate(receipt)}
                 onPayment={setPaymentReceipt}
                 onDelete={receipt => { if (window.confirm(`Delete Material Received for invoice ${receipt.invoice_number}? The linked Purchase Order will remain safe.`)) removeReceipt.mutate(receipt.id); }}
                 receipts={receipts}
@@ -512,8 +560,8 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
                 <div className="flex flex-col gap-4 border-b pb-6 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                         <p className="text-sm font-medium text-cyan-700">Purchase Order</p>
-                        <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">Add Material Received</h1>
-                        <p className="mt-2 text-sm text-muted-foreground">Record supplier invoice and received quantities against a Purchase Order.</p>
+                        <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">{editingReceipt ? "Edit Material Received" : "Add Material Received"}</h1>
+                        <p className="mt-2 text-sm text-muted-foreground">{editingReceipt ? "Update supplier invoice, bill and received quantities." : "Record supplier invoice and received quantities against a Purchase Order."}</p>
                     </div>
                     <Button type="button" variant="outline" onClick={() => setEntryMode(false)}><ArrowLeft className="mr-2 h-4 w-4" />Materials Received List</Button>
                 </div>
@@ -544,10 +592,70 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
                         <Field label="Invoice Number *"><input required disabled={!admin} value={invoiceNumber} onChange={e => setInvoiceNumber(e.target.value)} placeholder="Enter invoice number" className={input} /></Field>
                         <Field label="Freight Charge"><input disabled={!admin} type="number" min="0" step="0.01" value={freightCharge} onChange={e => setFreightCharge(e.target.value)} className={input} /></Field>
                         <Field label="Bill Upload">
-                            <label className={`${input} flex cursor-pointer items-center gap-2 ${!admin ? "cursor-not-allowed opacity-60" : ""}`}>
-                                <Upload className="h-4 w-4 text-cyan-700" /><span className="truncate">{bill?.name || "Upload bill / invoice"}</span>
-                                <input disabled={!admin} type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls" onChange={e => setBill(e.target.files?.[0] || null)} />
-                            </label>
+                            {bill ? (
+                                <div className={`${input} flex items-center justify-between gap-2 border-emerald-300 bg-emerald-50/50`}>
+                                    <span className="flex items-center gap-1.5 truncate text-xs font-medium text-emerald-800">
+                                        <FileText className="h-4 w-4 shrink-0 text-emerald-600" />
+                                        <span className="truncate">{bill.name}</span>
+                                    </span>
+                                    {admin && (
+                                        <button
+                                            type="button"
+                                            title="Clear selected file"
+                                            onClick={() => setBill(null)}
+                                            className="p-1 text-slate-400 hover:text-rose-600 transition"
+                                        >
+                                            <X className="h-4 w-4" />
+                                        </button>
+                                    )}
+                                </div>
+                            ) : existingBillUrl ? (
+                                <div className={`${input} flex items-center justify-between gap-2 border-slate-300 bg-slate-50`}>
+                                    <a
+                                        href={resolveFileUrl(existingBillUrl)}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        title="View currently attached bill"
+                                        className="flex items-center gap-1.5 truncate text-xs font-medium text-cyan-700 hover:underline"
+                                    >
+                                        <FileText className="h-4 w-4 shrink-0 text-emerald-600" />
+                                        <span className="truncate">Attached Bill</span>
+                                    </a>
+                                    {admin && (
+                                        <div className="flex items-center gap-2">
+                                            <label title="Replace attached bill" className="cursor-pointer text-xs font-semibold text-cyan-700 hover:text-cyan-800">
+                                                Change
+                                                <input
+                                                    type="file"
+                                                    className="hidden"
+                                                    accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls"
+                                                    onChange={e => setBill(e.target.files?.[0] || null)}
+                                                />
+                                            </label>
+                                            <button
+                                                type="button"
+                                                title="Remove attached bill"
+                                                onClick={() => setExistingBillUrl(null)}
+                                                className="p-1 text-slate-400 hover:text-rose-600 transition"
+                                            >
+                                                <X className="h-4 w-4" />
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <label className={`${input} flex cursor-pointer items-center gap-2 ${!admin ? "cursor-not-allowed opacity-60" : ""}`}>
+                                    <Upload className="h-4 w-4 text-cyan-700" />
+                                    <span className="truncate text-muted-foreground">Upload bill / invoice</span>
+                                    <input
+                                        disabled={!admin}
+                                        type="file"
+                                        className="hidden"
+                                        accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls"
+                                        onChange={e => setBill(e.target.files?.[0] || null)}
+                                    />
+                                </label>
+                            )}
                         </Field>
                     </div>
                     <Field label="Remarks"><textarea disabled={!admin} value={remarks} onChange={e => setRemarks(e.target.value)} className="mt-1.5 min-h-20 w-full rounded-md border border-slate-200 p-3 text-sm outline-none focus:border-cyan-500" placeholder="Delivery challan, condition or other remarks" /></Field>
@@ -613,7 +721,7 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
                     {admin && (
                         <Button disabled={save.isPending || uploadBill.isPending || !selected} onClick={() => save.mutate()}>
                             <Save className="mr-2 h-4 w-4" />
-                            {save.isPending ? "Saving…" : uploadBill.isPending ? "Uploading bill…" : "Save Materials Received"}
+                            {save.isPending ? "Saving…" : uploadBill.isPending ? "Uploading bill…" : editingReceipt ? "Update Materials Received" : "Save Materials Received"}
                         </Button>
                     )}
                 </div>
