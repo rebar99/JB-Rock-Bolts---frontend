@@ -34,10 +34,21 @@ function defaultFYTag() {
     return `${String(fyStart).slice(2)}-${String(fyStart + 1).slice(2)}`;
 }
 
+/** Parse PO number into prefix, series (e.g. "21"), and financial year (e.g. "26-27") */
+function parsePONumber(orderNumber) {
+    if (!orderNumber) return { prefix: "STR/0199/", series: "", fy: "" };
+    const m = String(orderNumber).match(/^(.*\/)?([^-]+)-(.*)$/);
+    if (m) {
+        return { prefix: m[1] || "STR/0199/", series: m[2], fy: m[3] };
+    }
+    return { prefix: "STR/0199/", series: "", fy: "" };
+}
+
 /** Build PO number from series count + financial year tag */
-function buildPONumber(orders, fyTag) {
-    const series = String(orders.length + 1).padStart(2, "0");
-    return `STR/0199/${series}-${fyTag}`;
+function buildPONumber(series, fyTag, prefix = "STR/0199/") {
+    const s = String(series ?? "").trim();
+    const fy = String(fyTag ?? "").trim();
+    return `${prefix}${s}-${fy}`;
 }
 
 export default function PurchaseOrderForm({ orders = [], admin = false, onBack, editingOrder = null, initialPoType = null }) {
@@ -103,8 +114,17 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
         return null;
     };
 
-    // Financial year is manually editable (default = current FY from date)
-    const [financialYear, setFinancialYear] = useState(defaultFYTag);
+    const initialParsed = useMemo(() => {
+        if (editingOrder?.order_number) {
+            return parsePONumber(editingOrder.order_number);
+        }
+        const defaultSeries = String((orders?.length || 0) + 1).padStart(2, "0");
+        return { prefix: "STR/0199/", series: defaultSeries, fy: defaultFYTag() };
+    }, [editingOrder, orders]);
+
+    // Financial year and PO series number are both editable
+    const [financialYear, setFinancialYear] = useState(() => initialParsed.fy || defaultFYTag());
+    const [poSeries, setPoSeries] = useState(() => initialParsed.series || String((orders?.length || 0) + 1).padStart(2, "0"));
 
     const [form, setForm] = useState(() => editingOrder ? ({
         ...editingOrder,
@@ -115,7 +135,7 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
         po_date: editingOrder.po_date || new Date().toISOString().slice(0, 10),
         items: (editingOrder.items || []).map(item => ({ item_description: item.item_description, quantity: item.quantity, uom: item.uom, unit_rate: item.unit_rate })),
     }) : ({
-        order_number: buildPONumber(orders, defaultFYTag()),
+        order_number: buildPONumber(initialParsed.series, initialParsed.fy || defaultFYTag()),
         po_type: initialPoType || "Regular Vendor PO",
         supplier: "", vendor_code: "", vendor_address: "", vendor_contact: "", vendor_gst: "",
         po_date: new Date().toISOString().slice(0, 10), reference: "Repeat Order",
@@ -125,11 +145,37 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
         items: [emptyLine()], status: "Pending Approval",
     }));
 
-    // Rebuild order_number whenever financial year changes (only for new POs)
+    // When PO Series / sequence number changes (e.g. user changes "21" to another number)
+    const handleSeriesChange = (newSeries) => {
+        setPoSeries(newSeries);
+        setForm(curr => {
+            const parsed = parsePONumber(curr.order_number);
+            const prefix = parsed.prefix || "STR/0199/";
+            const fy = financialYear || parsed.fy || defaultFYTag();
+            return { ...curr, order_number: `${prefix}${newSeries}-${fy}` };
+        });
+    };
+
+    // Rebuild order_number whenever financial year changes
     const handleFYChange = (newFY) => {
         setFinancialYear(newFY);
-        if (!editingOrder) {
-            setForm(curr => ({ ...curr, order_number: buildPONumber(orders, newFY) }));
+        setForm(curr => {
+            const parsed = parsePONumber(curr.order_number);
+            const prefix = parsed.prefix || "STR/0199/";
+            const series = poSeries || parsed.series || "01";
+            return { ...curr, order_number: `${prefix}${series}-${newFY}` };
+        });
+    };
+
+    // When PO number is edited directly in the PO Number field
+    const handleOrderNumberChange = (newOrderNumber) => {
+        change("order_number", newOrderNumber);
+        const parsed = parsePONumber(newOrderNumber);
+        if (parsed.series) {
+            setPoSeries(parsed.series);
+        }
+        if (parsed.fy) {
+            setFinancialYear(parsed.fy);
         }
     };
     const totals = useMemo(() => {
@@ -315,9 +361,10 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
     const submit = event => {
         event.preventDefault();
         if (!admin) return toast.error("Only Store Admin can save a Purchase Order.");
+        if (!form.order_number?.trim()) return toast.error("PO Number is required.");
         if (editingOrder && !isDirty) return toast.info("No changes made. Please update something before saving.");
         if (form.items.some(item => !item.item_description.trim() || Number(item.quantity) <= 0)) return toast.error("Enter an item description and quantity for every line.");
-        save.mutate({ ...form, gst_rate: Number(form.gst_rate), round_off: Number(form.round_off), items: form.items.map(item => ({ ...item, quantity: Number(item.quantity), unit_rate: Number(item.unit_rate) })) });
+        save.mutate({ ...form, order_number: form.order_number.trim(), gst_rate: Number(form.gst_rate), round_off: Number(form.round_off), items: form.items.map(item => ({ ...item, quantity: Number(item.quantity), unit_rate: Number(item.unit_rate) })) });
     };
     const money = value => `₹${value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const formatNumber = value => Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
@@ -399,14 +446,36 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
                     </Field>
 
                     <Field label="PO Number *">
-                        <input required readOnly value={form.order_number} className={`${inputClass} cursor-not-allowed bg-slate-50`} />
+                        <input
+                            required
+                            disabled={!admin}
+                            value={form.order_number}
+                            onChange={e => handleOrderNumberChange(e.target.value)}
+                            className={`${inputClass} ${!admin ? "cursor-not-allowed bg-slate-50" : ""}`}
+                            placeholder="e.g. STR/0199/21-26-27"
+                        />
                     </Field>
 
-                    {!editingOrder && (
-                        <Field label="Financial Year">
-                            <input disabled={!admin} value={financialYear} onChange={e => handleFYChange(e.target.value)} className={inputClass} placeholder="e.g. 26-27" maxLength={5} />
-                        </Field>
-                    )}
+                    <Field label="PO Series / No.">
+                        <input
+                            disabled={!admin}
+                            value={poSeries}
+                            onChange={e => handleSeriesChange(e.target.value)}
+                            className={`${inputClass} ${!admin ? "cursor-not-allowed bg-slate-50" : ""}`}
+                            placeholder="e.g. 21"
+                        />
+                    </Field>
+
+                    <Field label="Financial Year">
+                        <input
+                            disabled={!admin}
+                            value={financialYear}
+                            onChange={e => handleFYChange(e.target.value)}
+                            className={`${inputClass} ${!admin ? "cursor-not-allowed bg-slate-50" : ""}`}
+                            placeholder="e.g. 26-27"
+                            maxLength={7}
+                        />
+                    </Field>
 
                     <Field label="PO Date *">
                         <input required disabled={!admin} type="date" value={form.po_date} onChange={e => change("po_date", e.target.value)} className={inputClass} />
