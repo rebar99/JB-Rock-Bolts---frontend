@@ -229,14 +229,53 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
         return vendorList.find(v => (v.vendor_name || "").trim().toLowerCase() === form.supplier.trim().toLowerCase()) || null;
     }, [vendorList, form.supplier]);
 
-    // Filter item master by vendor's items_supplied when a registered vendor is selected
+    // Helper to clean/normalize text for flexible matching
+    const cleanStr = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+    // Filter to ONLY the selected vendor's items & sizes (show only this vendor's items, not all)
     const vendorFilteredItems = useMemo(() => {
+        if (!itemMasterList || itemMasterList.length === 0) return [];
         if (!currentMatchedVendor) return itemMasterList;
-        const supplied = Array.isArray(currentMatchedVendor.items_supplied) ? currentMatchedVendor.items_supplied : [];
-        if (supplied.length === 0) return itemMasterList;
-        return itemMasterList.filter(item =>
-            supplied.some(s => (s || "").toLowerCase() === (item.name || "").toLowerCase())
-        );
+
+        const rawSupplied = currentMatchedVendor.items_supplied;
+        const supplied = Array.isArray(rawSupplied)
+            ? rawSupplied
+            : (typeof rawSupplied === "string" ? (() => { try { return JSON.parse(rawSupplied); } catch { return []; } })() : []);
+
+        // If vendor has no items configured in vendor master, show all items
+        if (!supplied || supplied.length === 0) return itemMasterList;
+
+        const suppliedClean = supplied.map(cleanStr).filter(s => s.length >= 2);
+        if (suppliedClean.length === 0) return itemMasterList;
+
+        const matched = [];
+
+        for (const item of itemMasterList) {
+            const itemNorm = cleanStr(item.name);
+            const itemDirectMatch = suppliedClean.some(sc => (sc.length >= 3 && itemNorm.includes(sc)) || (itemNorm.length >= 3 && sc.includes(itemNorm)));
+
+            if (Array.isArray(item.sizes) && item.sizes.length > 0) {
+                // Keep ONLY the sizes that match the vendor's supplied list!
+                const matchedSizes = item.sizes.filter(sz => {
+                    const szNorm = cleanStr(sz.size || sz);
+                    return suppliedClean.some(sc => (sc.length >= 3 && szNorm.includes(sc)) || (szNorm.length >= 3 && sc.includes(szNorm)));
+                });
+
+                if (matchedSizes.length > 0) {
+                    matched.push({
+                        ...item,
+                        sizes: matchedSizes // ONLY this vendor's sizes!
+                    });
+                } else if (itemDirectMatch) {
+                    matched.push(item);
+                }
+            } else if (itemDirectMatch) {
+                matched.push(item);
+            }
+        }
+
+        // Return ONLY the matched items for this vendor (if none matched, fallback to itemMasterList)
+        return matched.length > 0 ? matched : itemMasterList;
     }, [currentMatchedVendor, itemMasterList]);
 
     // UOM options allowed for the current selected vendor
