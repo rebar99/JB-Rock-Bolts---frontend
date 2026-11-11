@@ -56,7 +56,7 @@ export const ItemCombobox = ({ value, onChange, items = [], placeholder = "Selec
 
     const selectSize = (sizeArg) => {
         const sizeObj = typeof sizeArg === "object" ? sizeArg : (activeItem?.sizes || []).find(x => x.size === sizeArg) || { size: sizeArg };
-        onChange(`${activeItem.name} ${sizeObj.size}`, activeItem, sizeObj);
+        onChange(sizeObj.size, activeItem, sizeObj);
         setOpen(false);
     };
 
@@ -119,7 +119,7 @@ export const ItemCombobox = ({ value, onChange, items = [], placeholder = "Selec
                                         value={s.size}
                                         onSelect={() => selectSize(s)}
                                     >
-                                        <Check className={cn("mr-2 h-4 w-4", value === `${activeItem.name} ${s.size}` ? "opacity-100" : "opacity-0")} />
+                                        <Check className={cn("mr-2 h-4 w-4", value === s.size || value === `${activeItem.name} ${s.size}` ? "opacity-100" : "opacity-0")} />
                                         <span className="truncate flex-1">{s.size}</span>
 
                                     </CommandItem>
