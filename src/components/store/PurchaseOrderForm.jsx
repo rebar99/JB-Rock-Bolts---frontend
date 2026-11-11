@@ -256,21 +256,19 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
             const groupNameMatch = suppliedClean.some(sc => (sc.length >= 3 && itemNorm.includes(sc)) || (itemNorm.length >= 3 && sc.includes(itemNorm)));
 
             if (Array.isArray(item.sizes) && item.sizes.length > 0) {
-                // If group name matched, include ALL sizes from this group
                 if (groupNameMatch) {
-                    matched.push(item); // push entire item with ALL sizes
+                    // Group name matched — include ALL sizes
+                    matched.push(item);
                 } else {
-                    // Otherwise, filter to only matching sizes
-                    const matchedSizes = item.sizes.filter(sz => {
+                    // Check if ANY size from this group matches vendor's supplied list
+                    const anySizeMatch = item.sizes.some(sz => {
                         const szNorm = cleanStr(sz.size || sz);
                         return suppliedClean.some(sc => (sc.length >= 3 && szNorm.includes(sc)) || (szNorm.length >= 3 && sc.includes(szNorm)));
                     });
 
-                    if (matchedSizes.length > 0) {
-                        matched.push({
-                            ...item,
-                            sizes: matchedSizes
-                        });
+                    if (anySizeMatch) {
+                        // If ANY size matched, include ALL sizes from this group
+                        matched.push(item);
                     }
                 }
             } else if (groupNameMatch) {
