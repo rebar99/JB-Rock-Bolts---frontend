@@ -252,24 +252,28 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
 
         for (const item of itemMasterList) {
             const itemNorm = cleanStr(item.name);
-            const itemDirectMatch = suppliedClean.some(sc => (sc.length >= 3 && itemNorm.includes(sc)) || (itemNorm.length >= 3 && sc.includes(itemNorm)));
+            // Check if the GROUP NAME itself matches any supplied entry
+            const groupNameMatch = suppliedClean.some(sc => (sc.length >= 3 && itemNorm.includes(sc)) || (itemNorm.length >= 3 && sc.includes(itemNorm)));
 
             if (Array.isArray(item.sizes) && item.sizes.length > 0) {
-                // Keep ONLY the sizes that match the vendor's supplied list!
-                const matchedSizes = item.sizes.filter(sz => {
-                    const szNorm = cleanStr(sz.size || sz);
-                    return suppliedClean.some(sc => (sc.length >= 3 && szNorm.includes(sc)) || (szNorm.length >= 3 && sc.includes(szNorm)));
-                });
-
-                if (matchedSizes.length > 0) {
-                    matched.push({
-                        ...item,
-                        sizes: matchedSizes // ONLY this vendor's sizes!
+                // If group name matched, include ALL sizes from this group
+                if (groupNameMatch) {
+                    matched.push(item); // push entire item with ALL sizes
+                } else {
+                    // Otherwise, filter to only matching sizes
+                    const matchedSizes = item.sizes.filter(sz => {
+                        const szNorm = cleanStr(sz.size || sz);
+                        return suppliedClean.some(sc => (sc.length >= 3 && szNorm.includes(sc)) || (szNorm.length >= 3 && sc.includes(szNorm)));
                     });
-                } else if (itemDirectMatch) {
-                    matched.push(item);
+
+                    if (matchedSizes.length > 0) {
+                        matched.push({
+                            ...item,
+                            sizes: matchedSizes
+                        });
+                    }
                 }
-            } else if (itemDirectMatch) {
+            } else if (groupNameMatch) {
                 matched.push(item);
             }
         }
