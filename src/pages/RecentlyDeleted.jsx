@@ -12,6 +12,7 @@ const MODULE_LABELS = {
   sale: 'PO Sales',
   purchase_order: 'Purchase Order',
   store_purchase_order: 'Purchase Order',
+  store_material_receipt: 'Materials Received',
   work_order: 'Work Order',
   work_order_sale: 'WO Sale',
   credit_note: 'Credit Note',
@@ -21,6 +22,7 @@ const MODULE_BADGE_COLORS = {
   sale: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
   purchase_order: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
   store_purchase_order: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200',
+  store_material_receipt: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200',
   work_order: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
   work_order_sale: 'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200',
   credit_note: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
@@ -68,6 +70,7 @@ const MARKETING_TABS = [
 const STORE_TABS = [
   { key: 'all', label: 'All' },
   { key: 'store_purchase_order', label: 'Purchase Orders' },
+  { key: 'store_material_receipt', label: 'Materials Received' },
 ];
 
 async function apiRequest(path, options = {}) {
@@ -202,7 +205,9 @@ export default function RecentlyDeleted({ workspace = 'Marketing' }) {
             <p className='text-lg font-medium'>No deleted records found</p>
             <p className='text-sm'>
               {isStore
-                ? 'No Store Purchase Orders have been deleted yet.'
+                ? (activeTab === 'store_material_receipt'
+                    ? 'No Material Receipts have been deleted yet.'
+                    : 'No Store Purchase Orders have been deleted yet.')
                 : (activeTab === 'all' ? 'No records have been deleted yet.' : 'No deleted ' + (MODULE_LABELS[activeTab] || activeTab) + ' records found.')}
             </p>
           </div>
