@@ -497,26 +497,6 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
                         />
                     </Field>
 
-                    <Field label="PO Series / No.">
-                        <input
-                            disabled={!admin}
-                            value={poSeries}
-                            onChange={e => handleSeriesChange(e.target.value)}
-                            className={`${inputClass} ${!admin ? "cursor-not-allowed bg-slate-50" : ""}`}
-                            placeholder="e.g. 21"
-                        />
-                    </Field>
-
-                    <Field label="Financial Year">
-                        <input
-                            disabled={!admin}
-                            value={financialYear}
-                            onChange={e => handleFYChange(e.target.value)}
-                            className={`${inputClass} ${!admin ? "cursor-not-allowed bg-slate-50" : ""}`}
-                            placeholder="e.g. 26-27"
-                            maxLength={7}
-                        />
-                    </Field>
 
                     <Field label="PO Date *">
                         <input required disabled={!admin} type="date" value={form.po_date} onChange={e => change("po_date", e.target.value)} className={inputClass} />
