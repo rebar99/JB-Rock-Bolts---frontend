@@ -34,7 +34,7 @@ const modules = {
     settings: { title: "Store Settings", icon: Settings, description: "Configure financial year, approval rules, document numbering and alert preferences.", steps: ["Financial year and month close", "Approval workflow", "Low-stock notification rules"] },
 };
 
-export default function StoreModule({ slug, inventory = [], orders = [], admin = false }) {
+export default function StoreModule({ slug, inventory = [], orders = [], ordersError = null, admin = false }) {
     const navigate = useNavigate(); const config = modules[slug] || modules.items; const Icon = config.icon;
     const queryClient = useQueryClient(); const [addOpen, setAddOpen] = useState(false);
     const [form, setForm] = useState({ name: "", quantity: "0", reorder_level: "0" });
@@ -43,7 +43,7 @@ export default function StoreModule({ slug, inventory = [], orders = [], admin =
     const saveItem = (event) => { event.preventDefault(); createItem.mutate({ name: form.name.trim(), quantity: Number(form.quantity), reorder_level: Number(form.reorder_level) }); };
     const records = slug === "items" ? inventory : slug === "purchase" ? orders : [];
     const storeTopbar = <Topbar title="Store Purchase Dashboard" subtitle="Purchase & Inventory Management System" searchPlaceholder="Search items, suppliers, purchase orders..." />;
-    if (slug === "purchase") return <div className="min-h-screen bg-background lg:flex"><StoreSidebar /><div className="min-w-0 flex-1">{storeTopbar}<StorePurchaseOrders orders={orders} admin={admin} /><StoreTableEnhancer /></div></div>;
+    if (slug === "purchase") return <div className="min-h-screen bg-background lg:flex"><StoreSidebar /><div className="min-w-0 flex-1">{storeTopbar}<StorePurchaseOrders orders={orders} ordersError={ordersError} admin={admin} /><StoreTableEnhancer /></div></div>;
     if (slug === "materials-received") return <div className="min-h-screen bg-background lg:flex"><StoreSidebar /><div className="min-w-0 flex-1">{storeTopbar}<StoreMaterialsReceived orders={orders} admin={admin} onBack={() => navigate("/store-purchase")} /><StoreTableEnhancer /></div></div>;
     if (slug === "approvals") return <div className="min-h-screen bg-background lg:flex"><StoreSidebar /><div className="min-w-0 flex-1">{storeTopbar}<StorePOApprovals /></div></div>;
     if (slug === "items") return <div className="min-h-screen bg-background lg:flex"><StoreSidebar /><div className="min-w-0 flex-1">{storeTopbar}<StoreItems inventory={inventory} admin={admin} /><StoreTableEnhancer /></div></div>;
