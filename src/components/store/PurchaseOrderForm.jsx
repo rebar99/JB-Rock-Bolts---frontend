@@ -140,7 +140,7 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
         supplier: "", vendor_code: "", vendor_address: "", vendor_contact: "", vendor_gst: "",
         po_date: new Date().toISOString().slice(0, 10), reference: "Repeat Order",
 
-        gst_rate: 18, round_off: 0, price_basis: "FOR Tahliwal", packing_terms: "In your scope", freight_terms: "Extra", insurance_terms: "Included",
+        gst_rate: 18, round_off: 0, freight_charges: 0, freight_gst_type: "With GST", price_basis: "FOR Tahliwal", packing_terms: "In your scope", freight_terms: "Extra", insurance_terms: "Included",
         delivery_terms: "", inspection_terms: "At our Store Department", warranty_terms: "Only genuine material", payment_terms: "", quantity_variance: "As per actual", notes: "",
         items: [emptyLine()], status: "Pending Approval",
     }));
@@ -181,8 +181,10 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
     const totals = useMemo(() => {
         const subtotal = form.items.reduce((sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.unit_rate) || 0), 0);
         const gstAmount = subtotal * (Number(form.gst_rate) || 0) / 100;
-        return { subtotal, gstAmount, grandTotal: subtotal + gstAmount + (Number(form.round_off) || 0) };
-    }, [form.items, form.gst_rate, form.round_off]);
+        const freightCharges = Number(form.freight_charges) || 0;
+        const freightGst = form.freight_gst_type === "Without GST" ? 0 : freightCharges * (Number(form.gst_rate) || 0) / 100;
+        return { subtotal, gstAmount, freightCharges, freightGst, grandTotal: subtotal + gstAmount + freightCharges + freightGst + (Number(form.round_off) || 0) };
+    }, [form.items, form.gst_rate, form.round_off, form.freight_charges, form.freight_gst_type]);
     const change = (key, value) => setForm(current => ({ ...current, [key]: value }));
 
     // Track if form has changed from original (only for edit mode)
@@ -425,7 +427,7 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
             <div className="po-print-meta"><div><p><b>M/S:</b> {form.supplier || "—"}</p><p className="preline">{form.vendor_address || "Vendor address not provided"}</p><p><b>Kind Att:</b> {form.vendor_contact || "—"}</p><p><b>GST No.:</b> {form.vendor_gst || "—"}</p></div><div><p><b>PO No:</b> {form.order_number}</p><p><b>Dated:</b> {form.po_date ? new Date(`${form.po_date}T00:00:00`).toLocaleDateString("en-IN") : "—"}</p><p><b>Reference:</b> {form.reference || "—"}</p><p><b>Status:</b> {form.status}</p></div></div>
             <p className="po-print-intro">Please supply the following goods subject to the terms and conditions mentioned herein.</p>
             <table className="po-print-table"><thead><tr><th>Sr. No.</th><th>Item Description</th><th>Quantity</th><th>UoM</th><th>Unit Rate (INR)</th><th>Amount (INR)</th></tr></thead><tbody>{form.items.map((line, index) => <tr key={index}><td>{index + 1}</td><td>{getItemOnlyName(line.item_description, itemMasterList) || "—"}</td><td>{formatNumber(line.quantity)}</td><td>{line.uom || "—"}</td><td>{money(Number(line.unit_rate) || 0)}</td><td>{money((Number(line.quantity) || 0) * (Number(line.unit_rate) || 0))}</td></tr>)}</tbody></table>
-            <div className="po-print-totals"><p><span>Total</span><b>{money(totals.subtotal)}</b></p><p><span>IGST ({form.gst_rate}%)</span><b>{money(totals.gstAmount)}</b></p><p><span>Rounded off</span><b>{money(Number(form.round_off) || 0)}</b></p><p className="grand"><span>Total Amount Including Taxes</span><b>{money(totals.grandTotal)}</b></p></div>
+            <div className="po-print-totals"><p><span>Total</span><b>{money(totals.subtotal)}</b></p><p><span>IGST ({form.gst_rate}%)</span><b>{money(totals.gstAmount)}</b></p>{totals.freightCharges > 0 && <p><span>Freight Charges</span><b>{money(totals.freightCharges)}</b></p>}{totals.freightCharges > 0 && <p><span>GST on Freight ({form.freight_gst_type === "Without GST" ? "Without GST" : `${form.gst_rate}%`})</span><b>{money(totals.freightGst)}</b></p>}<p><span>Rounded off</span><b>{money(Number(form.round_off) || 0)}</b></p><p className="grand"><span>Total Amount Including Taxes</span><b>{money(totals.grandTotal)}</b></p></div>
             <section className="po-print-terms"><h3>Terms and Conditions</h3><p><b>Price:</b> {form.price_basis || "—"}</p><p><b>Packing &amp; Forwarding:</b> {form.packing_terms || "—"}</p><p><b>Freight &amp; Transportation:</b> {form.freight_terms || "—"}</p><p><b>Insurance:</b> {form.insurance_terms || "—"}</p><p><b>Delivery:</b> {form.delivery_terms || "—"}</p><p><b>Inspection:</b> {form.inspection_terms || "—"}</p><p><b>Guarantee / Warranty:</b> {form.warranty_terms || "—"}</p><p><b>Payment Terms:</b> {form.payment_terms || "—"}</p><p><b>Quantity Variance:</b> {form.quantity_variance || "—"}</p>{form.notes && <p><b>Notes:</b> {form.notes}</p>}</section>
             <div className="po-print-signatures"><span>Prepared By</span><span>Approved By</span><span>Final Approved By</span><span>For RE-Bar Couplers India Private Limited</span></div>
         </div>
@@ -677,6 +679,34 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
                             className="h-9 rounded border bg-white px-2 text-right"
                         />
                         <span className="text-right font-medium">{money(totals.gstAmount)}</span>
+                    </div>
+                    <div className="grid grid-cols-[1fr_100px_110px_100px] items-center gap-3">
+                        <span>Freight Charges</span>
+                        <input
+                            disabled={!admin}
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={form.freight_charges}
+                            onChange={e => change("freight_charges", e.target.value)}
+                            className="h-9 rounded border bg-white px-2 text-right"
+                            placeholder="0"
+                        />
+                        <select
+                            disabled={!admin}
+                            value={form.freight_gst_type || "With GST"}
+                            onChange={e => change("freight_gst_type", e.target.value)}
+                            className="h-9 rounded border bg-white px-2 text-xs"
+                            aria-label="GST on freight"
+                        >
+                            <option value="With GST">With GST</option>
+                            <option value="Without GST">Without GST</option>
+                        </select>
+                        <span className="text-right font-medium">{money(totals.freightCharges)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                        <span>GST on Freight ({form.freight_gst_type === "Without GST" ? "Without GST" : `${form.gst_rate}%`})</span>
+                        <span className="font-medium">{money(totals.freightGst)}</span>
                     </div>
                     <div className="grid grid-cols-[1fr_130px] items-center gap-3">
                         <span>Rounded off</span>
