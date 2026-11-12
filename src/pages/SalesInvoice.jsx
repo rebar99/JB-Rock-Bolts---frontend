@@ -19,9 +19,10 @@ import {
     fetchPurchaseOrders, fetchSales, fetchSale, createSale, updateSale,
     deleteSale as deleteSaleApi, bulkDeleteSales, addSaleActivity, addSaleDispatch, openInvoiceDocument, downloadInvoiceDocument,
     uploadInvoiceFile, exportSales, importSales, fetchCompanyAddresses, resolveFileUrl,
-    fetchCreditNotesBySale,
+    fetchCreditNotesBySale, fetchCreditNotes,
 } from "@/lib/api";
 import { toast } from "sonner";
+import { CreditNoteView } from "./CreditNotes";
 import { Plus, Truck, Clock, CreditCard, Eye, Package, User, Trash2, Search, Download, UploadCloud, FileText, X, Pencil, Receipt, CheckCircle, Printer, FileDown, Upload, ChevronDown, ChevronUp } from "lucide-react";
 
 const PAYMENT_STATUS = ["Pending", "Paid"];
@@ -78,9 +79,55 @@ const SalesInvoice = () => {
         queryFn: () => fetchSales(),
     });
 
+    const { data: creditNotes = [] } = useQuery({
+        queryKey: ["credit-notes"],
+        queryFn: () => fetchCreditNotes(),
+    });
+
+    const creditedSalesMap = useMemo(() => {
+        const byId = new Map();
+        const byInv = new Map();
+        (creditNotes || []).forEach((cn) => {
+            if (!cn || cn.is_deleted || cn.status === "Cancelled") return;
+            if (cn.sale_type && cn.sale_type.toUpperCase() === "WO") return;
+
+            if (cn.sale_id) {
+                const idKey = Number(cn.sale_id);
+                const list = byId.get(idKey) || [];
+                list.push(cn);
+                byId.set(idKey, list);
+            }
+            if (cn.invoice_number && cn.invoice_number.trim()) {
+                const invKey = cn.invoice_number.trim().toLowerCase();
+                const list = byInv.get(invKey) || [];
+                list.push(cn);
+                byInv.set(invKey, list);
+            }
+        });
+        return { byId, byInv };
+    }, [creditNotes]);
+
+    const getMatchingCreditNotes = (saleItem) => {
+        if (!saleItem) return [];
+        const fromId = creditedSalesMap.byId.get(Number(saleItem.id)) || [];
+        const fromInv = (saleItem.invoice_number && saleItem.invoice_number.trim())
+            ? (creditedSalesMap.byInv.get(saleItem.invoice_number.trim().toLowerCase()) || [])
+            : [];
+        if (fromId.length === 0) return fromInv;
+        if (fromInv.length === 0) return fromId;
+        const combined = [...fromId];
+        fromInv.forEach((cn) => {
+            if (!combined.some((c) => c.id === cn.id)) {
+                combined.push(cn);
+            }
+        });
+        return combined;
+    };
+
     const invalidateSales = () => {
         qc.invalidateQueries({ queryKey: ["sales"] });
         qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+        qc.invalidateQueries({ queryKey: ["credit-notes"] });
         qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
         // Sales Report (and its footer totals) reads from ["report", ...] —
         // it must refetch whenever a sale is added/edited/deleted so the
@@ -180,6 +227,8 @@ const SalesInvoice = () => {
     const [dispatchOpen, setDispatchOpen] = useState(false);
     const [dispatchTarget, setDispatchTarget] = useState(null);
     const [viewSale, setViewSale] = useState(null);
+    const [viewCreditNotesModal, setViewCreditNotesModal] = useState(null);
+    const [selectedCNIndex, setSelectedCNIndex] = useState(0);
     const [itemToDelete, setItemToDelete] = useState(null);
     const [selectedIds, setSelectedIds] = useState(() => new Set());
     const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
@@ -2243,6 +2292,40 @@ const SalesInvoice = () => {
                 </DialogContent>
             </Dialog>
 
+            {/* Credit Note Details Dialog */}
+            <Dialog open={!!viewCreditNotesModal} onOpenChange={(o) => !o && setViewCreditNotesModal(null)}>
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Receipt className="h-5 w-5 text-primary" />
+                            Credit Note Details {viewCreditNotesModal?.cns?.[selectedCNIndex]?.cn_number ? `— ${viewCreditNotesModal.cns[selectedCNIndex].cn_number}` : ""}
+                        </DialogTitle>
+                    </DialogHeader>
+
+                    {viewCreditNotesModal?.cns?.length > 1 && (
+                        <div className="flex gap-2 border-b border-border pb-2.5 mb-2 overflow-x-auto">
+                            {viewCreditNotesModal.cns.map((cn, idx) => (
+                                <Button
+                                    key={cn.id || idx}
+                                    size="xs"
+                                    variant={selectedCNIndex === idx ? "default" : "outline"}
+                                    onClick={() => setSelectedCNIndex(idx)}
+                                >
+                                    {cn.cn_number || `CN #${idx + 1}`} ({inr(cn.total_amount)})
+                                </Button>
+                            ))}
+                        </div>
+                    )}
+
+                    {viewCreditNotesModal?.cns?.[selectedCNIndex] && (
+                        <CreditNoteView
+                            cn={viewCreditNotesModal.cns[selectedCNIndex]}
+                            onClose={() => setViewCreditNotesModal(null)}
+                        />
+                    )}
+                </DialogContent>
+            </Dialog>
+
             {/* Search bar */}
             {sales.length > 1 && (
                 <Card className="p-4 shadow-card">
@@ -2503,6 +2586,25 @@ const SalesInvoice = () => {
                                             <CreditCard className="h-3 w-3 mr-1" /> Mark {s}
                                         </Button>
                                     ))}
+                                    {(() => {
+                                        const matchingCNs = getMatchingCreditNotes(sale);
+                                        if (matchingCNs.length === 0) return null;
+                                        const cnNums = matchingCNs.map((c) => c.cn_number).filter(Boolean).join(", ");
+                                        return (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setSelectedCNIndex(0);
+                                                    setViewCreditNotesModal({ cns: matchingCNs, sale });
+                                                }}
+                                                className="inline-flex items-center gap-1 h-7 px-2.5 rounded text-[11px] font-semibold bg-[#800000] text-white select-none shadow-xs hover:bg-[#6b0000] active:scale-[0.98] transition-all cursor-pointer"
+                                                title={cnNums ? `Credit Note Issued: ${cnNums} (Click to view details)` : "Credit Note Issued (Click to view details)"}
+                                            >
+                                                <Receipt className="h-3 w-3 shrink-0" />
+                                                Credit Note Issued
+                                            </button>
+                                        );
+                                    })()}
                                 </div>
                             </Card>
                         );

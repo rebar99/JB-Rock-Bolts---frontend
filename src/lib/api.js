@@ -10,8 +10,20 @@ const BASE = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/
 export const resolveFileUrl = (url) => {
     if (!url) return "";
     if (/^https?:\/\//.test(url)) return url;
-    const path = url.startsWith("/") ? url : `/${url}`;
-    return `${BASE}${path}`;
+    let cleanPath = url.startsWith("/") ? url : `/${url}`;
+
+    // On production reverse proxies (like Nginx on Hostinger), Nginx only forwards
+    // `/api/` requests to the FastAPI backend. Direct requests to `/uploads/...` hit
+    // the frontend webroot (dist) which doesn't have the uploaded files, causing
+    // a 404 Not Found (nginx) error.
+    // Routing `/uploads/...` via `/api/uploads/...` ensures Nginx forwards the
+    // file request to FastAPI, where `app.mount("/api/uploads", ...)` serves it.
+    if (cleanPath.startsWith("/uploads/")) {
+        cleanPath = `/api${cleanPath}`;
+    }
+
+    const baseClean = BASE.replace(/\/api\/?$/, "");
+    return `${baseClean}${cleanPath}`;
 };
 
 const getToken = () => localStorage.getItem("auth_token");

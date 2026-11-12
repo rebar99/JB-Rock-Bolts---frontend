@@ -73,7 +73,7 @@ const escapeHtml = (value) => String(value ?? "—")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 
-const printCreditNote = (cn) => {
+export const printCreditNote = (cn) => {
     const printWindow = window.open("", "_blank", "width=900,height=700");
     if (!printWindow) {
         toast.error("Please allow pop-ups to print the credit note.");
@@ -579,7 +579,7 @@ function CreditNoteForm({ saleType, editing, suggestedCN, onClose }) {
 }
 
 // ---- CN View ----------------------------------------------------------------
-function CreditNoteView({ cn, onClose }) {
+export function CreditNoteView({ cn, onClose }) {
     const cfg = REASON_CONFIG[cn.reason] || {};
     return (
         <div className="space-y-4">
@@ -594,7 +594,7 @@ function CreditNoteView({ cn, onClose }) {
                     </div>
                 ))}
             </div>
-            {cfg.showItems && cn.items?.length > 0 && (
+            {(cfg.showItems || cn.items?.length > 0) && cn.items?.length > 0 && (
                 <div className="overflow-x-auto rounded-lg border border-border">
                     <table className="w-full text-sm">
                         <thead className="bg-muted/50">
@@ -629,7 +629,10 @@ function CreditNoteView({ cn, onClose }) {
                     <div className="flex justify-between font-bold text-base border-t pt-1 mt-1"><span>Credit Note Total</span><span className="text-red-500">{inr(cn.total_amount)}</span></div>
                 </div>
             </div>
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => printCreditNote(cn)}>
+                    <Printer className="h-4 w-4 mr-1" /> Print
+                </Button>
                 <Button variant="outline" onClick={onClose}>Close</Button>
             </div>
         </div>
