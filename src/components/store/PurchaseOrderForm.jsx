@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Plus, Printer, Settings, ShoppingCart, Trash2, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,16 @@ import { amountInWords } from "@/components/store/PurchaseOrderSheet";
 
 
 const emptyLine = () => ({ item_description: "", quantity: 1, uom: "Nos", unit_rate: 0 });
+
+const PAYMENT_TERM_PRESETS = [
+    "15 Days After Delivery",
+    "30 Days After Delivery",
+    "45 Days After Delivery",
+    "60 Days After Delivery",
+    "90 Days After Delivery",
+    "Immediate / On Delivery",
+    "100% Advance",
+];
 
 const inputClass = "mt-1.5 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100";
 const Field = ({ label, children, className = "" }) => (
@@ -51,7 +61,7 @@ function buildPONumber(series, fyTag, prefix = "STR/0199/") {
     return `${prefix}${s}-${fy}`;
 }
 
-export default function PurchaseOrderForm({ orders = [], admin = false, onBack, editingOrder = null, initialPoType = null }) {
+export default function PurchaseOrderForm({ orders = [], admin = false, onBack, editingOrder = null, initialPoType = null, initialItem = null, backLabel = null }) {
     const queryClient = useQueryClient();
     const [manageItemsOpen, setManageItemsOpen] = useState(false);
     const [manageUomOpen, setManageUomOpen] = useState(false);
@@ -126,24 +136,80 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
     const [financialYear, setFinancialYear] = useState(() => initialParsed.fy || defaultFYTag());
     const [poSeries, setPoSeries] = useState(() => initialParsed.series || String((orders?.length || 0) + 1).padStart(2, "0"));
 
-    const [form, setForm] = useState(() => editingOrder ? ({
-        ...editingOrder,
-        po_type: editingOrder.po_type || "Regular Vendor PO",
-        // Older records may still contain the retired Draft status.  Show
-        // them as Pending Approval so the status selector never appears blank.
-        status: editingOrder.status === "Draft" ? "Pending Approval" : editingOrder.status,
-        po_date: editingOrder.po_date || new Date().toISOString().slice(0, 10),
-        items: (editingOrder.items || []).map(item => ({ item_description: item.item_description, quantity: item.quantity, uom: item.uom, unit_rate: item.unit_rate })),
-    }) : ({
-        order_number: buildPONumber(initialParsed.series, initialParsed.fy || defaultFYTag()),
-        po_type: initialPoType || "Regular Vendor PO",
-        supplier: "", vendor_code: "", vendor_address: "", vendor_contact: "", vendor_gst: "",
-        po_date: new Date().toISOString().slice(0, 10), reference: "Repeat Order",
-
-        gst_rate: 18, round_off: 0, freight_charges: 0, freight_gst_type: "With GST", price_basis: "FOR Tahliwal", packing_terms: "In your scope", freight_terms: "Extra", insurance_terms: "Included",
-        delivery_terms: "", inspection_terms: "At our Store Department", warranty_terms: "Only genuine material", payment_terms: "", quantity_variance: "As per actual", notes: "",
-        items: [emptyLine()], status: "Pending Approval",
-    }));
+    const [form, setForm] = useState(() => {
+        if (editingOrder) {
+            return {
+                ...editingOrder,
+                po_type: editingOrder.po_type || "Regular Vendor PO",
+                // Older records may still contain the retired Draft status.  Show
+                // them as Pending Approval so the status selector never appears blank.
+                status: editingOrder.status === "Draft" ? "Pending Approval" : editingOrder.status,
+                po_date: editingOrder.po_date || new Date().toISOString().slice(0, 10),
+                items: (editingOrder.items || []).map(item => ({ item_description: item.item_description, quantity: item.quantity, uom: item.uom, unit_rate: item.unit_rate })),
+            };
+        }
+        if (initialItem) {
+            const desc = (initialItem.stock_item && initialItem.stock_item !== "General")
+                ? initialItem.stock_item
+                : (initialItem.name || "");
+            const rate = Number(initialItem.rate || 0);
+            const uom = initialItem.uom || "Nos";
+            return {
+                order_number: buildPONumber(initialParsed.series, initialParsed.fy || defaultFYTag()),
+                po_type: initialPoType || "Regular Vendor PO",
+                supplier: initialItem.vendor_name || "",
+                vendor_code: "",
+                vendor_address: "",
+                vendor_contact: "",
+                vendor_gst: "",
+                po_date: new Date().toISOString().slice(0, 10),
+                reference: "Re-Order from Inventory",
+                gst_rate: 18,
+                round_off: 0,
+                freight_charges: 0,
+                freight_gst_type: "With GST",
+                price_basis: "FOR Tahliwal",
+                packing_terms: "In your scope",
+                freight_terms: "Extra",
+                insurance_terms: "Included",
+                delivery_terms: "",
+                inspection_terms: "At our Store Department",
+                warranty_terms: "Only genuine material",
+                payment_terms: "",
+                quantity_variance: "As per actual",
+                notes: `Re-order for ${initialItem.name}${initialItem.stock_item ? ` - ${initialItem.stock_item}` : ""}`,
+                items: [{ item_description: desc, quantity: "", uom: uom, unit_rate: "" }],
+                status: "Pending Approval",
+            };
+        }
+        return {
+            order_number: buildPONumber(initialParsed.series, initialParsed.fy || defaultFYTag()),
+            po_type: initialPoType || "Regular Vendor PO",
+            supplier: "",
+            vendor_code: "",
+            vendor_address: "",
+            vendor_contact: "",
+            vendor_gst: "",
+            po_date: new Date().toISOString().slice(0, 10),
+            reference: "Repeat Order",
+            gst_rate: 18,
+            round_off: 0,
+            freight_charges: 0,
+            freight_gst_type: "With GST",
+            price_basis: "FOR Tahliwal",
+            packing_terms: "In your scope",
+            freight_terms: "Extra",
+            insurance_terms: "Included",
+            delivery_terms: "",
+            inspection_terms: "At our Store Department",
+            warranty_terms: "Only genuine material",
+            payment_terms: "",
+            quantity_variance: "As per actual",
+            notes: "",
+            items: [emptyLine()],
+            status: "Pending Approval",
+        };
+    });
 
     // When PO Series / sequence number changes (e.g. user changes "21" to another number)
     const handleSeriesChange = (newSeries) => {
@@ -183,8 +249,9 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
         const gstAmount = subtotal * (Number(form.gst_rate) || 0) / 100;
         const freightCharges = Number(form.freight_charges) || 0;
         const freightGst = form.freight_gst_type === "Without GST" ? 0 : freightCharges * (Number(form.gst_rate) || 0) / 100;
-        return { subtotal, gstAmount, freightCharges, freightGst, grandTotal: subtotal + gstAmount + freightCharges + freightGst + (Number(form.round_off) || 0) };
-    }, [form.items, form.gst_rate, form.round_off, form.freight_charges, form.freight_gst_type]);
+        // round_off is display-only / informational — it does NOT affect the grand total
+        return { subtotal, gstAmount, freightCharges, freightGst, grandTotal: subtotal + gstAmount + freightCharges + freightGst };
+    }, [form.items, form.gst_rate, form.freight_charges, form.freight_gst_type]);
     const change = (key, value) => setForm(current => ({ ...current, [key]: value }));
 
     // Track if form has changed from original (only for edit mode)
@@ -197,6 +264,7 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
     }) : null, [editingOrder]);
     const isDirty = !editingOrder || JSON.stringify(form) !== initialFormRef;
 
+    // Defined before useEffect so it can be referenced without hoisting issues
     const applyVendorToPO = (vendor) => {
         if (!vendor) return;
         const contactParts = [vendor.person_name, vendor.contact].filter(Boolean);
@@ -218,9 +286,73 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
         toast.success(`Vendor "${vendor.vendor_name}" details auto-filled.`);
     };
 
+    // When opened via Re-Order from Inventory, find the previous vendor for this item
+    const reorderVendorName = useMemo(() => {
+        if (!initialItem) return null;
+        if (initialItem.vendor_name && String(initialItem.vendor_name).trim()) {
+            return String(initialItem.vendor_name).trim();
+        }
+        // Fallback: check candidate orders to find previous PO supplier for this item
+        const desc = (initialItem.stock_item && initialItem.stock_item !== "General")
+            ? initialItem.stock_item
+            : (initialItem.name || "");
+        const norm = (str) => String(str || "").toLowerCase().replace(/\s*,\s*/g, ", ").replace(/\s+/g, " ").trim();
+        const target = norm(desc);
+        if (target) {
+            for (const order of candidateOrders) {
+                const lines = order.items || order.line_items || [];
+                if (lines.some(l => norm(l.item_description) === target)) {
+                    if (order.supplier && String(order.supplier).trim()) {
+                        return String(order.supplier).trim();
+                    }
+                }
+            }
+        }
+        return null;
+    }, [initialItem, candidateOrders]);
+
+    // Vendor options to display: when reordering, show ONLY the previous vendor of this item/PO
+    const selectableVendors = useMemo(() => {
+        const activeVendors = vendorList.filter(v => v.status !== "Inactive");
+        if (initialItem && reorderVendorName) {
+            const norm = reorderVendorName.toLowerCase();
+            const matched = activeVendors.filter(v => (v.vendor_name || "").trim().toLowerCase() === norm);
+            if (matched.length > 0) return matched;
+            const matchedAny = vendorList.filter(v => (v.vendor_name || "").trim().toLowerCase() === norm);
+            if (matchedAny.length > 0) return matchedAny;
+            return [{
+                id: "reorder-prev-vendor",
+                vendor_name: reorderVendorName,
+                person_name: "",
+                vendor_gst: form.vendor_gst || ""
+            }];
+        }
+        return activeVendors;
+    }, [vendorList, initialItem, reorderVendorName, form.vendor_gst]);
+
+    // Auto-fill vendor details when opened via Re-Order from Inventory
+    useEffect(() => {
+        if (!initialItem) return;
+        const vendorName = (reorderVendorName || initialItem.vendor_name || "").trim();
+        if (vendorName) {
+            if (vendorList.length > 0) {
+                const matched = vendorList.find(v => (v.vendor_name || "").trim().toLowerCase() === vendorName.toLowerCase());
+                if (matched) {
+                    applyVendorToPO(matched);
+                    return;
+                }
+            }
+            if (!form.supplier) {
+                change("supplier", vendorName);
+            }
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initialItem, vendorList, reorderVendorName]);
+
     const handleSelectVendor = (vendorName) => {
         change("supplier", vendorName);
-        const matched = vendorList.find(v => (v.vendor_name || "").trim().toLowerCase() === vendorName.trim().toLowerCase());
+        const matched = selectableVendors.find(v => (v.vendor_name || "").trim().toLowerCase() === vendorName.trim().toLowerCase())
+            || vendorList.find(v => (v.vendor_name || "").trim().toLowerCase() === vendorName.trim().toLowerCase());
         if (matched) {
             applyVendorToPO(matched);
         }
@@ -415,11 +547,16 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-4"><img src={jbEngineeringLogo} alt="JB Engineering" className="h-16 w-24 rounded-lg border object-contain" /><div><h1 className="text-2xl font-extrabold text-red-700 sm:text-3xl">RE-Bar Couplers India Private Limited</h1><p className="mt-1 font-semibold text-slate-800">VPO Palkwaha, Tehsil Haroli, District Una, Himachal Pradesh - 177220</p><p className="font-semibold text-slate-800">HO: 10 A&amp;B, Block 23, Industrial Area, Nangal Jarialan, Distt. Una - 177212</p><p className="mt-1 text-sm font-semibold text-slate-700">Cell: +91 9888603791 · seema@jbengineeringcorporation.com</p><p className="text-sm font-semibold text-slate-700">www.jbengineeringcorporation.com · GST No. 02AAFCR5621L1ZG</p></div></div>
-                <div className="flex shrink-0 gap-2">{onBack && <Button type="button" variant="outline" onClick={onBack}><ArrowLeft className="mr-2 h-4 w-4" />PO List</Button>}</div>
+                <div className="flex shrink-0 gap-2">{onBack && <Button type="button" variant="outline" onClick={onBack}><ArrowLeft className="mr-2 h-4 w-4" />{backLabel || "PO List"}</Button>}</div>
             </div>
             <div className="mt-5 border-t pt-5"><p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-700">Vendor document</p><h2 className="mt-1 text-3xl font-bold text-slate-950">{editingOrder ? "Edit Purchase Order" : "Create Purchase Order"}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{editingOrder ? "Update vendor, material lines, rates, quantities, status and PO terms. Items/Stock records are independent from this Purchase Order." : "Enter the vendor details, item lines, GST, totals and terms to create the purchase order."}</p></div>
         </div>
         {!admin && <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">You have View Only access. You can view purchase orders, but only a Store Admin can save them.</div>}
+        {initialItem && (
+            <div className="mt-5 rounded-lg border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900">
+                <strong>Re-Order:</strong> {initialItem.name}{initialItem.stock_item ? ` › ${initialItem.stock_item}` : ""} — Item details have been pre-filled. Enter the required quantity to complete this Purchase Order.
+            </div>
+        )}
         {!editingOrder && !initialPoType && <section className="mt-5 rounded-xl border bg-white p-5 shadow-sm sm:p-6"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-700">PO Type</p><h2 className="mt-1 text-lg font-bold">Choose the purchase-order flow</h2><div className="mt-4 grid gap-3 sm:grid-cols-2"><button type="button" onClick={() => change("po_type", "Regular Vendor PO")} className={`rounded-xl border-2 p-4 text-left transition ${!isLocalVendor ? "border-cyan-600 bg-cyan-50" : "border-slate-200 hover:border-cyan-200"}`}><p className="font-bold text-slate-950">Regular Vendor PO</p><p className="mt-1 text-xs text-slate-600">Full vendor details, GST, delivery address and standard terms.</p></button><button type="button" onClick={() => change("po_type", "One Time Vendor PO")} className={`rounded-xl border-2 p-4 text-left transition ${isLocalVendor ? "border-cyan-600 bg-cyan-50" : "border-slate-200 hover:border-cyan-200"}`}><p className="font-bold text-slate-950">One Time Vendor PO</p><p className="mt-1 text-xs text-slate-600">Quick, simple form for local purchases with only the essential fields.</p></button></div></section>}
         <div className="po-print-sheet hidden">
             <div className="po-print-company"><img src={jbEngineeringLogo} alt="JB Engineering" /><div><h1>RE-Bar Couplers India Private Limited</h1><p>VPO Palkwaha, Tehsil Haroli, District Una, Himachal Pradesh - 177220</p><p>HO: 10 A&amp;B, Block 23, Industrial Area, Nangal Jarialan, Distt. Una, Himachal Pradesh - 177212</p><p>Cell No. +91 9888603791 · seema@jbengineeringcorporation.com</p><p>www.jbengineeringcorporation.com · GST No. 02AAFCR5621L1ZG</p></div></div>
@@ -449,16 +586,18 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
                     <Field label="Select Vendor">
                         <select
                             disabled={!admin}
-                            value={currentMatchedVendor ? currentMatchedVendor.vendor_name : ""}
+                            value={currentMatchedVendor ? currentMatchedVendor.vendor_name : form.supplier || ""}
                             onChange={(e) => {
-                                const found = vendorList.find(v => v.vendor_name === e.target.value);
+                                const found = selectableVendors.find(v => v.vendor_name === e.target.value);
                                 if (found) applyVendorToPO(found);
                                 else if (e.target.value === "") change("supplier", "");
                             }}
                             className={inputClass}
                         >
-                            <option value="">-- Select Vendor to Auto-fill --</option>
-                            {vendorList.filter(v => v.status !== "Inactive").map(v => (
+                            {(!initialItem || !reorderVendorName) && (
+                                <option value="">-- Select Vendor to Auto-fill --</option>
+                            )}
+                            {selectableVendors.map(v => (
                                 <option key={v.id} value={v.vendor_name}>
                                     {v.vendor_name} {v.person_name ? `(${v.person_name})` : ""} {v.vendor_gst ? `• GST: ${v.vendor_gst}` : ""}
                                 </option>
@@ -479,7 +618,7 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
                                 placeholder="Enter or select vendor name"
                             />
                             <datalist id="store-vendor-suggestions">
-                                {vendorList.map(v => (
+                                {selectableVendors.map(v => (
                                     <option key={v.id} value={v.vendor_name}>
                                         {v.person_name ? `${v.person_name} · ` : ""}{v.vendor_gst || ""}
                                     </option>
@@ -575,6 +714,10 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
                         <tbody>
                             {form.items.map((line, index) => {
                                 const lastPrice = findLastPoPrice(line.item_description);
+                                // For re-orders: fall back to inventory rate as reference price when no PO history exists
+                                const displayLastPrice = lastPrice != null
+                                    ? lastPrice
+                                    : (initialItem && index === 0 && Number(initialItem.rate) > 0 ? Number(initialItem.rate) : null);
                                 return (
                                     <tr key={index} className="border-t">
                                         <td className="px-4 py-3 text-center text-slate-500">{index + 1}</td>
@@ -623,7 +766,7 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
                                                     className="h-9 w-full flex items-center justify-end rounded border border-red-200 bg-red-50/70 px-2.5 text-right font-bold text-red-600 select-none cursor-default"
                                                     title="Last PO Price (INR) - Reference only"
                                                 >
-                                                    {lastPrice != null ? money(lastPrice) : "N/A"}
+                                                    {displayLastPrice != null ? money(displayLastPrice) : "N/A"}
                                                 </div>
                                             </td>
                                         )}
@@ -729,7 +872,7 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
                     </div>
                 </div>
             </section>
-            <section className="rounded-xl border bg-card p-5 shadow-sm sm:p-6"><h2 className="font-bold">Terms and conditions</h2><p className="mt-1 text-xs text-muted-foreground">Update the standard terms from the Excel format as needed.</p><div className="mt-5 grid gap-4 md:grid-cols-2 lg:grid-cols-3"><Field label="Price"><input disabled={!admin} value={form.price_basis} onChange={e => change("price_basis", e.target.value)} className={inputClass} /></Field><Field label="Packing & Forwarding"><input disabled={!admin} value={form.packing_terms} onChange={e => change("packing_terms", e.target.value)} className={inputClass} /></Field><Field label="Freight & Transportation"><input disabled={!admin} value={form.freight_terms} onChange={e => change("freight_terms", e.target.value)} className={inputClass} /></Field><Field label="Insurance"><input disabled={!admin} value={form.insurance_terms} onChange={e => change("insurance_terms", e.target.value)} className={inputClass} /></Field><Field label="Inspection"><input disabled={!admin} value={form.inspection_terms} onChange={e => change("inspection_terms", e.target.value)} className={inputClass} /></Field><Field label="Guarantee / Warranty"><input disabled={!admin} value={form.warranty_terms} onChange={e => change("warranty_terms", e.target.value)} className={inputClass} /></Field><Field label="Payment Terms"><input disabled={!admin} value={form.payment_terms} onChange={e => change("payment_terms", e.target.value)} className={inputClass} placeholder="e.g. 30 days after delivery" /></Field><Field label="Quantity Variance"><input disabled={!admin} value={form.quantity_variance} onChange={e => change("quantity_variance", e.target.value)} className={inputClass} /></Field><Field label="Additional notes" className="!justify-start"><textarea disabled={!admin} value={form.notes} onChange={e => change("notes", e.target.value)} className={`${inputClass} min-h-[2.5rem] h-10 py-2 resize-y`} /></Field></div><Field label="Delivery" className="mt-4"><textarea disabled={!admin} value={form.delivery_terms} onChange={e => change("delivery_terms", e.target.value)} className={`${inputClass} h-20 py-2 resize-y`} placeholder="Delivery period and location" /></Field><Field label="Remark 1" className="mt-4"><textarea disabled={!admin} value={form.remark_1} onChange={e => change("remark_1", e.target.value)} className={`${inputClass} h-12 py-2`} placeholder="e.g. Steel Material`s � 10% Quantity Will Be Allowed." /></Field><Field label="Remark 2 (Red)" className="mt-4"><textarea disabled={!admin} value={form.remark_2} onChange={e => change("remark_2", e.target.value)} className={`${inputClass} h-12 py-2 border-red-300 focus:border-red-500 focus:ring-red-200 text-red-700 placeholder-red-300`} placeholder="e.g. 1. MTC to be supplied along with the Consignment." /></Field></section>
+            <section className="rounded-xl border bg-card p-5 shadow-sm sm:p-6"><h2 className="font-bold">Terms and conditions</h2><p className="mt-1 text-xs text-muted-foreground">Update the standard terms from the Excel format as needed.</p><div className="mt-5 grid gap-4 md:grid-cols-2 lg:grid-cols-3"><Field label="Price"><input disabled={!admin} value={form.price_basis} onChange={e => change("price_basis", e.target.value)} className={inputClass} /></Field><Field label="Packing & Forwarding"><input disabled={!admin} value={form.packing_terms} onChange={e => change("packing_terms", e.target.value)} className={inputClass} /></Field><Field label="Freight & Transportation"><input disabled={!admin} value={form.freight_terms} onChange={e => change("freight_terms", e.target.value)} className={inputClass} /></Field><Field label="Insurance"><input disabled={!admin} value={form.insurance_terms} onChange={e => change("insurance_terms", e.target.value)} className={inputClass} /></Field><Field label="Inspection"><input disabled={!admin} value={form.inspection_terms} onChange={e => change("inspection_terms", e.target.value)} className={inputClass} /></Field><Field label="Guarantee / Warranty"><input disabled={!admin} value={form.warranty_terms} onChange={e => change("warranty_terms", e.target.value)} className={inputClass} /></Field><Field label="Payment Terms" className="!justify-start"><input disabled={!admin} list="po-payment-terms-list" value={form.payment_terms} onChange={e => change("payment_terms", e.target.value)} className={inputClass} placeholder="e.g. 30 Days After Delivery" /><datalist id="po-payment-terms-list">{PAYMENT_TERM_PRESETS.map(opt => <option key={opt} value={opt} />)}</datalist>{admin && <div className="mt-1.5 flex flex-wrap gap-1">{PAYMENT_TERM_PRESETS.map(preset => <button key={preset} type="button" onClick={() => change("payment_terms", preset)} className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition ${form.payment_terms === preset ? "bg-cyan-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>{preset}</button>)}</div>}</Field><Field label="Quantity Variance"><input disabled={!admin} value={form.quantity_variance} onChange={e => change("quantity_variance", e.target.value)} className={inputClass} /></Field><Field label="Additional notes" className="!justify-start"><textarea disabled={!admin} value={form.notes} onChange={e => change("notes", e.target.value)} className={`${inputClass} min-h-[2.5rem] h-10 py-2 resize-y`} /></Field></div><Field label="Delivery" className="mt-4"><textarea disabled={!admin} value={form.delivery_terms} onChange={e => change("delivery_terms", e.target.value)} className={`${inputClass} h-20 py-2 resize-y`} placeholder="Delivery period and location" /></Field><Field label="Remark 1" className="mt-4"><textarea disabled={!admin} value={form.remark_1} onChange={e => change("remark_1", e.target.value)} className={`${inputClass} h-12 py-2`} placeholder="e.g. Steel Material`s � 10% Quantity Will Be Allowed." /></Field><Field label="Remark 2 (Red)" className="mt-4"><textarea disabled={!admin} value={form.remark_2} onChange={e => change("remark_2", e.target.value)} className={`${inputClass} h-12 py-2 border-red-300 focus:border-red-500 focus:ring-red-200 text-red-700 placeholder-red-300`} placeholder="e.g. 1. MTC to be supplied along with the Consignment." /></Field></section>
             <div className="flex flex-wrap justify-end gap-3">{onBack && <Button type="button" variant="outline" onClick={onBack}>Cancel</Button>}{admin && <Button type="submit" disabled={save.isPending}>{save.isPending ? "Sending..." : editingOrder ? "Update & Send Approval" : "Send Approval"}</Button>}</div>
         </form>
         <ItemMasterManageDialog open={manageItemsOpen} onOpenChange={setManageItemsOpen} type="STORE" />

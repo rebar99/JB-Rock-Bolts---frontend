@@ -13,7 +13,7 @@ import StoreModule from "./StoreModule";
 const menu = [
     { label: "Inventory", icon: Boxes, slug: "items" },
     { label: "Material Requests", icon: ClipboardList, slug: "requests", count: 0 }, { label: "Purchase", icon: ShoppingCart, slug: "purchase", children: ["Quotations", "Purchase Orders", "Goods Receipt", "Purchase History"] },
-    { label: "Suppliers", icon: Truck, slug: "suppliers" }, { label: "Stock Operations", icon: ArrowLeftRight, slug: "operations" }, { label: "Reports", icon: FileBarChart2, slug: "reports" },
+    { label: "Suppliers", icon: Truck, slug: "suppliers" }, { label: "Reports", icon: FileBarChart2, slug: "reports" },
     { label: "Approvals", icon: ClipboardCheck, slug: "approvals", count: 0 }, { label: "Masters", icon: Archive, slug: "masters" }, { label: "Documents", icon: FileText, slug: "documents" }, { label: "Users & Permissions", icon: Users, slug: "users" }, { label: "Settings", icon: Settings, slug: "settings" },
 ];
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { ArrowDownUp, CheckCircle2, ChevronDown, ChevronUp, Clock3, Eye, FileText, GripVertical, Package, Pencil, Plus, Printer, Search, Trash2, Truck, ClipboardCheck, BellRing, AlertCircle, XCircle, PackageCheck, ExternalLink, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import PurchaseOrderForm from "@/components/store/PurchaseOrderForm";
@@ -87,6 +87,7 @@ export default function StorePurchaseOrders({ orders = [], ordersError = null, a
         }
     }, [itemMasterList]);
     const navigate = useNavigate();
+    const location = useLocation();
     const { user: currentUser } = useAuth();
     const [screen, setScreen] = useState("list");
     const [search, setSearch] = useState("");
@@ -96,6 +97,19 @@ export default function StorePurchaseOrders({ orders = [], ordersError = null, a
     const [viewOrder, setViewOrder] = useState(null);
     const [editingOrder, setEditingOrder] = useState(null);
     const [createType, setCreateType] = useState(null);
+    const [reorderItem, setReorderItem] = useState(null);
+
+    // Auto-open PO form pre-filled when navigated here via Re-Order button from Inventory
+    useEffect(() => {
+        if (location.state?.reorderItem) {
+            setReorderItem(location.state.reorderItem);
+            setCreateType("Regular Vendor PO");
+            setScreen("create");
+            // Clear the navigation state so a page refresh doesn't re-trigger
+            window.history.replaceState({}, document.title);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
     const { data: myPendingApprovals = [] } = useQuery({
         queryKey: ["my-pending-po-approvals"],
         queryFn: fetchMyPendingPOApprovals,
@@ -236,7 +250,7 @@ export default function StorePurchaseOrders({ orders = [], ordersError = null, a
         window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
     };
     if (screen === "create" && !createType) return <main className="mx-auto max-w-3xl p-5 sm:p-8"><section className="rounded-2xl border bg-white p-6 shadow-card sm:p-8"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-700">Create PO</p><h1 className="mt-2 text-2xl font-extrabold text-slate-950">Select Purchase Order Type</h1><p className="mt-2 text-sm text-muted-foreground">Choose the flow that fits this vendor before filling the Purchase Order.</p><div className="mt-6 grid gap-4 sm:grid-cols-2"><button type="button" onClick={() => setCreateType("Regular Vendor PO")} className="rounded-xl border-2 border-slate-200 p-5 text-left transition hover:border-cyan-600 hover:bg-cyan-50"><h2 className="font-bold text-slate-950">Regular Vendor PO</h2><p className="mt-2 text-sm text-muted-foreground">Complete vendor details, GST, delivery address and standard terms.</p></button><button type="button" onClick={() => setCreateType("One Time Vendor PO")} className="rounded-xl border-2 border-slate-200 p-5 text-left transition hover:border-cyan-600 hover:bg-cyan-50"><h2 className="font-bold text-slate-950">One Time Vendor PO</h2><p className="mt-2 text-sm text-muted-foreground">A clean, quick form with only the essential purchase details.</p></button></div><div className="mt-6"><Button type="button" variant="outline" onClick={() => setScreen("list")}>Cancel</Button></div></section></main>;
-    if (screen === "create" || screen === "edit") return <PurchaseOrderForm orders={orders} admin={admin || (editingOrder && ["Rejected by Approved By", "Rejected by Final Approved By", "Rejected"].includes(editingOrder.status) && (Number(editingOrder.created_by_user_id) === Number(currentUser?.id) || (editingOrder.created_by_user_id == null && Boolean(currentUser?.name && editingOrder.created_by) && (editingOrder.created_by || "").toLowerCase() === (currentUser?.name || "").toLowerCase())))} editingOrder={editingOrder} initialPoType={createType} onBack={() => { setScreen("list"); setEditingOrder(null); setCreateType(null); }} />;
+    if (screen === "create" || screen === "edit") return <PurchaseOrderForm orders={orders} admin={admin || (editingOrder && ["Rejected by Approved By", "Rejected by Final Approved By", "Rejected"].includes(editingOrder.status) && (Number(editingOrder.created_by_user_id) === Number(currentUser?.id) || (editingOrder.created_by_user_id == null && Boolean(currentUser?.name && editingOrder.created_by) && (editingOrder.created_by || "").toLowerCase() === (currentUser?.name || "").toLowerCase())))} editingOrder={editingOrder} initialPoType={createType} initialItem={reorderItem} backLabel={reorderItem ? "Back to Inventory" : "PO List"} onBack={() => { setScreen("list"); setEditingOrder(null); setCreateType(null); if (reorderItem) { setReorderItem(null); navigate("/store-purchase/items"); } else { setReorderItem(null); } }} />;
     return <main className="min-h-[calc(100vh-4rem)] w-full bg-white px-4 py-7 sm:px-6 lg:px-8"><div className="w-full"><div className="relative text-center"><h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">Purchase Orders</h1><p className="mt-2 text-sm text-muted-foreground">Create vendor POs, track ordered quantities and view purchase details.</p><div className="mt-6 flex flex-wrap justify-end gap-2"><Button variant="outline" onClick={() => navigate("/store-purchase/approvals")}><ClipboardCheck className="mr-2 h-4 w-4" />PO Approvals</Button>{admin && <Button onClick={() => { setCreateType(null); setScreen("create"); }} className="bg-gradient-primary shadow-elegant hover:opacity-90"><Plus className="mr-2 h-4 w-4" />Create PO</Button>}</div></div>
         <div className="mt-6 grid gap-4 sm:grid-cols-3"><StatCard label="Total Purchase Orders" value={formatNumber(totals.count)} icon={FileText} color="bg-primary/10 text-primary" /><StatCard label="Total Purchase Value" value={`₹${formatNumber(totals.value)}`} icon={Truck} color="bg-success/15 text-success" /><StatCard label="Approval Pending PO" value={formatNumber(totals.pending)} icon={Clock3} color="bg-warning/15 text-warning" onClick={() => { if (myPendingApprovals.length > 0) setApprovalPopupOpen(true); else navigate("/store-purchase/approvals"); }} /></div>
         {myPendingApprovals.length > 0 && (

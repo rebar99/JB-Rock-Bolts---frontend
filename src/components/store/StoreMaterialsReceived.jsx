@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Eye, FileText, FileUp, PackageCheck, Pencil, Plus, Save, Trash2, Upload, CreditCard, X } from "lucide-react";
+import { ArrowLeft, Eye, FileText, FileUp, PackageCheck, Pencil, Plus, Save, Trash2, Upload, CreditCard, X, Calendar, AlertCircle, Clock, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createStoreMaterialReceipt, deleteStoreMaterialReceipt, fetchStoreMaterialReceipts, patchStoreMaterialReceiptBill, patchStoreMaterialReceiptPayment, resolveFileUrl, updateStoreMaterialReceipt, uploadStoreMaterialReceiptBill } from "@/lib/api";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -19,17 +19,61 @@ function fmtDateTime(val) {
     return d.toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true });
 }
 
+function fmtDate(val) {
+    if (!val) return "—";
+    const d = new Date(val);
+    if (isNaN(d)) return val;
+    return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function parsePaymentTermsDays(terms) {
+    if (!terms) return null;
+    const t = String(terms).trim().toLowerCase();
+    if (t.includes("advance") || t.includes("dispatch") || t.includes("immediate")) return 0;
+    const rangeMatch = t.match(/(\d+)\s*(?:to|-)\s*(\d+)\s*day/);
+    if (rangeMatch) return parseInt(rangeMatch[2], 10);
+    const dayMatch = t.match(/(\d+)\s*day/);
+    if (dayMatch) return parseInt(dayMatch[1], 10);
+    const nums = t.match(/\d+/g);
+    if (nums && nums.length > 0) return parseInt(nums[nums.length - 1], 10);
+    return null;
+}
+
+function calculateDueDate(invDate, terms) {
+    if (!invDate) return null;
+    const days = parsePaymentTermsDays(terms);
+    if (days === null) return null;
+    const d = new Date(invDate);
+    if (isNaN(d)) return null;
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
+}
+
 /** Payment status badge colours */
 const PAYMENT_COLORS = {
-    "Unpaid":         "border-rose-200 bg-rose-50 text-rose-700",
-    "Partially Paid": "border-amber-200 bg-amber-50 text-amber-700",
-    "Paid":           "border-emerald-200 bg-emerald-50 text-emerald-700",
+    "Upcoming":       "border-sky-300 bg-sky-50 text-sky-700",
+    "Due Today":      "border-amber-400 bg-amber-50 text-amber-800 font-extrabold shadow-sm",
+    "Overdue":        "border-rose-300 bg-rose-50 text-rose-700 font-extrabold shadow-sm",
+    "Partially Paid": "border-orange-300 bg-orange-50 text-orange-700",
+    "Paid":           "border-emerald-300 bg-emerald-50 text-emerald-700",
+    "Unpaid":         "border-slate-300 bg-slate-50 text-slate-700",
 };
 
-function PaymentBadge({ status }) {
+function PaymentBadge({ status, isOverdue, daysOverdue, daysRemaining }) {
+    const st = status || "Upcoming";
+    let subtext = "";
+    if (st === "Overdue" || isOverdue) {
+        if (daysOverdue > 0) subtext = `(${daysOverdue}d overdue)`;
+    } else if (st === "Due Today") {
+        subtext = "(Today)";
+    } else if (st === "Upcoming" && daysRemaining !== undefined && daysRemaining !== null && daysRemaining > 0) {
+        subtext = `(in ${daysRemaining}d)`;
+    }
+
     return (
-        <span className={`rounded-full border px-3 py-1 text-xs font-bold ${PAYMENT_COLORS[status] || PAYMENT_COLORS["Unpaid"]}`}>
-            {status || "Unpaid"}
+        <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${PAYMENT_COLORS[st] || PAYMENT_COLORS["Upcoming"]}`}>
+            <span>{st}</span>
+            {subtext && <span className="text-[10px] opacity-80">{subtext}</span>}
         </span>
     );
 }
@@ -37,40 +81,91 @@ function PaymentBadge({ status }) {
 /** Payment edit dialog */
 function PaymentDialog({ receipt, onClose, onSave, isSaving }) {
     const invoiceTotal = Number(receipt?.invoice_total || 0);
-    const [status, setStatus]   = useState(receipt?.payment_status || "Unpaid");
+    const [status, setStatus]   = useState(receipt?.payment_status || "Upcoming");
     const [amount, setAmount]   = useState(String(receipt?.amount_paid || 0));
     const [pDate, setPDate]     = useState(receipt?.payment_date || today());
+    const [dueDate, setDueDate] = useState(receipt?.payment_due_date || "");
     const [ref, setRef]         = useState(receipt?.payment_reference || "");
+
+    useEffect(() => {
+        if (receipt) {
+            setStatus(receipt.payment_status || "Upcoming");
+            setAmount(String(receipt.amount_paid || 0));
+            setPDate(receipt.payment_date || today());
+            setDueDate(receipt.payment_due_date || "");
+            setRef(receipt.payment_reference || "");
+        }
+    }, [receipt]);
 
     const balance = invoiceTotal - Number(amount || 0);
 
+    const handleAmountChange = val => {
+        setAmount(val);
+        const num = Number(val || 0);
+        if (num >= invoiceTotal && invoiceTotal > 0) {
+            setStatus("Paid");
+        } else if (num > 0) {
+            setStatus("Partially Paid");
+        } else {
+            const dd = dueDate || receipt?.payment_due_date;
+            const curToday = today();
+            if (dd) {
+                if (dd < curToday) setStatus("Overdue");
+                else if (dd === curToday) setStatus("Due Today");
+                else setStatus("Upcoming");
+            } else {
+                setStatus("Upcoming");
+            }
+        }
+    };
+
     return (
         <Dialog open={!!receipt} onOpenChange={open => !open && onClose()}>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent className="sm:max-w-lg">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <CreditCard className="h-5 w-5 text-cyan-700" /> Update Payment
                     </DialogTitle>
                     <DialogDescription>
-                        Invoice {receipt?.invoice_number} — {receipt?.vendor_name}
+                        Invoice {receipt?.invoice_number} — {receipt?.vendor_name} ({receipt?.order_number})
                     </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-4 py-2">
-                    {/* Invoice Total (read-only) */}
-                    <div className="rounded-lg border bg-slate-50 px-4 py-3 flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Invoice Total</span>
-                        <span className="font-bold text-slate-800">{money(invoiceTotal)}</span>
+                    {/* Invoice & Payment terms summary */}
+                    <div className="rounded-lg border bg-slate-50 p-3 grid grid-cols-2 gap-3 text-xs">
+                        <div>
+                            <span className="text-muted-foreground block">Material Received Date</span>
+                            <span className="font-semibold text-slate-800">{fmtDate(receipt?.invoice_date)}</span>
+                        </div>
+                        <div>
+                            <span className="text-muted-foreground block">PO Payment Terms</span>
+                            <span className="font-semibold text-cyan-700">{receipt?.payment_terms || "Not specified in PO"}</span>
+                        </div>
+                        <div>
+                            <span className="text-muted-foreground block">Invoice Total</span>
+                            <span className="font-bold text-slate-900 text-sm">{money(invoiceTotal)}</span>
+                        </div>
+                        <div>
+                            <span className="text-muted-foreground block">Balance Pending</span>
+                            <span className={`font-bold text-sm ${balance <= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                                {money(Math.max(0, balance))}
+                            </span>
+                        </div>
                     </div>
 
-                    {/* Payment Status */}
+                    {/* Payment Due Date */}
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Payment Status *</label>
-                        <select value={status} onChange={e => setStatus(e.target.value)} className={input}>
-                            <option value="Unpaid">Unpaid</option>
-                            <option value="Partially Paid">Partially Paid</option>
-                            <option value="Paid">Paid</option>
-                        </select>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                            Payment Due Date
+                            <span className="text-xs font-normal text-muted-foreground ml-1.5">(Auto-calculated from Received Date + Payment Terms)</span>
+                        </label>
+                        <input
+                            type="date"
+                            value={dueDate}
+                            onChange={e => setDueDate(e.target.value)}
+                            className={input}
+                        />
                     </div>
 
                     {/* Amount Paid */}
@@ -78,29 +173,51 @@ function PaymentDialog({ receipt, onClose, onSave, isSaving }) {
                         <label className="block text-sm font-medium text-slate-700 mb-1">Amount Paid (₹)</label>
                         <input
                             type="number" min="0" step="0.01" max={invoiceTotal}
-                            value={amount} onChange={e => setAmount(e.target.value)}
+                            value={amount} onChange={e => handleAmountChange(e.target.value)}
                             className={input} placeholder="0.00"
                         />
-                        {Number(amount) > 0 && (
-                            <p className={`mt-1 text-xs font-medium ${balance <= 0 ? "text-emerald-600" : "text-amber-600"}`}>
+                        <div className="mt-1 flex items-center justify-between text-xs">
+                            <span className={balance <= 0 ? "text-emerald-600 font-semibold" : "text-amber-600 font-medium"}>
                                 Balance Due: {money(Math.max(0, balance))}
-                            </p>
-                        )}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() => handleAmountChange(String(invoiceTotal))}
+                                className="text-cyan-700 hover:underline font-semibold"
+                            >
+                                Pay Full Amount ({money(invoiceTotal)})
+                            </button>
+                        </div>
                     </div>
 
-                    {/* Payment Date */}
+                    {/* Payment Status */}
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Payment Date</label>
-                        <input type="date" value={pDate} onChange={e => setPDate(e.target.value)} className={input} />
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Payment Status *</label>
+                        <select value={status} onChange={e => setStatus(e.target.value)} className={input}>
+                            <option value="Upcoming">Upcoming (Future due date)</option>
+                            <option value="Due Today">Due Today</option>
+                            <option value="Overdue">Overdue (Past due date & pending)</option>
+                            <option value="Partially Paid">Partially Paid (Partial amount paid)</option>
+                            <option value="Paid">Paid (Full payment completed)</option>
+                            <option value="Unpaid">Unpaid</option>
+                        </select>
                     </div>
 
-                    {/* Reference */}
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Reference (Cheque / NEFT / UTR)</label>
-                        <input
-                            type="text" value={ref} onChange={e => setRef(e.target.value)}
-                            className={input} placeholder="e.g. NEFT-20241001-001"
-                        />
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        {/* Payment Date */}
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Payment Date</label>
+                            <input type="date" value={pDate} onChange={e => setPDate(e.target.value)} className={input} />
+                        </div>
+
+                        {/* Reference */}
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Reference (UTR / Cheque / NEFT)</label>
+                            <input
+                                type="text" value={ref} onChange={e => setRef(e.target.value)}
+                                className={input} placeholder="e.g. UTR-20261112-987"
+                            />
+                        </div>
                     </div>
                 </div>
 
@@ -108,7 +225,13 @@ function PaymentDialog({ receipt, onClose, onSave, isSaving }) {
                     <Button variant="outline" onClick={onClose}>Cancel</Button>
                     <Button
                         disabled={isSaving}
-                        onClick={() => onSave({ payment_status: status, amount_paid: Number(amount || 0), payment_date: pDate || null, payment_reference: ref || null })}
+                        onClick={() => onSave({
+                            payment_status: status,
+                            amount_paid: Number(amount || 0),
+                            payment_date: pDate || null,
+                            payment_reference: ref || null,
+                            payment_due_date: dueDate || null
+                        })}
                     >
                         {isSaving ? "Saving…" : "Save Payment"}
                     </Button>
@@ -145,6 +268,27 @@ function Metric({ label, value }) {
 }
 
 function MaterialsReceivedList({ admin, isLoading, onAdd, onBack, onDelete, onEdit, onDeleteBill, onView, onPayment, receipts }) {
+    const [filterStatus, setFilterStatus] = useState("All");
+    const [expandedItems, setExpandedItems] = useState({});
+
+    const counts = useMemo(() => {
+        const c = { All: receipts.length, Overdue: 0, "Due Today": 0, Upcoming: 0, "Partially Paid": 0, Paid: 0 };
+        receipts.forEach(r => {
+            if (r.payment_status === "Paid") c.Paid++;
+            else if (r.payment_status === "Partially Paid") c["Partially Paid"]++;
+            else if (r.payment_status === "Due Today") c["Due Today"]++;
+            else if (r.payment_status === "Overdue" || r.is_overdue) c.Overdue++;
+            else c.Upcoming++;
+        });
+        return c;
+    }, [receipts]);
+
+    const filteredReceipts = useMemo(() => {
+        if (filterStatus === "All") return receipts;
+        if (filterStatus === "Overdue") return receipts.filter(r => r.payment_status === "Overdue" || r.is_overdue);
+        return receipts.filter(r => r.payment_status === filterStatus);
+    }, [receipts, filterStatus]);
+
     return (
         <main className="min-h-[calc(100vh-4rem)] w-full bg-slate-50 px-4 py-7 sm:px-6 lg:px-8">
             <div className="w-full">
@@ -153,7 +297,37 @@ function MaterialsReceivedList({ admin, isLoading, onAdd, onBack, onDelete, onEd
                     <div>
                         <p className="text-sm font-medium text-cyan-700">Purchase Order</p>
                         <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">Materials Received</h1>
-                        <p className="mt-2 text-sm text-muted-foreground">Review supplier invoices and received quantities against Purchase Orders.</p>
+                        <p className="mt-2 text-sm text-muted-foreground">Review supplier invoices, received quantities, and automated payment due dates against Purchase Orders.</p>
+
+                        {/* Status Filter Pills */}
+                        <div className="mt-4 flex flex-wrap items-center gap-2">
+                            {[
+                                { label: "All", count: counts.All, color: "hover:bg-slate-100" },
+                                { label: "Overdue", count: counts.Overdue, color: "text-rose-700 bg-rose-50 border-rose-200" },
+                                { label: "Due Today", count: counts["Due Today"], color: "text-amber-800 bg-amber-50 border-amber-300" },
+                                { label: "Upcoming", count: counts.Upcoming, color: "text-sky-700 bg-sky-50 border-sky-200" },
+                                { label: "Partially Paid", count: counts["Partially Paid"], color: "text-orange-700 bg-orange-50 border-orange-200" },
+                                { label: "Paid", count: counts.Paid, color: "text-emerald-700 bg-emerald-50 border-emerald-200" },
+                            ].map(item => (
+                                <button
+                                    key={item.label}
+                                    type="button"
+                                    onClick={() => setFilterStatus(item.label)}
+                                    className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                                        filterStatus === item.label
+                                            ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                                            : `${item.color || "bg-white text-slate-700 border-slate-200"}`
+                                    }`}
+                                >
+                                    <span>{item.label}</span>
+                                    <span className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
+                                        filterStatus === item.label ? "bg-white/20 text-white" : "bg-black/5"
+                                    }`}>
+                                        {item.count}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
                         {onBack && <Button type="button" variant="outline" onClick={onBack}><ArrowLeft className="mr-2 h-4 w-4" />Purchase Order List</Button>}
@@ -165,7 +339,7 @@ function MaterialsReceivedList({ admin, isLoading, onAdd, onBack, onDelete, onEd
                 <div className="mt-6 space-y-4">
                     {isLoading ? (
                         <div className="rounded-xl border bg-white p-12 text-center text-muted-foreground">Loading records…</div>
-                    ) : receipts.length ? receipts.map((receipt, index) => {
+                    ) : filteredReceipts.length ? filteredReceipts.map((receipt, index) => {
                         const totalQty = (receipt.lines || []).reduce((sum, line) => sum + Number(line.received_quantity || 0), 0);
                         const totalAmount = (receipt.lines || []).reduce((sum, line) => sum + Number(line.amount || 0), 0);
                         const freightCharge = Number(receipt.freight_charge || 0);
@@ -173,6 +347,8 @@ function MaterialsReceivedList({ admin, isLoading, onAdd, onBack, onDelete, onEd
                         const invoiceTotal = Number(receipt.invoice_total ?? totalAmount + freightCharge + gstAmount);
                         const items = (receipt.lines || []).map(line => line.item_description).join(", ");
                         const balance = invoiceTotal - Number(receipt.amount_paid || 0);
+                        const isExpanded = !!expandedItems[receipt.id];
+                        const lineCount = receipt.lines?.length || 0;
 
                         return (
                             <section key={receipt.id} className="rounded-xl border bg-white p-5 shadow-card transition-shadow hover:shadow-elegant">
@@ -184,19 +360,75 @@ function MaterialsReceivedList({ admin, isLoading, onAdd, onBack, onDelete, onEd
                                             <div className="flex flex-wrap items-center gap-2">
                                                 <h2 className="font-bold text-slate-950">{receipt.order_number} — M/s. {receipt.vendor_name}</h2>
                                                 <span className="rounded bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">Invoice: {receipt.invoice_number}</span>
-                                                <span className="text-xs text-muted-foreground">{receipt.invoice_date}</span>
+                                                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                                    <Calendar className="h-3 w-3" /> Received: {fmtDate(receipt.invoice_date)}
+                                                </span>
+                                                {receipt.payment_due_date && (
+                                                    <span className={`text-xs font-semibold px-2.5 py-0.5 rounded flex items-center gap-1 ${
+                                                        receipt.is_overdue || receipt.payment_status === "Overdue"
+                                                            ? "bg-rose-100 text-rose-700 border border-rose-200"
+                                                            : receipt.payment_status === "Due Today"
+                                                            ? "bg-amber-100 text-amber-800 border border-amber-300 animate-pulse"
+                                                            : receipt.payment_status === "Paid"
+                                                            ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                                                            : "bg-sky-100 text-sky-700 border border-sky-200"
+                                                    }`}>
+                                                        <Clock className="h-3 w-3" /> Due: {fmtDate(receipt.payment_due_date)}
+                                                    </span>
+                                                )}
                                             </div>
-                                            <p className="mt-3 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Items</p>
-                                            <p className="mt-1 text-sm font-medium text-slate-800">{items || "—"}</p>
+                                            <div className="mt-3">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                                                        Items ({lineCount})
+                                                    </span>
+                                                    {lineCount > 1 && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setExpandedItems(prev => ({ ...prev, [receipt.id]: !prev[receipt.id] }))}
+                                                            className="inline-flex items-center gap-1 rounded bg-slate-100 hover:bg-slate-200 px-2 py-0.5 text-xs font-semibold text-cyan-700 transition cursor-pointer"
+                                                            title={isExpanded ? "Collapse item list" : "Click arrow to show all items"}
+                                                        >
+                                                            <span>{isExpanded ? "Collapse" : `View all ${lineCount} items`}</span>
+                                                            {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                                        </button>
+                                                    )}
+                                                </div>
+
+                                                {!isExpanded ? (
+                                                    <p className="mt-1 text-sm font-medium text-slate-800">
+                                                        {receipt.lines?.[0]?.item_description || items || "—"}
+                                                        {lineCount > 1 && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setExpandedItems(prev => ({ ...prev, [receipt.id]: true }))}
+                                                                className="ml-1.5 inline-flex items-center gap-0.5 text-xs font-semibold text-cyan-700 hover:underline cursor-pointer"
+                                                            >
+                                                                <span>(+ {lineCount - 1} more)</span>
+                                                                <ChevronDown className="h-3.5 w-3.5" />
+                                                            </button>
+                                                        )}
+                                                    </p>
+                                                ) : (
+                                                    <div className="mt-2.5 rounded-lg border border-slate-200 bg-slate-50/80 p-3">
+                                                        <div className="space-y-1.5">
+                                                            {(receipt.lines || []).map((line, lIdx) => (
+                                                                <div key={line.id || lIdx} className="flex items-start gap-2 text-xs">
+                                                                    <span className="shrink-0 font-bold text-slate-400 w-5 text-right">{lIdx + 1}.</span>
+                                                                    <span className="font-medium text-slate-900">{line.item_description}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                     <div className="flex flex-wrap items-center gap-1">
                                         <span className="mr-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">Received</span>
-                                        {/* Payment badge */}
-                                        <PaymentBadge status={receipt.payment_status} />
+                                        <PaymentBadge status={receipt.payment_status} isOverdue={receipt.is_overdue} daysOverdue={receipt.days_overdue} daysRemaining={receipt.days_remaining} />
                                         <Button type="button" variant="ghost" size="icon" title="View material receipt" onClick={() => onView(receipt)}><Eye className="h-4 w-4" /></Button>
                                         {admin && <Button type="button" variant="ghost" size="icon" title="Edit material receipt" onClick={() => onEdit(receipt)}><Pencil className="h-4 w-4" /></Button>}
-                                        {/* Bill View action: only show green icon when bill is uploaded */}
                                         {receipt.bill_file_url && (
                                             <a
                                                 title="View Bill"
@@ -229,10 +461,30 @@ function MaterialsReceivedList({ admin, isLoading, onAdd, onBack, onDelete, onEd
                                 </div>
 
                                 {/* Payment summary row */}
-                                <div className="mt-4 rounded-lg border bg-slate-50 px-4 py-3 grid grid-cols-2 gap-4 sm:grid-cols-4 text-sm">
+                                <div className="mt-4 rounded-lg border bg-slate-50 px-4 py-3 grid grid-cols-2 gap-4 sm:grid-cols-5 text-sm">
                                     <div>
                                         <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Payment Status</p>
-                                        <p className="mt-0.5 font-semibold"><PaymentBadge status={receipt.payment_status} /></p>
+                                        <p className="mt-0.5"><PaymentBadge status={receipt.payment_status} isOverdue={receipt.is_overdue} daysOverdue={receipt.days_overdue} daysRemaining={receipt.days_remaining} /></p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Payment Due Date</p>
+                                        <p className="mt-0.5 font-bold text-slate-800">{receipt.payment_due_date ? fmtDate(receipt.payment_due_date) : "—"}</p>
+                                        <p className="text-[11px] text-muted-foreground truncate">{receipt.payment_terms || "As per PO"}</p>
+                                        {receipt.is_overdue || receipt.payment_status === "Overdue" ? (
+                                            <span className="text-[11px] font-bold text-rose-600 flex items-center gap-0.5 mt-0.5">
+                                                <AlertCircle className="h-3 w-3" /> Overdue by {receipt.days_overdue || 1}d
+                                            </span>
+                                        ) : receipt.payment_status === "Due Today" ? (
+                                            <span className="text-[11px] font-bold text-amber-600 flex items-center gap-0.5 mt-0.5">
+                                                <Clock className="h-3 w-3" /> Due Today
+                                            </span>
+                                        ) : receipt.payment_status === "Paid" ? (
+                                            <span className="text-[11px] font-medium text-emerald-600 flex items-center gap-0.5 mt-0.5">
+                                                <CheckCircle2 className="h-3 w-3" /> Paid
+                                            </span>
+                                        ) : receipt.days_remaining ? (
+                                            <span className="text-[11px] text-sky-600 mt-0.5">Due in {receipt.days_remaining}d</span>
+                                        ) : null}
                                     </div>
                                     <div>
                                         <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Amount Paid</p>
@@ -240,11 +492,14 @@ function MaterialsReceivedList({ admin, isLoading, onAdd, onBack, onDelete, onEd
                                     </div>
                                     <div>
                                         <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Balance Due</p>
-                                        <p className={`mt-0.5 font-semibold ${balance > 0 ? "text-rose-600" : "text-emerald-600"}`}>{money(Math.max(0, balance))}</p>
+                                        <p className={`mt-0.5 font-bold ${balance > 0 ? (receipt.is_overdue || receipt.payment_status === "Overdue" ? "text-rose-600" : "text-amber-600") : "text-emerald-600"}`}>
+                                            {money(Math.max(0, balance))}
+                                        </p>
                                     </div>
                                     <div>
                                         <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Payment Date</p>
-                                        <p className="mt-0.5 font-semibold text-slate-700">{receipt.payment_date || "—"}</p>
+                                        <p className="mt-0.5 font-semibold text-slate-700">{receipt.payment_date ? fmtDate(receipt.payment_date) : "—"}</p>
+                                        {receipt.payment_reference && <p className="text-[11px] text-muted-foreground truncate">{receipt.payment_reference}</p>}
                                     </div>
                                 </div>
 
@@ -261,7 +516,9 @@ function MaterialsReceivedList({ admin, isLoading, onAdd, onBack, onDelete, onEd
                             </section>
                         );
                     }) : (
-                        <div className="rounded-xl border bg-white p-12 text-center text-muted-foreground">No material receipt records yet. Use Add Material Received to create the first entry.</div>
+                        <div className="rounded-xl border bg-white p-12 text-center text-muted-foreground">
+                            {filterStatus === "All" ? "No material receipt records yet. Use Add Material Received to create the first entry." : `No receipts found with status '${filterStatus}'.`}
+                        </div>
                     )}
                 </div>
             </div>
@@ -327,29 +584,56 @@ function ReceiptViewDialog({ receipt, onClose }) {
                     </div>
 
                     {/* Payment section */}
-                    <div className="rounded-lg border p-4 space-y-3">
-                        <p className="font-semibold flex items-center gap-2"><CreditCard className="h-4 w-4 text-cyan-700" /> Payment Details</p>
-                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="rounded-lg border p-4 space-y-4">
+                        <div className="flex items-center justify-between">
+                            <p className="font-semibold flex items-center gap-2"><CreditCard className="h-4 w-4 text-cyan-700" /> Payment & Due Date Details</p>
+                            <PaymentBadge status={receipt.payment_status} isOverdue={receipt.is_overdue} daysOverdue={receipt.days_overdue} daysRemaining={receipt.days_remaining} />
+                        </div>
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 rounded-lg bg-slate-50 p-3 text-sm">
                             <div>
-                                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Status</p>
-                                <div className="mt-1"><PaymentBadge status={receipt.payment_status} /></div>
+                                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">PO Payment Terms</p>
+                                <p className="mt-1 font-semibold text-cyan-700">{receipt.payment_terms || "Not specified"}</p>
+                            </div>
+                            <div>
+                                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Payment Due Date</p>
+                                <p className="mt-1 font-bold text-slate-900">{receipt.payment_due_date ? fmtDate(receipt.payment_due_date) : "—"}</p>
+                                {receipt.is_overdue || receipt.payment_status === "Overdue" ? (
+                                    <span className="text-xs font-bold text-rose-600 flex items-center gap-1 mt-0.5">
+                                        <AlertCircle className="h-3 w-3" /> Overdue by {receipt.days_overdue || 1} days
+                                    </span>
+                                ) : receipt.payment_status === "Due Today" ? (
+                                    <span className="text-xs font-bold text-amber-600 flex items-center gap-1 mt-0.5">
+                                        <Clock className="h-3 w-3" /> Due Today
+                                    </span>
+                                ) : receipt.payment_status === "Paid" ? (
+                                    <span className="text-xs font-medium text-emerald-600 flex items-center gap-1 mt-0.5">
+                                        <CheckCircle2 className="h-3 w-3" /> Paid in full
+                                    </span>
+                                ) : receipt.days_remaining ? (
+                                    <span className="text-xs text-sky-600 mt-0.5">Due in {receipt.days_remaining} days</span>
+                                ) : null}
                             </div>
                             <div>
                                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Amount Paid</p>
-                                <p className="mt-1 font-semibold text-emerald-700">{money(receipt.amount_paid || 0)}</p>
+                                <p className="mt-1 font-bold text-emerald-700">{money(receipt.amount_paid || 0)}</p>
                             </div>
                             <div>
-                                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Balance Due</p>
-                                <p className={`mt-1 font-semibold ${balance > 0 ? "text-rose-600" : "text-emerald-600"}`}>{money(Math.max(0, balance))}</p>
-                            </div>
-                            <div>
-                                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Payment Date</p>
-                                <p className="mt-1 font-semibold">{receipt.payment_date || "—"}</p>
+                                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Balance Pending</p>
+                                <p className={`mt-1 font-bold ${balance > 0 ? (receipt.is_overdue || receipt.payment_status === "Overdue" ? "text-rose-600" : "text-amber-600") : "text-emerald-600"}`}>
+                                    {money(Math.max(0, balance))}
+                                </p>
                             </div>
                         </div>
-                        {receipt.payment_reference && (
-                            <p className="text-sm text-muted-foreground">Reference: <span className="font-medium text-slate-700">{receipt.payment_reference}</span></p>
-                        )}
+                        <div className="grid gap-4 sm:grid-cols-2 text-xs">
+                            <div>
+                                <span className="text-muted-foreground">Payment Date: </span>
+                                <span className="font-semibold text-slate-800">{receipt.payment_date ? fmtDate(receipt.payment_date) : "—"}</span>
+                            </div>
+                            <div>
+                                <span className="text-muted-foreground">Payment Reference: </span>
+                                <span className="font-semibold text-slate-800">{receipt.payment_reference || "—"}</span>
+                            </div>
+                        </div>
                     </div>
 
                     {/* Attached Bill section */}
@@ -426,6 +710,10 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
     const vendors        = useMemo(() => [...new Set(approvedOrders.map(o => o.supplier).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [approvedOrders]);
     const vendorOrders   = useMemo(() => approvedOrders.filter(o => o.supplier === vendorName), [approvedOrders, vendorName]);
 
+    const activeTerms = selected?.payment_terms || editingReceipt?.payment_terms || "";
+    const activeTermsDays = parsePaymentTermsDays(activeTerms);
+    const calculatedDueDate = calculateDueDate(invoiceDate, activeTerms);
+
     const invalidate = () => {
         client.invalidateQueries({ queryKey: ["store-material-receipts"] });
         client.invalidateQueries({ queryKey: ["store-orders"] });
@@ -475,6 +763,7 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
                 invoice_number: invoiceNumber.trim(), 
                 freight_charge: freightAmount, 
                 bill_file_url: finalBillUrl, 
+                payment_due_date: calculatedDueDate || null,
                 remarks, 
                 lines: lines.map(l => ({ ...l, ordered_quantity: Number(l.ordered_quantity || 0), received_quantity: Number(l.received_quantity || 0), unit_rate: Number(l.unit_rate || 0) })) 
             };
@@ -573,7 +862,7 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
                         <div className="grid h-10 w-10 place-items-center rounded-lg bg-emerald-50 text-emerald-700"><PackageCheck className="h-5 w-5" /></div>
                         <div><h2 className="font-bold">Vendor & PO Details</h2><p className="text-xs text-muted-foreground">First select vendor, then select a PO number to auto-fill the remaining details.</p></div>
                     </div>
-                    <div className="mt-5 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    <div className="mt-5 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                         <Field label="Vendor Name / M/S. *"><select required disabled={!admin} value={vendorName} onChange={e => chooseVendor(e.target.value)} className={input}><option value="">Select vendor</option>{vendors.map(v => <option key={v} value={v}>{v}</option>)}</select></Field>
                         <Field label="Purchase Order Number *"><select required disabled={!admin || !vendorName} value={selectedId} onChange={e => chooseOrder(e.target.value)} className={input}><option value="">{vendorName ? "Select PO number" : "First select vendor"}</option>{vendorOrders.map(o => <option key={o.id} value={o.id}>{o.order_number}</option>)}</select></Field>
                         <Field label="Reference"><input readOnly value={selected?.reference || ""} placeholder="Auto-filled from PO" className={`${input} bg-slate-50`} /></Field>
@@ -581,14 +870,28 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
                         <Field label="PO Date"><input readOnly value={selected?.po_date || ""} className={`${input} bg-slate-50`} /></Field>
                         <Field label="PO Status"><input readOnly value={selected?.status || ""} className={`${input} bg-slate-50`} /></Field>
                         <Field label="GST Rate (from PO)"><input readOnly value={selected ? `${gstRate}%` : ""} placeholder="Auto-filled from PO" className={`${input} bg-slate-50`} /></Field>
+                        <Field label="Payment Terms (from PO)"><input readOnly value={activeTerms || ""} placeholder="Auto-filled from PO" className={`${input} bg-slate-50 font-semibold text-cyan-800`} /></Field>
                     </div>
                 </section>
 
                 <section className="mt-6 rounded-xl border bg-card p-5 shadow-sm sm:p-6">
                     <h2 className="font-bold">Invoice & Bill Details</h2>
-                    <p className="mt-1 text-xs text-muted-foreground">Enter supplier invoice information and attach the bill.</p>
-                    <div className="mt-5 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                        <Field label="Invoice Date *"><input required disabled={!admin} type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} className={input} /></Field>
+                    <p className="mt-1 text-xs text-muted-foreground">Enter supplier invoice information, verify the auto-calculated payment due date, and attach the bill.</p>
+                    <div className="mt-5 grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+                        <Field label="Invoice Date (Received Date) *"><input required disabled={!admin} type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} className={input} /></Field>
+                        <Field label="Payment Due Date (Auto-calculated)">
+                            <div className={`${input} flex items-center justify-between bg-slate-50 font-semibold ${calculatedDueDate ? "text-cyan-800 border-cyan-300" : "text-muted-foreground"}`}>
+                                <span className="flex items-center gap-1.5 truncate">
+                                    <Clock className="h-4 w-4 shrink-0 text-cyan-700" />
+                                    {calculatedDueDate ? fmtDate(calculatedDueDate) : "Select PO & Date"}
+                                </span>
+                                {calculatedDueDate && (
+                                    <span className="text-[11px] font-normal text-slate-500 shrink-0 ml-1">
+                                        ({activeTermsDays !== null ? `+${activeTermsDays}d` : "PO terms"})
+                                    </span>
+                                )}
+                            </div>
+                        </Field>
                         <Field label="Invoice Number *"><input required disabled={!admin} value={invoiceNumber} onChange={e => setInvoiceNumber(e.target.value)} placeholder="Enter invoice number" className={input} /></Field>
                         <Field label="Freight Charge"><input disabled={!admin} type="number" min="0" step="0.01" value={freightCharge} onChange={e => setFreightCharge(e.target.value)} className={input} /></Field>
                         <Field label="Bill Upload">

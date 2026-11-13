@@ -32,6 +32,13 @@ export default function StoreTableEnhancer() {
         };
         const enhance = table => {
             if (!table.tHead || !table.tBodies.length) return;
+            // Native-controlled grouped tables (such as Grouped Inventory) own their React row structure, S.No., and expand/collapse
+            if (table.classList.contains("store-inventory-grouped-table") || table.dataset.storeGrouped === "true" || table.closest(".store-inventory-grouped-table")) {
+                table.dataset.storeEnhanced = "inventory-grouped-native";
+                attachStickyBar(table);
+                updateStickyBars();
+                return;
+            }
             // This table is rendered by StorePurchaseOrders and already owns
             // its select/S.No./resize layout from the first paint.
             if (table.classList.contains("store-purchase-orders-table")) table.dataset.storeEnhanced = "purchase-native";

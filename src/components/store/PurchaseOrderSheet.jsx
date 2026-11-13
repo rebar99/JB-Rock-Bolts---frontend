@@ -35,31 +35,35 @@ export function getItemOnlyName(description, itemMasters = []) {
 
     const candidateList = [
         ...(Array.isArray(itemMasters) ? itemMasters : []),
-        ...(Array.isArray(typeof window !== "undefined" && window.__STORE_ITEM_MASTERS__ ) ? window.__STORE_ITEM_MASTERS__ : []),
+        ...(Array.isArray(typeof window !== "undefined" && window.__STORE_ITEM_MASTERS__) ? window.__STORE_ITEM_MASTERS__ : []),
     ];
 
-    const masterNames = [...new Set(
-        candidateList
-            .map(m => (typeof m === "string" ? m : m?.name || "").trim())
-            .filter(Boolean)
-    )].sort((a, b) => b.length - a.length);
+    const masterObjects = candidateList.filter(m => m && typeof m === "object" && m.name);
 
-    for (const group of masterNames) {
-        if (raw.toLowerCase() === group.toLowerCase()) {
-            return raw;
-        }
-        if (raw.toLowerCase().startsWith(group.toLowerCase())) {
-            const remainder = raw.slice(group.length).trim().replace(/^[-:,/]\s*/, "");
-            if (remainder) return remainder;
+    // If description looks like a measurement-only string (e.g. "6.3 mm", "16mm", "140*6.3 mm"),
+    // find which item master group has this exact size and prepend the group name.
+    // This fixes old POs where only the size was saved without the group name.
+    const looksLikeMeasurement = /^[\d\s.*xX×/\-+,()°]+(\s*(mm|cm|m|inch|in|kg|g|l|ltr|nos|set|pc|pcs|mtr|ft|deg|rpm|bar|kw|hp|ml|lt))?$/i.test(raw);
+    if (looksLikeMeasurement) {
+        for (const item of masterObjects) {
+            if (Array.isArray(item.sizes) && item.sizes.length > 0) {
+                const sizeMatch = item.sizes.find(s =>
+                    (s.size || "").trim().toLowerCase() === raw.toLowerCase()
+                );
+                if (sizeMatch) {
+                    return `${item.name} ${raw}`;
+                }
+            }
         }
     }
+
     return raw;
 }
 
 export function printPurchaseOrder(order, itemMasterList = []) {
     if (!order) return;
     const items = (order.items || []).map((item, index) => {
-        const displayName = item.item_name || getItemOnlyName(item.item_description, itemMasterList);
+        const displayName = getItemOnlyName(item.item_description || item.item_name, itemMasterList);
         return `<tr><td>${index + 1}</td><td>${escapeHtml(displayName)}</td><td>${formatNumber(item.quantity)}</td><td>${escapeHtml(item.uom)}</td><td>&#8377;${formatNumber(item.unit_rate)}</td><td>&#8377;${formatNumber(item.amount)}</td></tr>`;
     }).join("");
 
@@ -259,7 +263,7 @@ export default function PurchaseOrderSheet({ order, itemMasterList = [] }) {
                                     className={index % 2 === 0 ? "bg-white" : "bg-[#f0f5ff]"}>
                                     <td className="border border-[#c5d2e8] px-2 py-1.5 text-center">{index + 1}</td>
                                     <td className="border border-[#c5d2e8] px-3 py-1.5 font-medium text-center">
-                                        {item.item_name || getItemOnlyName(item.item_description, itemMasterList)}
+                                        {getItemOnlyName(item.item_description || item.item_name, itemMasterList)}
                                     </td>
                                     <td className="border border-[#c5d2e8] px-2 py-1.5 text-center">{formatNumber(item.quantity)}</td>
                                     <td className="border border-[#c5d2e8] px-2 py-1.5 text-center">{item.uom}</td>

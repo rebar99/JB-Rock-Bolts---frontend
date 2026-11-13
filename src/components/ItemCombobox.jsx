@@ -56,6 +56,7 @@ export const ItemCombobox = ({ value, onChange, items = [], placeholder = "Selec
 
     const selectSize = (sizeArg) => {
         const sizeObj = typeof sizeArg === "object" ? sizeArg : (activeItem?.sizes || []).find(x => x.size === sizeArg) || { size: sizeArg };
+        // Save only the size as item_description (e.g. "V Belt B 29"), not the group name prefix
         onChange(sizeObj.size, activeItem, sizeObj);
         setOpen(false);
     };
