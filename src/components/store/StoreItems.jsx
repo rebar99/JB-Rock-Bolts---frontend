@@ -277,6 +277,31 @@ export default function StoreItems({ inventory = [], admin = false, initialStock
         return m;
     }, [itemMasterList]);
 
+    // Prefix-based lookup: "Cpc Cap" → finds "Cpc Cap 16 mm" etc.
+    // Returns the group that owns the most sizes matching this prefix.
+    const findByPrefix = useMemo(() => {
+        // Build prefix → group map: for each size key, record all prefixes of length >= 4
+        const prefixMap = new Map(); // cleanPrefix → { group, item, matchLen }
+        (itemMasterList || []).forEach(g => {
+            if (g.name && Array.isArray(g.sizes)) {
+                g.sizes.forEach(s => {
+                    const sName = (s.size || s || "").trim();
+                    const sClean = cleanStr(sName);
+                    if (sClean.length >= 4) {
+                        // Store the full size key AND every prefix of it (min 4 chars)
+                        for (let len = 4; len <= sClean.length; len++) {
+                            const prefix = sClean.slice(0, len);
+                            if (!prefixMap.has(prefix)) {
+                                prefixMap.set(prefix, { group: g.name.trim(), item: sName, matchLen: len });
+                            }
+                        }
+                    }
+                });
+            }
+        });
+        return prefixMap;
+    }, [itemMasterList]);
+
     const normalizedInventory = useMemo(() => {
         return (inventory || []).map(rawItem => {
             let groupName = (rawItem.name || "").trim() || "Uncategorized";
@@ -288,13 +313,21 @@ export default function StoreItems({ inventory = [], admin = false, initialStock
             // resolve its true parent group and item name from Item Master.
             if (!isOfficialGroup) {
                 const combinedClean = cleanStr(`${groupName} ${stockItemName}`);
+                // 1. Exact match (combined or single)
                 let matched = sizeToGroupMap.get(combinedClean) || sizeToGroupMap.get(cleanStr(groupName));
+                if (!matched) {
+                    // 2. Prefix match — "Cpc Cap" (clean="cpccap") is prefix of "cpccap16mm"
+                    matched = findByPrefix.get(combinedClean) || findByPrefix.get(cleanStr(groupName));
+                }
                 if (matched) {
                     groupName = matched.group;
-                    stockItemName = matched.item;
+                    // Keep existing stockItemName if it carries real info (not "General"/empty)
+                    if (!stockItemName || stockItemName.toLowerCase() === "general") {
+                        stockItemName = matched.item;
+                    }
                 }
             } else if (!stockItemName || stockItemName.toLowerCase() === "general") {
-                const matched = sizeToGroupMap.get(cleanStr(groupName));
+                const matched = sizeToGroupMap.get(cleanStr(groupName)) || findByPrefix.get(cleanStr(groupName));
                 if (matched) {
                     groupName = matched.group;
                     stockItemName = matched.item;
@@ -307,7 +340,7 @@ export default function StoreItems({ inventory = [], admin = false, initialStock
                 stock_item: stockItemName || "General"
             };
         });
-    }, [inventory, sizeToGroupMap, officialGroupNames]);
+    }, [inventory, sizeToGroupMap, officialGroupNames, findByPrefix]);
 
     const groupOptions = useMemo(() => {
         const set = new Set();
