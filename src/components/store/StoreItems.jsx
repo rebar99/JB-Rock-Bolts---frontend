@@ -254,6 +254,14 @@ export default function StoreItems({ inventory = [], admin = false, initialStock
 
     const cleanStr = (s) => (s || "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
 
+    const officialGroupNames = useMemo(() => {
+        const s = new Set();
+        (itemMasterList || []).forEach(g => {
+            if (g.name) s.add(cleanStr(g.name));
+        });
+        return s;
+    }, [itemMasterList]);
+
     const sizeToGroupMap = useMemo(() => {
         const m = new Map();
         (itemMasterList || []).forEach(g => {
@@ -274,11 +282,22 @@ export default function StoreItems({ inventory = [], admin = false, initialStock
             let groupName = (rawItem.name || "").trim() || "Uncategorized";
             let stockItemName = (rawItem.stock_item || "").trim();
 
-            if (!stockItemName || stockItemName.toLowerCase() === "general") {
+            const isOfficialGroup = officialGroupNames.has(cleanStr(groupName));
+
+            // If group name is NOT one of our registered 17 groups (e.g. "Cpc Cap", "T Allen Key", "Addustable Wrech 14\""),
+            // resolve its true parent group and item name from Item Master.
+            if (!isOfficialGroup) {
+                const combinedClean = cleanStr(`${groupName} ${stockItemName}`);
+                let matched = sizeToGroupMap.get(combinedClean) || sizeToGroupMap.get(cleanStr(groupName));
+                if (matched) {
+                    groupName = matched.group;
+                    stockItemName = matched.item;
+                }
+            } else if (!stockItemName || stockItemName.toLowerCase() === "general") {
                 const matched = sizeToGroupMap.get(cleanStr(groupName));
                 if (matched) {
-                    stockItemName = matched.item;
                     groupName = matched.group;
+                    stockItemName = matched.item;
                 }
             }
 
@@ -288,14 +307,13 @@ export default function StoreItems({ inventory = [], admin = false, initialStock
                 stock_item: stockItemName || "General"
             };
         });
-    }, [inventory, sizeToGroupMap]);
+    }, [inventory, sizeToGroupMap, officialGroupNames]);
 
     const groupOptions = useMemo(() => {
         const set = new Set();
         (itemMasterList || []).forEach(g => { if (g.name) set.add(g.name.trim()); });
-        (normalizedInventory || []).forEach(i => { if (i.name) set.add(i.name.trim()); });
         return Array.from(set).sort((a, b) => a.localeCompare(b));
-    }, [itemMasterList, normalizedInventory]);
+    }, [itemMasterList]);
 
     const selectedMasterGroup = useMemo(() => {
         if (!form.name) return null;
