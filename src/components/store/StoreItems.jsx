@@ -252,12 +252,50 @@ export default function StoreItems({ inventory = [], admin = false, initialStock
         queryFn: () => fetchUomOptions("STORE"),
     });
 
+    const cleanStr = (s) => (s || "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+
+    const sizeToGroupMap = useMemo(() => {
+        const m = new Map();
+        (itemMasterList || []).forEach(g => {
+            if (g.name && Array.isArray(g.sizes)) {
+                g.sizes.forEach(s => {
+                    const sName = (s.size || s || "").trim();
+                    if (sName) {
+                        m.set(cleanStr(sName), { group: g.name.trim(), item: sName });
+                    }
+                });
+            }
+        });
+        return m;
+    }, [itemMasterList]);
+
+    const normalizedInventory = useMemo(() => {
+        return (inventory || []).map(rawItem => {
+            let groupName = (rawItem.name || "").trim() || "Uncategorized";
+            let stockItemName = (rawItem.stock_item || "").trim();
+
+            if (!stockItemName || stockItemName.toLowerCase() === "general") {
+                const matched = sizeToGroupMap.get(cleanStr(groupName));
+                if (matched) {
+                    stockItemName = matched.item;
+                    groupName = matched.group;
+                }
+            }
+
+            return {
+                ...rawItem,
+                name: groupName,
+                stock_item: stockItemName || "General"
+            };
+        });
+    }, [inventory, sizeToGroupMap]);
+
     const groupOptions = useMemo(() => {
         const set = new Set();
         (itemMasterList || []).forEach(g => { if (g.name) set.add(g.name.trim()); });
-        (inventory || []).forEach(i => { if (i.name) set.add(i.name.trim()); });
+        (normalizedInventory || []).forEach(i => { if (i.name) set.add(i.name.trim()); });
         return Array.from(set).sort((a, b) => a.localeCompare(b));
-    }, [itemMasterList, inventory]);
+    }, [itemMasterList, normalizedInventory]);
 
     const selectedMasterGroup = useMemo(() => {
         if (!form.name) return null;
@@ -271,7 +309,7 @@ export default function StoreItems({ inventory = [], admin = false, initialStock
         }
         if (form.name) {
             const norm = form.name.trim().toLowerCase();
-            (inventory || []).forEach(i => {
+            (normalizedInventory || []).forEach(i => {
                 if ((i.name || "").trim().toLowerCase() === norm) {
                     if (i.stock_item) set.add(i.stock_item.trim());
                     if (i.stock_items?.length) {
@@ -281,7 +319,7 @@ export default function StoreItems({ inventory = [], admin = false, initialStock
             });
         }
         return Array.from(set).sort((a, b) => a.localeCompare(b));
-    }, [selectedMasterGroup, inventory, form.name]);
+    }, [selectedMasterGroup, normalizedInventory, form.name]);
 
     const applyVendorToInventory = (vendor) => {
         if (!vendor) return;
@@ -319,7 +357,7 @@ export default function StoreItems({ inventory = [], admin = false, initialStock
         setExpandedGroups(new Set());
     };
 
-    const filtered = useMemo(() => (inventory || []).filter(item => {
+    const filtered = useMemo(() => (normalizedInventory || []).filter(item => {
         const matchSearch = `${item.name || ""} ${item.stock_item || ""} ${item.vendor_name || ""} ${item.location || ""}`.toLowerCase().includes(search.toLowerCase());
         const matchStatus =
             statusFilter === "all" ||
@@ -328,18 +366,18 @@ export default function StoreItems({ inventory = [], admin = false, initialStock
             (statusFilter === "out_of_stock" && item.status === "Out of Stock");
         const matchGroup = !groupFilter || (item.name || "").trim().toLowerCase() === groupFilter.trim().toLowerCase();
         return matchSearch && matchStatus && matchGroup;
-    }), [inventory, search, statusFilter, groupFilter]);
+    }), [normalizedInventory, search, statusFilter, groupFilter]);
 
     const totals = useMemo(() => {
-        const uniqueGroups = new Set((inventory || []).map(x => (x.name || "").trim()).filter(Boolean));
+        const uniqueGroups = new Set((normalizedInventory || []).map(x => (x.name || "").trim()).filter(Boolean));
         return {
             groups: uniqueGroups.size,
-            items: (inventory || []).length,
-            available: (inventory || []).reduce((sum, x) => sum + Number(x.available_quantity || 0), 0),
-            issued: (inventory || []).reduce((sum, x) => sum + Number(x.issued_quantity || 0), 0),
-            value: (inventory || []).reduce((sum, x) => sum + Number(x.remaining_stock_amount || 0), 0)
+            items: (normalizedInventory || []).length,
+            available: (normalizedInventory || []).reduce((sum, x) => sum + Number(x.available_quantity || 0), 0),
+            issued: (normalizedInventory || []).reduce((sum, x) => sum + Number(x.issued_quantity || 0), 0),
+            value: (normalizedInventory || []).reduce((sum, x) => sum + Number(x.remaining_stock_amount || 0), 0)
         };
-    }, [inventory]);
+    }, [normalizedInventory]);
 
     const groupedInventory = useMemo(() => {
         const map = new Map();
