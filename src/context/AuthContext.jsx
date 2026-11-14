@@ -19,7 +19,7 @@ export const AuthProvider = ({ children }) => {
             const parsed = stored ? JSON.parse(stored) : null;
             if (parsed && (parsed.is_super_admin || parsed.email?.toLowerCase() === "deepikar412003@gmail.com")) {
                 parsed.is_super_admin = true;
-                parsed.application_access = { marketing: "admin", store_purchase: "admin" };
+                parsed.application_access = { marketing: "admin", store_purchase: "admin", accounts: "admin" };
             }
             if (parsed && (parsed.is_super_admin || parsed.application_access?.marketing === "admin")) {
                 parsed.is_admin = true;
@@ -77,7 +77,9 @@ export const AuthProvider = ({ children }) => {
             window.location.pathname.startsWith("/store-purchase") ||
             localStorage.getItem(LAST_WS_KEY) === "Store"
                 ? "Store"
-                : (activeApplication === "marketing" || window.location.pathname.startsWith("/marketing") ? "Marketing" : null)
+                : (activeApplication === "accounts" || window.location.pathname.startsWith("/accounts")
+                    ? "Accounts"
+                    : (activeApplication === "marketing" || window.location.pathname.startsWith("/marketing") ? "Marketing" : null))
         );
         try {
             await logoutUser(ws);
@@ -145,7 +147,7 @@ export const AuthProvider = ({ children }) => {
         const u = data.user;
         if (u && (u.is_super_admin || u.email?.toLowerCase() === "deepikar412003@gmail.com")) {
             u.is_super_admin = true;
-            u.application_access = { marketing: "admin", store_purchase: "admin" };
+            u.application_access = { marketing: "admin", store_purchase: "admin", accounts: "admin" };
         }
         if (u && (u.is_super_admin || u.application_access?.marketing === "admin")) {
             u.is_admin = true;
@@ -179,7 +181,7 @@ export const AuthProvider = ({ children }) => {
         setActiveApplication(code);
         if (code) {
             localStorage.setItem(ACTIVE_APP_KEY, code);
-            localStorage.setItem(LAST_WS_KEY, code === "store_purchase" ? "Store" : "Marketing");
+            localStorage.setItem(LAST_WS_KEY, code === "store_purchase" ? "Store" : (code === "accounts" ? "Accounts" : "Marketing"));
         } else {
             localStorage.removeItem(ACTIVE_APP_KEY);
         }
@@ -194,7 +196,7 @@ export const AuthProvider = ({ children }) => {
             if (fresh) {
                 if (fresh.is_super_admin || fresh.email?.toLowerCase() === "deepikar412003@gmail.com") {
                     fresh.is_super_admin = true;
-                    fresh.application_access = { marketing: "admin", store_purchase: "admin" };
+                    fresh.application_access = { marketing: "admin", store_purchase: "admin", accounts: "admin" };
                 }
                 if (fresh.is_super_admin || fresh.application_access?.marketing === "admin") {
                     fresh.is_admin = true;

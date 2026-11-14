@@ -765,3 +765,9 @@ export const fetchAlreadyCreditedWOSale = (woSaleId) => get(`/api/credit-notes/a
 export const fetchAllSalesForCN = () => get("/api/sales", { limit: 100000 });
 // Fetch all WO Sale invoices for the CN form dropdown
 export const fetchAllWOSalesForCN = () => get("/api/work-order-sales", { limit: 100000 });
+
+// ── Accounts Workspace ────────────────────────────────────────────────────────
+export const fetchAccountsStore = () => get("/api/accounts/store");
+export const fetchAccountsStoreDetail = (poId) => get(`/api/accounts/store/${poId}`);
+export const fetchAccountsMarketing = () => get("/api/accounts/marketing");
+export const updateAccountsAccess = (userId, payload) => put(`/api/application-access/users/${userId}`, payload);

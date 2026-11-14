@@ -24,6 +24,7 @@ import SystemBackup from "./pages/SystemBackup";
 import RecentlyDeleted from "./pages/RecentlyDeleted";
 import SoftwareSelection from "./pages/SoftwareSelection";
 import StorePurchase from "./pages/StorePurchase";
+import Accounts from "./pages/Accounts";
 import ApplicationAccessManagement from "./pages/ApplicationAccessManagement";
 import POApprovalSettings from "./pages/POApprovalSettings";
 import POSignatureConfig from "./pages/POSignatureConfig";
@@ -76,6 +77,12 @@ const StorePurchaseRoute = ({ children }) => {
     return applicationRole("store_purchase") === "none" ? <Navigate to="/" replace /> : children;
 };
 
+const AccountsRoute = ({ children }) => {
+    const { isAuthenticated, applicationRole } = useAuth();
+    if (!isAuthenticated) return <Navigate to="/login" replace />;
+    return applicationRole("accounts") === "none" ? <Navigate to="/" replace /> : children;
+};
+
 const App = () => (
     <QueryClientProvider client={queryClient}>
         <ThemeProvider>
@@ -108,6 +115,7 @@ const App = () => (
                             <Route path="/admin/po-approval-settings" element={<SuperAdminRoute><POApprovalSettings /></SuperAdminRoute>} />
                             <Route path="/admin/po-signature-config" element={<SuperAdminRoute><POSignatureConfig /></SuperAdminRoute>} />
                             <Route path="/store-purchase/*" element={<StorePurchaseRoute><StorePurchase /></StorePurchaseRoute>} />
+                            <Route path="/accounts/*" element={<AccountsRoute><Accounts /></AccountsRoute>} />
                             <Route path="*" element={<NotFound />} />
                         </Routes>
                     </AuthProvider>

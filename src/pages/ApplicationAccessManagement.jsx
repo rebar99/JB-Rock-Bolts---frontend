@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import {
     ShieldCheck, UserCheck, UserX, Mail, Clock, Megaphone,
-    Warehouse, LayoutGrid, ArrowLeft, Users, ClipboardList, PenLine,
+    Warehouse, LayoutGrid, ArrowLeft, Users, ClipboardList, PenLine, Landmark,
 } from "lucide-react";
 import { fmtDateTime } from "@/lib/format";
 
@@ -23,7 +23,9 @@ const RoleSelect = ({ value, onChange }) => (
 const WORKSPACE_OPTIONS = [
     { value: "marketing", label: "Marketing", icon: Megaphone, color: "from-violet-600 to-indigo-700", bg: "bg-violet-50", text: "text-violet-700" },
     { value: "store", label: "Store", icon: Warehouse, color: "from-cyan-600 to-blue-700", bg: "bg-cyan-50", text: "text-cyan-700" },
-    { value: "both", label: "Both", icon: LayoutGrid, color: "from-slate-700 to-slate-900", bg: "bg-slate-100", text: "text-slate-700" },
+    { value: "accounts", label: "Accounts", icon: Landmark, color: "from-emerald-600 to-teal-700", bg: "bg-emerald-50", text: "text-emerald-700" },
+    { value: "both", label: "Marketing + Store", icon: LayoutGrid, color: "from-slate-700 to-slate-900", bg: "bg-slate-100", text: "text-slate-700" },
+    { value: "all", label: "All Workspaces", icon: LayoutGrid, color: "from-slate-900 to-slate-950", bg: "bg-slate-200", text: "text-slate-900" },
 ];
 
 function WorkspacePicker({ selected, onChange }) {
@@ -52,10 +54,37 @@ function WorkspacePicker({ selected, onChange }) {
 function getWorkspace(access) {
     const hasMarketing = access?.marketing && access.marketing !== "none";
     const hasStore = access?.store_purchase && access.store_purchase !== "none";
+    const hasAccounts = access?.accounts && access.accounts !== "none";
+    if (hasMarketing && hasStore && hasAccounts) return "all";
     if (hasMarketing && hasStore) return "both";
+    if (hasMarketing && hasAccounts) return "all";
+    if (hasStore && hasAccounts) return "all";
     if (hasMarketing) return "marketing";
     if (hasStore) return "store";
-    return "both";
+    if (hasAccounts) return "accounts";
+    return "all";
+}
+
+function getWorkspaceLabel(ws) {
+    switch (ws) {
+        case "all": return "All (Marketing + Store + Accounts)";
+        case "both": return "Marketing + Store";
+        case "marketing": return "Marketing Only";
+        case "store": return "Store Only";
+        case "accounts": return "Accounts Only";
+        default: return "All Workspaces";
+    }
+}
+
+function getWorkspaceBadgeClass(ws) {
+    switch (ws) {
+        case "all": return "bg-slate-900 text-white";
+        case "both": return "bg-slate-100 text-slate-700";
+        case "marketing": return "bg-violet-100 text-violet-700";
+        case "store": return "bg-cyan-100 text-cyan-700";
+        case "accounts": return "bg-emerald-100 text-emerald-700";
+        default: return "bg-slate-100 text-slate-700";
+    }
 }
 
 // ── Pending Approvals Tab ─────────────────────────────────────────────────────
@@ -205,6 +234,7 @@ function AccessTab() {
             body: {
                 marketing: user.application_access?.marketing === "admin" ? "admin" : "user",
                 store_purchase: user.application_access?.store_purchase === "admin" ? "admin" : "user",
+                accounts: user.application_access?.accounts === "admin" ? "admin" : "user",
                 is_super_admin: !!user.is_super_admin,
                 [field]: value,
             },
@@ -238,13 +268,14 @@ function AccessTab() {
                             <th className="p-3 text-left">Workspace</th>
                             <th className="p-3 text-left">Marketing Role</th>
                             <th className="p-3 text-left">Store Role</th>
+                            <th className="p-3 text-left">Accounts Role</th>
                             <th className="p-3 text-left">Super Admin</th>
                             <th className="p-3 text-center">Delete</th>
                         </tr>
                     </thead>
                     <tbody>
                         {isLoading ? (
-                            <tr><td className="p-4" colSpan="6">Loading…</td></tr>
+                            <tr><td className="p-4" colSpan="7">Loading…</td></tr>
                         ) : users.map((user) => {
                             // dbWs = what the database currently says for this user
                             const dbWs = getWorkspace(user.application_access);
@@ -271,16 +302,8 @@ function AccessTab() {
                                             {/* Current / selected workspace label */}
                                             <div className="flex items-center gap-1.5 text-xs">
                                                 <span className="font-medium text-foreground">Current:</span>
-                                                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                                                    displayWs === "both"
-                                                        ? "bg-slate-100 text-slate-700"
-                                                        : displayWs === "marketing"
-                                                            ? "bg-violet-100 text-violet-700"
-                                                            : "bg-cyan-100 text-cyan-700"
-                                                }`}>
-                                                    {displayWs === "both" ? "Marketing + Store"
-                                                        : displayWs === "marketing" ? "Marketing Only"
-                                                        : "Store Only"}
+                                                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${getWorkspaceBadgeClass(displayWs)}`}>
+                                                    {getWorkspaceLabel(displayWs)}
                                                 </span>
                                                 {savedConfirm[user.id] && (
                                                     <span className="text-emerald-600 font-bold text-[10px] animate-pulse">✓ Saved!</span>
@@ -302,7 +325,7 @@ function AccessTab() {
                                                 disabled={wsMutation.isPending || !hasChange}
                                                 onClick={() => applyWorkspace(user.id, pickerWs)}
                                             >
-                                                {wsMutation.isPending ? "Saving…" : hasChange ? `Save → ${pickerWs === "both" ? "Marketing + Store" : pickerWs === "marketing" ? "Marketing Only" : "Store Only"}` : "Save Workspace"}
+                                                {wsMutation.isPending ? "Saving…" : hasChange ? `Save → ${getWorkspaceLabel(pickerWs)}` : "Save Workspace"}
                                             </Button>
                                         </div>
                                     </td>
@@ -316,6 +339,12 @@ function AccessTab() {
                                         <RoleSelect
                                             value={user.application_access?.store_purchase}
                                             onChange={(v) => changeRole(user, "store_purchase", v)}
+                                        />
+                                    </td>
+                                    <td className="p-3">
+                                        <RoleSelect
+                                            value={user.application_access?.accounts}
+                                            onChange={(v) => changeRole(user, "accounts", v)}
                                         />
                                     </td>
                                     <td className="p-3 text-center">

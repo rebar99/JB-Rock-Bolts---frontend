@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Eye, FileText, FileUp, PackageCheck, Pencil, Plus, Save, Trash2, Upload, CreditCard, X, Calendar, AlertCircle, Clock, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, Eye, FileText, FileUp, PackageCheck, Pencil, Plus, Save, Trash2, Upload, CreditCard, X, Calendar, AlertCircle, Clock, CheckCircle2, ChevronDown, ChevronUp, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { createStoreMaterialReceipt, deleteStoreMaterialReceipt, fetchStoreMaterialReceipts, patchStoreMaterialReceiptBill, patchStoreMaterialReceiptPayment, resolveFileUrl, updateStoreMaterialReceipt, uploadStoreMaterialReceiptBill } from "@/lib/api";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
@@ -269,6 +270,7 @@ function Metric({ label, value }) {
 
 function MaterialsReceivedList({ admin, isLoading, onAdd, onBack, onDelete, onEdit, onDeleteBill, onView, onPayment, receipts }) {
     const [filterStatus, setFilterStatus] = useState("All");
+    const [search, setSearch] = useState("");
     const [expandedItems, setExpandedItems] = useState({});
 
     const counts = useMemo(() => {
@@ -284,10 +286,38 @@ function MaterialsReceivedList({ admin, isLoading, onAdd, onBack, onDelete, onEd
     }, [receipts]);
 
     const filteredReceipts = useMemo(() => {
-        if (filterStatus === "All") return receipts;
-        if (filterStatus === "Overdue") return receipts.filter(r => r.payment_status === "Overdue" || r.is_overdue);
-        return receipts.filter(r => r.payment_status === filterStatus);
-    }, [receipts, filterStatus]);
+        let list = receipts;
+        if (filterStatus === "Overdue") {
+            list = list.filter(r => r.payment_status === "Overdue" || r.is_overdue);
+        } else if (filterStatus !== "All") {
+            list = list.filter(r => r.payment_status === filterStatus);
+        }
+
+        const q = search.trim().toLowerCase();
+        if (!q) return list;
+
+        return list.filter(r => {
+            const vendor = (r.vendor_name || r.supplier || "").toLowerCase();
+            const po = (r.order_number || "").toLowerCase();
+            const inv = (r.invoice_number || "").toLowerCase();
+            const code = (r.vendor_code || "").toLowerCase();
+            const ref = (r.reference || "").toLowerCase();
+            const remarks = (r.remarks || "").toLowerCase();
+            const items = (r.lines || []).map(l => l.item_description || "").join(" ").toLowerCase();
+            const date = (r.invoice_date || "").toLowerCase();
+            const createdBy = (r.created_by || "").toLowerCase();
+
+            return vendor.includes(q) ||
+                po.includes(q) ||
+                inv.includes(q) ||
+                code.includes(q) ||
+                ref.includes(q) ||
+                remarks.includes(q) ||
+                items.includes(q) ||
+                date.includes(q) ||
+                createdBy.includes(q);
+        });
+    }, [receipts, filterStatus, search]);
 
     return (
         <main className="min-h-[calc(100vh-4rem)] w-full bg-slate-50 px-4 py-7 sm:px-6 lg:px-8">
@@ -335,8 +365,37 @@ function MaterialsReceivedList({ admin, isLoading, onAdd, onBack, onDelete, onEd
                     </div>
                 </div>
 
+                {/* Search Bar */}
+                <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+                    <div className="relative w-full max-w-md">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <Input
+                            type="text"
+                            placeholder="Search vendor, invoice, PO number, item description..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            className="h-10 pl-9 pr-9 text-sm bg-white border-slate-200 rounded-lg shadow-sm focus-visible:ring-cyan-500"
+                        />
+                        {search && (
+                            <button
+                                type="button"
+                                onClick={() => setSearch("")}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                                title="Clear search"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        )}
+                    </div>
+                    {search && (
+                        <p className="text-xs text-slate-500">
+                            Showing <strong className="text-slate-800">{filteredReceipts.length}</strong> of {receipts.length} receipts
+                        </p>
+                    )}
+                </div>
+
                 {/* List */}
-                <div className="mt-6 space-y-4">
+                <div className="mt-5 space-y-4">
                     {isLoading ? (
                         <div className="rounded-xl border bg-white p-12 text-center text-muted-foreground">Loading records…</div>
                     ) : filteredReceipts.length ? filteredReceipts.map((receipt, index) => {
@@ -516,8 +575,24 @@ function MaterialsReceivedList({ admin, isLoading, onAdd, onBack, onDelete, onEd
                             </section>
                         );
                     }) : (
-                        <div className="rounded-xl border bg-white p-12 text-center text-muted-foreground">
-                            {filterStatus === "All" ? "No material receipt records yet. Use Add Material Received to create the first entry." : `No receipts found with status '${filterStatus}'.`}
+                        <div className="rounded-xl border border-dashed border-slate-200 bg-white p-12 text-center">
+                            <p className="font-semibold text-slate-700">
+                                {search
+                                    ? `No materials received found matching "${search}".`
+                                    : filterStatus === "All"
+                                        ? "No material receipt records yet. Use Add Material Received to create the first entry."
+                                        : `No receipts found with status '${filterStatus}'.`}
+                            </p>
+                            {search && (
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                    Try searching with a different vendor name, invoice number, or PO number.
+                                </p>
+                            )}
+                            {search && (
+                                <Button variant="outline" size="sm" onClick={() => setSearch("")} className="mt-4">
+                                    Clear Search
+                                </Button>
+                            )}
                         </div>
                     )}
                 </div>
@@ -790,7 +865,12 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
 
     const removeReceipt = useMutation({
         mutationFn: deleteStoreMaterialReceipt,
-        onSuccess: () => { invalidate(); toast.success("Material receipt deleted successfully."); },
+        onSuccess: () => {
+            invalidate();
+            client.invalidateQueries({ queryKey: ["store-inventory"] });
+            client.invalidateQueries({ queryKey: ["store-dashboard"] });
+            toast.success("Material receipt deleted. Inventory quantity reversed successfully.");
+        },
         onError: e => toast.error(e.message),
     });
 
@@ -830,7 +910,17 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
                 onView={setViewingReceipt} onEdit={openEdit}
                 onDeleteBill={receipt => removeBill.mutate(receipt)}
                 onPayment={setPaymentReceipt}
-                onDelete={receipt => { if (window.confirm(`Delete Material Received for invoice ${receipt.invoice_number}? The linked Purchase Order will remain safe.`)) removeReceipt.mutate(receipt.id); }}
+                onDelete={receipt => {
+                    const inv = receipt.invoice_number ? `Invoice #${receipt.invoice_number}` : "this receipt";
+                    if (window.confirm(
+                        `Delete Materials Received — ${inv}?\n\n` +
+                        `This will:\n` +
+                        `• Reverse the received quantity from Inventory\n` +
+                        `• Automatically adjust the stock balance\n` +
+                        `• Allow the linked PO to be deleted (if no other receipts remain)\n\n` +
+                        `Are you sure you want to continue?`
+                    )) removeReceipt.mutate(receipt.id);
+                }}
                 receipts={receipts}
             />
             <ReceiptViewDialog receipt={viewingReceipt} onClose={() => setViewingReceipt(null)} />

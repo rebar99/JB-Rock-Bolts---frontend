@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowDownUp, CheckCircle2, ChevronDown, ChevronUp, Clock3, Eye, FileText, GripVertical, Package, Pencil, Plus, Printer, Search, Trash2, Truck, ClipboardCheck, BellRing, AlertCircle, XCircle, PackageCheck, ExternalLink, AlertTriangle } from "lucide-react";
+import { ArrowDownUp, CheckCircle2, ChevronDown, ChevronUp, Clock3, Eye, FileText, GripVertical, Package, Pencil, Plus, Printer, Search, Trash2, Truck, ClipboardCheck, BellRing, AlertCircle, XCircle, PackageCheck, ExternalLink, AlertTriangle, Boxes } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import PurchaseOrderForm from "@/components/store/PurchaseOrderForm";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -210,7 +210,27 @@ export default function StorePurchaseOrders({ orders = [], ordersError = null, a
             return isPreparedBy;
         });
     }, [orders, currentUser]);
-    const deleteOrder = useMutation({ mutationFn: deleteStoreOrder, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["store-orders"] }); queryClient.invalidateQueries({ queryKey: ["store-inventory"] }); queryClient.invalidateQueries({ queryKey: ["store-dashboard"] }); queryClient.invalidateQueries({ queryKey: ["recently-deleted"] }); toast.success("Purchase Order moved to Recently Deleted."); }, onError: error => toast.error(error.message) });
+    const deleteOrder = useMutation({
+        mutationFn: deleteStoreOrder,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["store-orders"] });
+            queryClient.invalidateQueries({ queryKey: ["store-inventory"] });
+            queryClient.invalidateQueries({ queryKey: ["store-dashboard"] });
+            queryClient.invalidateQueries({ queryKey: ["recently-deleted"] });
+            toast.success("Purchase Order moved to Recently Deleted.");
+        },
+        onError: error => {
+            const msg = error?.message || "";
+            if (msg.includes("material receipt") || msg.includes("Cannot delete PO")) {
+                toast.error(
+                    "Cannot delete this PO. Please delete all linked Materials Received entries first, then try again.",
+                    { duration: 7000 }
+                );
+            } else {
+                toast.error(msg);
+            }
+        }
+    });
     const completeOrder = useMutation({ mutationFn: completeStoreOrder, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["store-orders"] }); toast.success("Purchase Order marked as Completed."); }, onError: error => toast.error(error.message) });
     // Purchase Orders already owns its Select + S.No. columns and native sort /
     // resize controls. Remove any earlier shared-table controls left by hot reload.
@@ -396,6 +416,8 @@ export default function StorePurchaseOrders({ orders = [], ordersError = null, a
                             );
                         })()}
                         <PurchaseOrderSheet order={viewOrder} itemMasterList={itemMasterList} />
+
+                        <POQuantitySummary order={viewOrder} />
 
                         <ReceivedMaterialsSection order={viewOrder} />
 
@@ -604,6 +626,133 @@ export default function StorePurchaseOrders({ orders = [], ordersError = null, a
 }
 
 function Detail({ label, value, full }) { return <div className={full ? "sm:col-span-2 lg:col-span-3" : ""}><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 whitespace-pre-line font-medium">{value || "—"}</p></div>; }
+
+function POQuantitySummary({ order }) {
+    if (!order) return null;
+
+    const items = order.items || order.line_items || [];
+    const receipts = (order.material_receipts || []).filter(r => !r.is_deleted);
+
+    const totalPoQty = items.length > 0
+        ? items.reduce((sum, item) => sum + Number(item.quantity || 0), 0)
+        : Number(order.quantity || 0);
+
+    const totalReceivedQty = Number(order.received_quantity ?? 0) > 0
+        ? Number(order.received_quantity)
+        : receipts.reduce((sum, r) => sum + (r.lines || []).reduce((lSum, l) => lSum + Number(l.received_quantity || 0), 0), 0);
+
+    const totalPendingQty = Math.max(0, totalPoQty - totalReceivedQty);
+    const percentReceived = totalPoQty > 0 ? Math.min(100, Math.round((totalReceivedQty / totalPoQty) * 100)) : 0;
+
+    const isFullyReceived = totalPoQty > 0 && totalReceivedQty >= totalPoQty;
+    const isPartiallyReceived = totalReceivedQty > 0 && totalReceivedQty < totalPoQty;
+
+    const uoms = [...new Set(items.map(i => i.uom).filter(Boolean))];
+    const commonUom = uoms.length === 1 ? ` ${uoms[0]}` : "";
+
+    return (
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            {/* Header */}
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2.5">
+                    <div className="grid h-8 w-8 place-items-center rounded-lg bg-blue-50 text-blue-700 shadow-sm">
+                        <Boxes className="h-4 w-4" />
+                    </div>
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <h3 className="font-bold text-sm text-slate-900">PO Quantity Summary</h3>
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold border ${
+                                isFullyReceived 
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200" 
+                                    : isPartiallyReceived 
+                                        ? "bg-amber-50 text-amber-700 border-amber-200" 
+                                        : "bg-slate-50 text-slate-700 border-slate-200"
+                            }`}>
+                                <span className={`h-1.5 w-1.5 rounded-full ${isFullyReceived ? "bg-emerald-500" : isPartiallyReceived ? "bg-amber-500 animate-pulse" : "bg-slate-400"}`} />
+                                {isFullyReceived ? "Fully Received" : isPartiallyReceived ? "Partially Received" : "Pending Receipt"}
+                            </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            Order quantity fulfillment tracking against Purchase Order
+                        </p>
+                    </div>
+                </div>
+
+                <div className="text-right">
+                    <span className="text-xs font-semibold text-slate-600">
+                        {percentReceived}% Fulfilled
+                    </span>
+                </div>
+            </div>
+
+            {/* 3 Main KPI Cards */}
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {/* 1. PO Qty */}
+                <div className="rounded-xl border border-blue-200/80 bg-gradient-to-br from-blue-50/80 to-blue-50/30 p-3.5 shadow-sm">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-blue-700">PO Qty</span>
+                        <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-800">Total Ordered</span>
+                    </div>
+                    <div className="mt-2 flex items-baseline gap-1.5">
+                        <span className="text-2xl font-extrabold text-blue-950">
+                            {totalPoQty.toLocaleString("en-IN")}
+                        </span>
+                        {commonUom && <span className="text-xs font-bold text-blue-700">{commonUom}</span>}
+                    </div>
+                    <p className="mt-1 text-[11px] text-blue-600">Total ordered quantity in PO</p>
+                </div>
+
+                {/* 2. Materials Received Qty */}
+                <div className="rounded-xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50/80 to-emerald-50/30 p-3.5 shadow-sm">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">Materials Received Qty</span>
+                        <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">Delivered</span>
+                    </div>
+                    <div className="mt-2 flex items-baseline gap-1.5">
+                        <span className="text-2xl font-extrabold text-emerald-950">
+                            {totalReceivedQty.toLocaleString("en-IN")}
+                        </span>
+                        {commonUom && <span className="text-xs font-bold text-emerald-700">{commonUom}</span>}
+                    </div>
+                    <p className="mt-1 text-[11px] text-emerald-600">Verified received quantity in store</p>
+                </div>
+
+                {/* 3. Pending Qty */}
+                <div className="rounded-xl border border-amber-200/80 bg-gradient-to-br from-amber-50/80 to-amber-50/30 p-3.5 shadow-sm">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700">Pending Qty</span>
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${totalPendingQty > 0 ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>
+                            {totalPendingQty > 0 ? "Remaining" : "Nil"}
+                        </span>
+                    </div>
+                    <div className="mt-2 flex items-baseline gap-1.5">
+                        <span className={`text-2xl font-extrabold ${totalPendingQty > 0 ? "text-amber-950" : "text-emerald-700"}`}>
+                            {totalPendingQty.toLocaleString("en-IN")}
+                        </span>
+                        {commonUom && <span className="text-xs font-bold text-amber-700">{commonUom}</span>}
+                    </div>
+                    <p className="mt-1 text-[11px] text-amber-600">
+                        {totalPendingQty > 0 ? "Balance quantity remaining to arrive" : "All ordered materials received"}
+                    </p>
+                </div>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="mt-3">
+                <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1">
+                    <span>Delivery Progress</span>
+                    <span className="font-semibold text-slate-700">{percentReceived}% completed</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                    <div 
+                        className={`h-full transition-all duration-500 ${isFullyReceived ? "bg-emerald-500" : "bg-gradient-to-r from-blue-500 to-emerald-500"}`} 
+                        style={{ width: `${percentReceived}%` }} 
+                    />
+                </div>
+            </div>
+        </section>
+    );
+}
 
 function ReceivedMaterialsSection({ order }) {
     const receipts = order.material_receipts || [];

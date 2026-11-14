@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Megaphone, Warehouse, ShieldCheck, LogOut, ArrowRight, CheckCircle2, Circle, BellRing } from "lucide-react";
+import { Megaphone, Warehouse, ShieldCheck, LogOut, ArrowRight, CheckCircle2, Circle, BellRing, Landmark } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -12,6 +12,7 @@ import { toast } from "sonner";
 const apps = [
     { code: "marketing", title: "Marketing", subtitle: "Marketing & Sales Management", description: "Manage customer activity, sales records, reports and business performance.", icon: Megaphone, route: "/marketing", accent: "from-violet-600 to-indigo-700", pale: "bg-violet-50", iconClass: "text-violet-700", ring: "group-hover:ring-violet-300" },
     { code: "store_purchase", title: "Store Purchase", subtitle: "Purchase, Stock & Inventory", description: "Track purchasing, stock levels and your store inventory in one place.", icon: Warehouse, route: "/store-purchase", accent: "from-cyan-600 to-blue-700", pale: "bg-cyan-50", iconClass: "text-cyan-700", ring: "group-hover:ring-cyan-300" },
+    { code: "accounts", title: "Accounts", subtitle: "Store & Marketing Accounts", description: "Review and verify store receiving records and marketing transactions.", icon: Landmark, route: "/accounts/store", accent: "from-emerald-600 to-teal-700", pale: "bg-emerald-50", iconClass: "text-emerald-700", ring: "group-hover:ring-emerald-300" },
 ];
 
 export default function SoftwareSelection() {
@@ -26,9 +27,10 @@ export default function SoftwareSelection() {
         if (!user) return false;
         if (user.is_super_admin) return true;
         const access = user?.application_access ?? {};
-        const hasMarketing = access.marketing && access.marketing !== "none";
-        const hasStore = access.store_purchase && access.store_purchase !== "none";
-        return !!(hasMarketing && hasStore);
+        const count = ["marketing", "store_purchase", "accounts"].filter(
+            (c) => access[c] && access[c] !== "none"
+        ).length;
+        return count > 1;
     })();
     const [checking, setChecking] = useState(!hasMultiWorkspaceCached);
     const isSuperAdminUser = Boolean(user?.is_super_admin || user?.email?.toLowerCase() === "deepikar412003@gmail.com");
@@ -43,15 +45,15 @@ export default function SoftwareSelection() {
         const tryRedirect = (accessUser) => {
             if (accessUser.is_super_admin) return false; // Super Admin always sees selection
             const access = accessUser?.application_access ?? {};
-            const hasMarketing = access.marketing && access.marketing !== "none";
-            const hasStore = access.store_purchase && access.store_purchase !== "none";
-            if (hasMarketing && !hasStore) {
-                selectApplication("marketing");
-                navigate("/marketing", { replace: true });
-                return true;
-            } else if (hasStore && !hasMarketing) {
-                selectApplication("store_purchase");
-                navigate("/store-purchase", { replace: true });
+            const availableCodes = ["marketing", "store_purchase", "accounts"].filter(
+                (c) => access[c] && access[c] !== "none"
+            );
+            if (availableCodes.length === 1) {
+                const single = availableCodes[0];
+                selectApplication(single);
+                if (single === "marketing") navigate("/marketing", { replace: true });
+                else if (single === "store_purchase") navigate("/store-purchase", { replace: true });
+                else if (single === "accounts") navigate("/accounts/store", { replace: true });
                 return true;
             }
             return false;
@@ -204,7 +206,7 @@ export default function SoftwareSelection() {
 
             {pendingApprovals.length > 0 && <button type="button" onClick={() => setApprovalPopupOpen(true)} className="mx-auto mb-6 flex max-w-2xl items-center gap-3 rounded-xl border border-amber-300/50 bg-amber-50 px-5 py-3 text-left text-amber-950 shadow-lg"><BellRing className="h-5 w-5 shrink-0 text-amber-600" /><span><b>{pendingApprovals.length} PO approval{pendingApprovals.length === 1 ? "" : "s"} required</b><span className="block text-sm">Click to review the Purchase Orders assigned to you.</span></span></button>}
 
-            {available.length ? <div className="mx-auto grid max-w-3xl gap-4 pb-7 md:grid-cols-2">{available.map(({ icon: Icon, ...app }) => {
+            {available.length ? <div className="mx-auto grid max-w-5xl gap-4 pb-7 sm:grid-cols-2 lg:grid-cols-3">{available.map(({ icon: Icon, ...app }) => {
                 const isAdmin = applicationRole(app.code) === "admin";
                 return <button key={app.code} onClick={() => choose(app)} className={`group relative overflow-hidden rounded-xl border border-slate-200 bg-white p-4 text-left shadow-xl shadow-slate-900/10 transition duration-300 hover:-translate-y-1.5 hover:shadow-2xl focus:outline-none focus-visible:ring-4 ${app.ring}`}>
                     <div className={`absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r ${app.accent}`} />

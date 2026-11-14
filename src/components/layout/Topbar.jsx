@@ -163,6 +163,9 @@ export const Topbar = ({ onMenu, title = "JB Engineering Dashboard", subtitle = 
             if (window.location.pathname.startsWith("/store-purchase") || title.includes("Store")) {
                 return "Store";
             }
+            if (window.location.pathname.startsWith("/accounts") || title.toLowerCase().includes("account")) {
+                return "Accounts";
+            }
         }
         return "Marketing";
     }, [title]);
