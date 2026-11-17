@@ -16,17 +16,18 @@ import jbEngineeringLogo from "@/assets/jb-engineering-logo.jpg";
 
 const columns = [
     { key: "select", label: "Select", width: 52, min: 52, align: "center" },
-    { key: "sno", label: "S.No.", width: 100, min: 100, align: "center" },
-    { key: "supplier", label: "Vendor", width: 250, min: 150 },
-    { key: "item", label: "Item", width: 310, min: 160 },
-    { key: "order_number", label: "PO #", width: 150, min: 110 },
-    { key: "date", label: "PO Date", width: 140, min: 115 },
-    { key: "quantity", label: "Order Quantity", width: 145, min: 110, align: "right" },
-    { key: "received_quantity", label: "Received Qty", width: 135, min: 105, align: "right" },
-    { key: "amount", label: "Amount", width: 155, min: 110, align: "right" },
-    { key: "status", label: "Status", width: 200, min: 160, align: "center" },
-    { key: "activity", label: "Activity", width: 150, min: 120 },
-    { key: "actions", label: "Actions", width: 170, min: 140, align: "center" },
+    { key: "sno", label: "S.No.", width: 80, min: 70, align: "center" },
+    { key: "company", label: "Company", width: 140, min: 110, align: "center" },
+    { key: "supplier", label: "Vendor", width: 230, min: 150 },
+    { key: "item", label: "Item", width: 280, min: 150 },
+    { key: "order_number", label: "PO #", width: 140, min: 110 },
+    { key: "date", label: "PO Date", width: 130, min: 110 },
+    { key: "quantity", label: "Order Qty", width: 120, min: 95, align: "right" },
+    { key: "received_quantity", label: "Received Qty", width: 120, min: 95, align: "right" },
+    { key: "amount", label: "Amount", width: 140, min: 105, align: "right" },
+    { key: "status", label: "Status", width: 180, min: 150, align: "center" },
+    { key: "activity", label: "Activity", width: 140, min: 110 },
+    { key: "actions", label: "Actions", width: 160, min: 130, align: "center" },
 ];
 const defaultWidths = Object.fromEntries(columns.map(column => [column.key, column.width]));
 const itemText = order => (order.items || []).map(item => item.item_description).join(", ");
@@ -91,11 +92,12 @@ export default function StorePurchaseOrders({ orders = [], ordersError = null, a
     const { user: currentUser } = useAuth();
     const [screen, setScreen] = useState("list");
     const [search, setSearch] = useState("");
-    const [sort, setSort] = useState({ key: "date", direction: "desc" });
+    const [sort, setSort] = useState({ key: "sno", direction: "desc" });
     const [widths, setWidths] = useState(defaultWidths);
     const [selectedIds, setSelectedIds] = useState(new Set());
     const [viewOrder, setViewOrder] = useState(null);
     const [editingOrder, setEditingOrder] = useState(null);
+    const [selectedCompany, setSelectedCompany] = useState(null);
     const [createType, setCreateType] = useState(null);
     const [reorderItem, setReorderItem] = useState(null);
 
@@ -242,20 +244,23 @@ export default function StorePurchaseOrders({ orders = [], ordersError = null, a
         table.dataset.storeEnhanced = "purchase-native";
     }, []);
     const filtered = useMemo(() => orders.filter(order => {
-        const text = `${order.order_number} ${order.supplier} ${order.reference || ""} ${itemText(order)}`.toLowerCase();
+        const text = `${order.order_number} ${order.supplier} ${order.company || ""} ${order.reference || ""} ${itemText(order)}`.toLowerCase();
         return text.includes(search.toLowerCase());
     }).sort((a, b) => {
         const values = {
+            sno: [Number(a.id || 0), Number(b.id || 0)],
             supplier: [a.supplier, b.supplier], item: [itemText(a), itemText(b)], order_number: [a.order_number, b.order_number],
+            company: [a.company || "", b.company || ""],
             date: [a.po_date || a.created_at || "", b.po_date || b.created_at || ""], quantity: [quantityFor(a), quantityFor(b)], received_quantity: [Number(a.received_quantity || 0), Number(b.received_quantity || 0)],
             amount: [Number(a.grand_total || 0), Number(b.grand_total || 0)], status: [a.status, b.status],
             activity: [a.created_at || "", b.created_at || ""],
         };
         const pair = values[sort.key];
-        if (!pair) return 0;
+        if (!pair) return Number(b.id || 0) - Number(a.id || 0);
         const [left, right] = pair;
         const result = typeof left === "number" ? left - right : String(left || "").localeCompare(String(right || ""));
-        return sort.direction === "asc" ? result : -result;
+        if (result !== 0) return sort.direction === "asc" ? result : -result;
+        return Number(b.id || 0) - Number(a.id || 0);
     }), [orders, search, sort]);
     const totals = useMemo(() => ({ count: orders.length, quantity: orders.reduce((sum, order) => sum + quantityFor(order), 0), value: orders.reduce((sum, order) => sum + Number(order.grand_total || 0), 0), pending: orders.filter(order => !["Approved", "Final Approved", "Finally Approved", "Completed"].includes(order.status) && !(order.status || "").startsWith("Rejected")).length }), [orders]);
     const toggleSort = key => setSort(current => current.key === key ? { key, direction: current.direction === "asc" ? "desc" : "asc" } : { key, direction: "asc" });
@@ -269,9 +274,131 @@ export default function StorePurchaseOrders({ orders = [], ordersError = null, a
         const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
         window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
     };
-    if (screen === "create" && !createType) return <main className="mx-auto max-w-3xl p-5 sm:p-8"><section className="rounded-2xl border bg-white p-6 shadow-card sm:p-8"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-700">Create PO</p><h1 className="mt-2 text-2xl font-extrabold text-slate-950">Select Purchase Order Type</h1><p className="mt-2 text-sm text-muted-foreground">Choose the flow that fits this vendor before filling the Purchase Order.</p><div className="mt-6 grid gap-4 sm:grid-cols-2"><button type="button" onClick={() => setCreateType("Regular Vendor PO")} className="rounded-xl border-2 border-slate-200 p-5 text-left transition hover:border-cyan-600 hover:bg-cyan-50"><h2 className="font-bold text-slate-950">Regular Vendor PO</h2><p className="mt-2 text-sm text-muted-foreground">Complete vendor details, GST, delivery address and standard terms.</p></button><button type="button" onClick={() => setCreateType("One Time Vendor PO")} className="rounded-xl border-2 border-slate-200 p-5 text-left transition hover:border-cyan-600 hover:bg-cyan-50"><h2 className="font-bold text-slate-950">One Time Vendor PO</h2><p className="mt-2 text-sm text-muted-foreground">A clean, quick form with only the essential purchase details.</p></button></div><div className="mt-6"><Button type="button" variant="outline" onClick={() => setScreen("list")}>Cancel</Button></div></section></main>;
-    if (screen === "create" || screen === "edit") return <PurchaseOrderForm orders={orders} admin={admin || (editingOrder && ["Rejected by Approved By", "Rejected by Final Approved By", "Rejected"].includes(editingOrder.status) && (Number(editingOrder.created_by_user_id) === Number(currentUser?.id) || (editingOrder.created_by_user_id == null && Boolean(currentUser?.name && editingOrder.created_by) && (editingOrder.created_by || "").toLowerCase() === (currentUser?.name || "").toLowerCase())))} editingOrder={editingOrder} initialPoType={createType} initialItem={reorderItem} backLabel={reorderItem ? "Back to Inventory" : "PO List"} onBack={() => { setScreen("list"); setEditingOrder(null); setCreateType(null); if (reorderItem) { setReorderItem(null); navigate("/store-purchase/items"); } else { setReorderItem(null); } }} />;
-    return <main className="min-h-[calc(100vh-4rem)] w-full bg-white px-4 py-7 sm:px-6 lg:px-8"><div className="w-full"><div className="relative text-center"><h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">Purchase Orders</h1><p className="mt-2 text-sm text-muted-foreground">Create vendor POs, track ordered quantities and view purchase details.</p><div className="mt-6 flex flex-wrap justify-end gap-2"><Button variant="outline" onClick={() => navigate("/store-purchase/approvals")}><ClipboardCheck className="mr-2 h-4 w-4" />PO Approvals</Button>{admin && <Button onClick={() => { setCreateType(null); setScreen("create"); }} className="bg-gradient-primary shadow-elegant hover:opacity-90"><Plus className="mr-2 h-4 w-4" />Create PO</Button>}</div></div>
+    // Step 1: Select Company
+    if (screen === "create" && !selectedCompany) {
+        return (
+            <main className="mx-auto max-w-4xl p-5 sm:p-8">
+                <section className="rounded-2xl border bg-white p-6 shadow-card sm:p-8">
+                    <div className="flex items-center gap-2">
+                        <span className="rounded-full bg-cyan-100 px-3 py-1 text-xs font-bold text-cyan-800">
+                            Step 1 of 2
+                        </span>
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-700">Create PO</p>
+                    </div>
+                    <h1 className="mt-3 text-2xl sm:text-3xl font-extrabold text-slate-950">Select Company</h1>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                        Choose the company on whose behalf this Purchase Order is being issued.
+                    </p>
+
+                    <div className="mt-8 grid gap-5 sm:grid-cols-2">
+                        {/* Option 1: Re-Bar Couplers */}
+                        <button
+                            type="button"
+                            onClick={() => setSelectedCompany("RE-Bar Couplers India Private Limited")}
+                            className="group relative flex flex-col justify-between rounded-2xl border-2 border-slate-200 bg-white p-6 text-left transition-all hover:border-red-600 hover:shadow-lg hover:bg-red-50/20 active:scale-[0.99]"
+                        >
+                            <div>
+                                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                                    <img
+                                        src={jbEngineeringLogo}
+                                        alt="Re-Bar Couplers Logo"
+                                        className="h-12 w-auto object-contain rounded border border-slate-200 p-0.5 bg-white"
+                                    />
+                                    <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-[11px] font-bold text-red-700">
+                                        Re-Bar
+                                    </span>
+                                </div>
+                                <h2 className="mt-4 text-base font-extrabold text-slate-950 group-hover:text-red-700 transition-colors">
+                                    Re-Bar Couplers India Private Limited
+                                </h2>
+                            </div>
+                            <div className="mt-5 flex items-center gap-2 text-xs font-bold text-red-600">
+                                <span>Select Re-Bar Couplers</span>
+                                <span className="transition-transform group-hover:translate-x-1">→</span>
+                            </div>
+                        </button>
+
+                        {/* Option 2: JBEC Construction */}
+                        <button
+                            type="button"
+                            onClick={() => setSelectedCompany("JBEC Construction India Private Limited")}
+                            className="group relative flex flex-col justify-between rounded-2xl border-2 border-slate-200 bg-white p-6 text-left transition-all hover:border-green-700 hover:shadow-lg hover:bg-green-50/20 active:scale-[0.99]"
+                        >
+                            <div>
+                                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                                    <img
+                                        src={jbEngineeringLogo}
+                                        alt="JBEC Engineering Logo"
+                                        className="h-12 w-auto object-contain rounded border border-slate-200 p-0.5 bg-white"
+                                    />
+                                    <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-[11px] font-bold text-green-800">
+                                        JBEC
+                                    </span>
+                                </div>
+                                <h2 className="mt-4 text-base font-extrabold text-slate-950 group-hover:text-green-800 transition-colors">
+                                    JBEC Construction India Private Limited
+                                </h2>
+                            </div>
+                            <div className="mt-5 flex items-center gap-2 text-xs font-bold text-green-700">
+                                <span>Select JBEC Construction</span>
+                                <span className="transition-transform group-hover:translate-x-1">→</span>
+                            </div>
+                        </button>
+                    </div>
+
+                    <div className="mt-8 pt-4 border-t border-slate-100">
+                        <Button type="button" variant="outline" onClick={() => { setScreen("list"); setSelectedCompany(null); }}>
+                            Cancel
+                        </Button>
+                    </div>
+                </section>
+            </main>
+        );
+    }
+
+    // Step 2: Select PO Type
+    if (screen === "create" && !createType) {
+        return (
+            <main className="mx-auto max-w-3xl p-5 sm:p-8">
+                <section className="rounded-2xl border bg-white p-6 shadow-card sm:p-8">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <span className="rounded-full bg-cyan-100 px-3 py-1 text-xs font-bold text-cyan-800">
+                                Step 2 of 2
+                            </span>
+                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-700">Create PO</p>
+                        </div>
+                        <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-md">
+                            Company: <span className="text-cyan-700">{selectedCompany}</span>
+                        </span>
+                    </div>
+                    <h1 className="mt-3 text-2xl font-extrabold text-slate-950">Select Purchase Order Type</h1>
+                    <p className="mt-2 text-sm text-muted-foreground">Choose the flow that fits this vendor before filling the Purchase Order.</p>
+                    <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                        <button type="button" onClick={() => setCreateType("Regular Vendor PO")} className="rounded-xl border-2 border-slate-200 p-5 text-left transition hover:border-cyan-600 hover:bg-cyan-50">
+                            <h2 className="font-bold text-slate-950">Regular Vendor PO</h2>
+                            <p className="mt-2 text-sm text-muted-foreground">Complete vendor details, GST, delivery address and standard terms.</p>
+                        </button>
+                        <button type="button" onClick={() => setCreateType("One Time Vendor PO")} className="rounded-xl border-2 border-slate-200 p-5 text-left transition hover:border-cyan-600 hover:bg-cyan-50">
+                            <h2 className="font-bold text-slate-950">One Time Vendor PO</h2>
+                            <p className="mt-2 text-sm text-muted-foreground">A clean, quick form with only the essential purchase details.</p>
+                        </button>
+                    </div>
+                    <div className="mt-6 flex items-center gap-3">
+                        <Button type="button" variant="outline" onClick={() => setSelectedCompany(null)}>
+                            ← Back to Company Selection
+                        </Button>
+                        <Button type="button" variant="ghost" onClick={() => { setScreen("list"); setSelectedCompany(null); setCreateType(null); }}>
+                            Cancel
+                        </Button>
+                    </div>
+                </section>
+            </main>
+        );
+    }
+
+    if (screen === "create" || screen === "edit") return <PurchaseOrderForm orders={orders} admin={admin || (editingOrder && ["Rejected by Approved By", "Rejected by Final Approved By", "Rejected"].includes(editingOrder.status) && (Number(editingOrder.created_by_user_id) === Number(currentUser?.id) || (editingOrder.created_by_user_id == null && Boolean(currentUser?.name && editingOrder.created_by) && (editingOrder.created_by || "").toLowerCase() === (currentUser?.name || "").toLowerCase())))} editingOrder={editingOrder} initialCompany={selectedCompany || editingOrder?.company} initialPoType={createType} initialItem={reorderItem} backLabel={reorderItem ? "Back to Inventory" : "PO List"} onBack={() => { setScreen("list"); setEditingOrder(null); setCreateType(null); setSelectedCompany(null); if (reorderItem) { setReorderItem(null); navigate("/store-purchase/items"); } else { setReorderItem(null); } }} />;
+    return <main className="min-h-[calc(100vh-4rem)] w-full bg-white px-4 py-7 sm:px-6 lg:px-8"><div className="w-full"><div className="relative text-center"><h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">Purchase Orders</h1><p className="mt-2 text-sm text-muted-foreground">Create vendor POs, track ordered quantities and view purchase details.</p><div className="mt-6 flex flex-wrap justify-end gap-2"><Button variant="outline" onClick={() => navigate("/store-purchase/approvals")}><ClipboardCheck className="mr-2 h-4 w-4" />PO Approvals</Button>{admin && <Button onClick={() => { setSelectedCompany(null); setCreateType(null); setScreen("create"); }} className="bg-gradient-primary shadow-elegant hover:opacity-90"><Plus className="mr-2 h-4 w-4" />Create PO</Button>}</div></div>
         <div className="mt-6 grid gap-4 sm:grid-cols-3"><StatCard label="Total Purchase Orders" value={formatNumber(totals.count)} icon={FileText} color="bg-primary/10 text-primary" /><StatCard label="Total Purchase Value" value={`₹${formatNumber(totals.value)}`} icon={Truck} color="bg-success/15 text-success" /><StatCard label="Approval Pending PO" value={formatNumber(totals.pending)} icon={Clock3} color="bg-warning/15 text-warning" onClick={() => { if (myPendingApprovals.length > 0) setApprovalPopupOpen(true); else navigate("/store-purchase/approvals"); }} /></div>
         {myPendingApprovals.length > 0 && (
             <div className="mt-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50/90 p-4 shadow-sm">
@@ -359,7 +486,7 @@ export default function StorePurchaseOrders({ orders = [], ordersError = null, a
         )}
         <section className="mt-5 rounded-xl border bg-white p-4 shadow-card"><div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search by vendor, PO number, item or reference..." className="h-10 w-full rounded-lg border bg-slate-50 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-primary/20" /></div></section>
         {selectedIds.size > 0 && <div className="mt-5 flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5 text-sm"><span className="font-medium">{selectedIds.size} purchase order{selectedIds.size === 1 ? "" : "s"} selected</span><Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>Clear selection</Button></div>}
-        <section className="mt-5 overflow-hidden rounded-xl border bg-white shadow-card"><div className="overflow-x-auto"><table className="store-purchase-orders-table w-full table-fixed text-sm" style={{ minWidth: columns.reduce((sum, column) => sum + widths[column.key], 0) }}><colgroup>{columns.map(column => <col key={column.key} style={{ width: widths[column.key] }} />)}</colgroup><thead><tr>{columns.map(column => column.key === "select" ? <th key={column.key} className="border-r border-border bg-slate-50 px-3 py-3 text-center"><Checkbox checked={allSelected} onCheckedChange={toggleAll} aria-label="Select all purchase orders" /></th> : column.key === "actions" ? <th key={column.key} className="border-r border-border bg-slate-50 px-3 py-3 text-center text-xs font-bold uppercase tracking-wider">Actions</th> : <SortHeader key={column.key} column={column} sort={sort} onSort={toggleSort} width={widths[column.key]} onResizeStart={startResize} />)}</tr></thead><tbody>{filtered.length ? filtered.map((order, index) => { const items = order.items || []; const quantity = quantityFor(order); const activity = latestActivity(order); const awaiting = pendingApproversFor(order); const flow = approvalFlowFor(order); const rejected = ["Rejected by Approved By", "Rejected by Final Approved By", "Rejected"].includes(order.status); const isPreparedBy = Number(order.created_by_user_id) === Number(currentUser?.id) || (order.created_by_user_id == null && Boolean(currentUser?.name && order.created_by) && (order.created_by || "").toLowerCase() === (currentUser?.name || "").toLowerCase()) || admin; const isBothApproved = ["Finally Approved", "Approved", "Final Approved", "Completed"].includes(order.status); const canEditOrder = !isBothApproved && ((rejected && isPreparedBy) || (isPreparedBy && order.status === "Pending Approval") || admin); return <tr key={order.id} className="border-t transition-colors hover:bg-slate-50"><td className="px-3 py-4 text-center"><Checkbox checked={selectedIds.has(order.id)} onCheckedChange={() => toggleSelected(order.id)} aria-label={`Select ${order.order_number}`} /></td><td className="px-3 py-4 text-center text-muted-foreground">{index + 1}</td><td className="px-3 py-4 cursor-pointer hover:bg-slate-100/70 transition-colors" title={`Click to view PO ${order.order_number}`} onClick={() => setViewOrder(order)}><p className="truncate font-semibold text-primary hover:underline" title={order.supplier}>{order.supplier}</p><p className="mt-1 truncate text-xs text-muted-foreground" title={order.vendor_gst || "GST not added"}>{order.vendor_gst || "GST not added"}</p></td><td className="px-3 py-4 cursor-pointer hover:bg-slate-100/70 transition-colors" title={`Click to view PO ${order.order_number}`} onClick={() => setViewOrder(order)}><p className="truncate font-medium hover:text-primary hover:underline" title={itemText(order)}>{items.length ? itemText(order) : "—"}</p><p className="mt-1 text-xs text-muted-foreground">{items.length} item{items.length === 1 ? "" : "s"}</p></td><td className="truncate px-3 py-4 font-semibold text-primary cursor-pointer hover:underline hover:bg-slate-100/70 transition-colors" title={`Click to view PO ${order.order_number}`} onClick={() => setViewOrder(order)}>{order.order_number}</td><td className="px-3 py-4 whitespace-nowrap">{formatDate(order.po_date || order.created_at)}</td><td className="px-3 py-4 text-right font-medium">{formatNumber(quantity)}</td><td className="px-3 py-4 text-right font-medium">{formatNumber(order.received_quantity)}</td><td className="px-3 py-4 text-right font-semibold">₹{formatNumber(order.grand_total)}</td><td className="px-3 py-4 text-center"><span className={`inline-block max-w-full truncate rounded-full px-2.5 py-1 text-[11px] font-bold ${ ["Finally Approved","Approved","Final Approved","Completed"].includes(order.status) ? "bg-green-50 text-green-700" : (order.status||"").startsWith("Rejected") ? "bg-red-50 text-red-700" : "bg-blue-50 text-blue-700" }`}>{order.status}</span><div className="mt-1.5 space-y-0.5 text-[10px]"><div className="flex flex-wrap items-center justify-center gap-0.5"><span className="font-semibold text-slate-500">1st:</span><span className="truncate text-slate-700 max-w-[70px]" title={flow.firstName}>{flow.firstName}</span><span className={`rounded px-1 font-bold ${flow.s1Status === "Approved" ? "bg-green-50 text-green-600" : flow.s1Status === "Rejected" ? "bg-red-50 text-red-600" : "bg-amber-50 text-amber-600"}`}>{flow.s1Status}</span></div><div className="flex flex-wrap items-center justify-center gap-0.5"><span className="font-semibold text-slate-500">2nd:</span><span className="truncate text-slate-700 max-w-[70px]" title={flow.secondName}>{flow.secondName}</span><span className={`rounded px-1 font-bold ${flow.s2Status === "Approved" ? "bg-green-50 text-green-600" : flow.s2Status === "Rejected" ? "bg-red-50 text-red-600" : flow.s2Status === "Cancelled" ? "bg-slate-100 text-slate-400" : flow.s2Status === "Waiting" ? "bg-slate-50 text-slate-400" : "bg-amber-50 text-amber-600"}`}>{flow.s2Status}</span></div>{(quantity > 0 && Number(order.received_quantity || 0) >= quantity) && <div className="mt-1.5 flex items-center justify-center"><span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Fully Received</span></div>}</div></td><td className="px-3 py-4"><p className="truncate text-xs font-semibold text-foreground" title={activity.performed_by || "Not recorded"}>{activity.performed_by || "Not recorded"}</p><p className="mt-1 truncate text-xs font-medium">{activity.action}</p><p className="mt-1 truncate text-xs text-muted-foreground">{formatDate(activity.created_at)}</p></td><td className="px-3 py-4 text-center"><div className="flex items-center justify-center gap-1.5"><Button type="button" variant="ghost" size="icon" title="View full PO" onClick={() => setViewOrder(order)}><Eye className="h-4 w-4 text-slate-700 hover:text-primary" /></Button><Button type="button" variant="ghost" size="icon" title={isBothApproved ? "Editing disabled (Finally Approved)" : canEditOrder ? (rejected ? "Edit and resubmit rejected PO" : "Edit PO") : "Editing not permitted"} disabled={!canEditOrder} className={canEditOrder ? "text-blue-600 hover:text-blue-800" : "opacity-30 cursor-not-allowed text-slate-400"} onClick={() => { if (canEditOrder) { setEditingOrder(order); setScreen("edit"); } }}><Pencil className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" title={isBothApproved ? "Print / Save PDF" : "Print disabled (Approval pending)"} disabled={!isBothApproved} className={isBothApproved ? "text-slate-700 hover:text-primary" : "opacity-30 cursor-not-allowed text-slate-400"} onClick={() => { if (isBothApproved) printPurchaseOrder(order, itemMasterList); }}><Printer className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" title="Delete PO" className="text-destructive hover:text-destructive" disabled={deleteOrder.isPending} onClick={() => { if (window.confirm(`Move Purchase Order ${order.order_number} to Recently Deleted? It will be kept for 24 hours.`)) deleteOrder.mutate(order.id); }}><Trash2 className="h-4 w-4" /></Button></div></td></tr>; }) : <tr><td colSpan={columns.length} className="px-4 py-14 text-center text-sm text-muted-foreground">{search ? "No Purchase Order matched your search." : "No Purchase Orders yet. Use Create PO to create the first vendor purchase order."}</td></tr>}</tbody></table></div><p className="border-t bg-slate-50 px-4 py-2.5 text-xs text-muted-foreground">Click a header to sort. Drag the right edge of a column to change its width.</p></section><Dialog open={!!viewOrder} onOpenChange={open => !open && setViewOrder(null)}>
+        <section className="mt-5 overflow-hidden rounded-xl border bg-white shadow-card"><div className="overflow-x-auto"><table className="store-purchase-orders-table w-full table-fixed text-sm" style={{ minWidth: columns.reduce((sum, column) => sum + widths[column.key], 0) }}><colgroup>{columns.map(column => <col key={column.key} style={{ width: widths[column.key] }} />)}</colgroup><thead><tr>{columns.map(column => column.key === "select" ? <th key={column.key} className="border-r border-border bg-slate-50 px-3 py-3 text-center"><Checkbox checked={allSelected} onCheckedChange={toggleAll} aria-label="Select all purchase orders" /></th> : column.key === "actions" ? <th key={column.key} className="border-r border-border bg-slate-50 px-3 py-3 text-center text-xs font-bold uppercase tracking-wider">Actions</th> : <SortHeader key={column.key} column={column} sort={sort} onSort={toggleSort} width={widths[column.key]} onResizeStart={startResize} />)}</tr></thead><tbody>{filtered.length ? filtered.map((order, index) => { const items = order.items || []; const quantity = quantityFor(order); const activity = latestActivity(order); const awaiting = pendingApproversFor(order); const flow = approvalFlowFor(order); const rejected = ["Rejected by Approved By", "Rejected by Final Approved By", "Rejected"].includes(order.status); const isPreparedBy = Number(order.created_by_user_id) === Number(currentUser?.id) || (order.created_by_user_id == null && Boolean(currentUser?.name && order.created_by) && (order.created_by || "").toLowerCase() === (currentUser?.name || "").toLowerCase()) || admin; const isBothApproved = ["Finally Approved", "Approved", "Final Approved", "Completed"].includes(order.status); const canEditOrder = !isBothApproved && ((rejected && isPreparedBy) || (isPreparedBy && order.status === "Pending Approval") || admin); return <tr key={order.id} className="border-t transition-colors hover:bg-slate-50"><td className="px-3 py-4 text-center"><Checkbox checked={selectedIds.has(order.id)} onCheckedChange={() => toggleSelected(order.id)} aria-label={`Select ${order.order_number}`} /></td><td className="px-3 py-4 text-center text-muted-foreground">{index + 1}</td><td className="px-2 py-4 text-center">{((order.company || "").toLowerCase().includes("jbec")) ? <span className="inline-block rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10.5px] px-2 py-0.5 whitespace-nowrap">JBEC</span> : <span className="inline-block rounded-full bg-rose-100 text-rose-800 font-bold text-[10.5px] px-2 py-0.5 whitespace-nowrap">Re-Bar</span>}</td><td className="px-3 py-4 cursor-pointer hover:bg-slate-100/70 transition-colors" title={`Click to view PO ${order.order_number}`} onClick={() => setViewOrder(order)}><p className="truncate font-semibold text-primary hover:underline" title={order.supplier}>{order.supplier}</p><p className="mt-1 truncate text-xs text-muted-foreground" title={order.vendor_gst || "GST not added"}>{order.vendor_gst || "GST not added"}</p></td><td className="px-3 py-4 cursor-pointer hover:bg-slate-100/70 transition-colors" title={`Click to view PO ${order.order_number}`} onClick={() => setViewOrder(order)}><p className="truncate font-medium hover:text-primary hover:underline" title={itemText(order)}>{items.length ? itemText(order) : "—"}</p><p className="mt-1 text-xs text-muted-foreground">{items.length} item{items.length === 1 ? "" : "s"}</p></td><td className="truncate px-3 py-4 font-semibold text-primary cursor-pointer hover:underline hover:bg-slate-100/70 transition-colors" title={`Click to view PO ${order.order_number}`} onClick={() => setViewOrder(order)}>{order.order_number}</td><td className="px-3 py-4 whitespace-nowrap">{formatDate(order.po_date || order.created_at)}</td><td className="px-3 py-4 text-right font-medium">{formatNumber(quantity)}</td><td className="px-3 py-4 text-right font-medium">{formatNumber(order.received_quantity)}</td><td className="px-3 py-4 text-right font-semibold">₹{formatNumber(order.grand_total)}</td><td className="px-3 py-4 text-center"><span className={`inline-block max-w-full truncate rounded-full px-2.5 py-1 text-[11px] font-bold ${ ["Finally Approved","Approved","Final Approved","Completed"].includes(order.status) ? "bg-green-50 text-green-700" : (order.status||"").startsWith("Rejected") ? "bg-red-50 text-red-700" : "bg-blue-50 text-blue-700" }`}>{order.status}</span><div className="mt-1.5 space-y-0.5 text-[10px]"><div className="flex flex-wrap items-center justify-center gap-0.5"><span className="font-semibold text-slate-500">1st:</span><span className="truncate text-slate-700 max-w-[70px]" title={flow.firstName}>{flow.firstName}</span><span className={`rounded px-1 font-bold ${flow.s1Status === "Approved" ? "bg-green-50 text-green-600" : flow.s1Status === "Rejected" ? "bg-red-50 text-red-600" : "bg-amber-50 text-amber-600"}`}>{flow.s1Status}</span></div><div className="flex flex-wrap items-center justify-center gap-0.5"><span className="font-semibold text-slate-500">2nd:</span><span className="truncate text-slate-700 max-w-[70px]" title={flow.secondName}>{flow.secondName}</span><span className={`rounded px-1 font-bold ${flow.s2Status === "Approved" ? "bg-green-50 text-green-600" : flow.s2Status === "Rejected" ? "bg-red-50 text-red-600" : flow.s2Status === "Cancelled" ? "bg-slate-100 text-slate-400" : flow.s2Status === "Waiting" ? "bg-slate-50 text-slate-400" : "bg-amber-50 text-amber-600"}`}>{flow.s2Status}</span></div>{(quantity > 0 && Number(order.received_quantity || 0) >= quantity) && <div className="mt-1.5 flex items-center justify-center"><span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Fully Received</span></div>}</div></td><td className="px-3 py-4"><p className="truncate text-xs font-semibold text-foreground" title={activity.performed_by || "Not recorded"}>{activity.performed_by || "Not recorded"}</p><p className="mt-1 truncate text-xs font-medium">{activity.action}</p><p className="mt-1 truncate text-xs text-muted-foreground">{formatDate(activity.created_at)}</p></td><td className="px-3 py-4 text-center"><div className="flex items-center justify-center gap-1.5"><Button type="button" variant="ghost" size="icon" title="View full PO" onClick={() => setViewOrder(order)}><Eye className="h-4 w-4 text-slate-700 hover:text-primary" /></Button><Button type="button" variant="ghost" size="icon" title={isBothApproved ? "Editing disabled (Finally Approved)" : canEditOrder ? (rejected ? "Edit and resubmit rejected PO" : "Edit PO") : "Editing not permitted"} disabled={!canEditOrder} className={canEditOrder ? "text-blue-600 hover:text-blue-800" : "opacity-30 cursor-not-allowed text-slate-400"} onClick={() => { if (canEditOrder) { setEditingOrder(order); setScreen("edit"); } }}><Pencil className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" title={isBothApproved ? "Print / Save PDF" : "Print disabled (Approval pending)"} disabled={!isBothApproved} className={isBothApproved ? "text-slate-700 hover:text-primary" : "opacity-30 cursor-not-allowed text-slate-400"} onClick={() => { if (isBothApproved) printPurchaseOrder(order, itemMasterList); }}><Printer className="h-4 w-4" /></Button><Button type="button" variant="ghost" size="icon" title="Delete PO" className="text-destructive hover:text-destructive" disabled={deleteOrder.isPending} onClick={() => { if (window.confirm(`Move Purchase Order ${order.order_number} to Recently Deleted? It will be kept for 24 hours.`)) deleteOrder.mutate(order.id); }}><Trash2 className="h-4 w-4" /></Button></div></td></tr>; }) : <tr><td colSpan={columns.length} className="px-4 py-14 text-center text-sm text-muted-foreground">{search ? "No Purchase Order matched your search." : "No Purchase Orders yet. Use Create PO to create the first vendor purchase order."}</td></tr>}</tbody></table></div><p className="border-t bg-slate-50 px-4 py-2.5 text-xs text-muted-foreground">Click a header to sort. Drag the right edge of a column to change its width.</p></section><Dialog open={!!viewOrder} onOpenChange={open => !open && setViewOrder(null)}>
             <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto bg-slate-100 p-4 sm:p-6">
                 <DialogHeader className="mb-2">
                     <DialogTitle className="flex items-center justify-between pr-6">

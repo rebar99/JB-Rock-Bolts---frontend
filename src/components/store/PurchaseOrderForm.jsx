@@ -15,13 +15,13 @@ import { amountInWords } from "@/components/store/PurchaseOrderSheet";
 const emptyLine = () => ({ item_description: "", quantity: 1, uom: "Nos", unit_rate: 0 });
 
 const PAYMENT_TERM_PRESETS = [
-    "15 Days After Delivery",
-    "30 Days After Delivery",
-    "45 Days After Delivery",
-    "60 Days After Delivery",
-    "90 Days After Delivery",
-    "Immediate / On Delivery",
-    "100% Advance",
+    { label: "15 Days", value: "15 Days After Delivery" },
+    { label: "30 Days", value: "30 Days After Delivery" },
+    { label: "45 Days", value: "45 Days After Delivery" },
+    { label: "60 Days", value: "60 Days After Delivery" },
+    { label: "90 Days", value: "90 Days After Delivery" },
+    { label: "Immediate", value: "Immediate / On Delivery" },
+    { label: "100% Adv", value: "100% Advance" },
 ];
 
 const inputClass = "mt-1.5 h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100";
@@ -61,7 +61,7 @@ function buildPONumber(series, fyTag, prefix = "STR/0199/") {
     return `${prefix}${s}-${fy}`;
 }
 
-export default function PurchaseOrderForm({ orders = [], admin = false, onBack, editingOrder = null, initialPoType = null, initialItem = null, backLabel = null }) {
+export default function PurchaseOrderForm({ orders = [], admin = false, onBack, editingOrder = null, initialPoType = null, initialCompany = null, initialItem = null, backLabel = null }) {
     const queryClient = useQueryClient();
     const [manageItemsOpen, setManageItemsOpen] = useState(false);
     const [manageUomOpen, setManageUomOpen] = useState(false);
@@ -140,6 +140,7 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
         if (editingOrder) {
             return {
                 ...editingOrder,
+                company: editingOrder.company || initialCompany || "RE-Bar Couplers India Private Limited",
                 po_type: editingOrder.po_type || "Regular Vendor PO",
                 // Older records may still contain the retired Draft status.  Show
                 // them as Pending Approval so the status selector never appears blank.
@@ -155,6 +156,7 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
             const rate = Number(initialItem.rate || 0);
             const uom = initialItem.uom || "Nos";
             return {
+                company: initialCompany || "RE-Bar Couplers India Private Limited",
                 order_number: buildPONumber(initialParsed.series, initialParsed.fy || defaultFYTag()),
                 po_type: initialPoType || "Regular Vendor PO",
                 supplier: initialItem.vendor_name || "",
@@ -183,6 +185,7 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
             };
         }
         return {
+            company: initialCompany || "RE-Bar Couplers India Private Limited",
             order_number: buildPONumber(initialParsed.series, initialParsed.fy || defaultFYTag()),
             po_type: initialPoType || "Regular Vendor PO",
             supplier: "",
@@ -543,10 +546,44 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
     };
     const money = value => `₹${value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const formatNumber = value => Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+    const isJBEC = (form.company || "").toLowerCase().includes("jbec");
+    const companyTitle = isJBEC
+        ? "JBEC CONSTRUCTION INDIA PRIVATE LIMITED"
+        : "RE-Bar Couplers India Private Limited";
+
     return <main className="store-purchase-po mx-auto max-w-7xl p-5 sm:p-8">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-4"><img src={jbEngineeringLogo} alt="JB Engineering" className="h-16 w-24 rounded-lg border object-contain" /><div><h1 className="text-2xl font-extrabold text-red-700 sm:text-3xl">RE-Bar Couplers India Private Limited</h1><p className="mt-1 font-semibold text-slate-800">VPO Palkwaha, Tehsil Haroli, District Una, Himachal Pradesh - 177220</p><p className="font-semibold text-slate-800">HO: 10 A&amp;B, Block 23, Industrial Area, Nangal Jarialan, Distt. Una - 177212</p><p className="mt-1 text-sm font-semibold text-slate-700">Cell: +91 9888603791 · seema@jbengineeringcorporation.com</p><p className="text-sm font-semibold text-slate-700">www.jbengineeringcorporation.com · GST No. 02AAFCR5621L1ZG</p></div></div>
+                {isJBEC ? (
+                    <div className="flex items-center gap-4">
+                        <img src={jbEngineeringLogo} alt="JB Engineering" className="h-16 w-24 rounded-lg border object-contain" />
+                        <div>
+                            <h1 className="text-2xl font-extrabold text-red-700 sm:text-3xl">
+                                JBEC Construction India Private Limited
+                            </h1>
+                            <p className="mt-1 font-semibold text-slate-800">
+                                HO: 10 A&amp;B, Block 23, Industrial Area, Village Nangal Jarialan, Distt. Una, Himachal Pradesh – 177212 India
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-slate-700">
+                                Cell: +91 9434086599 · Contactus@jbengineeringcorporation.com
+                            </p>
+                            <p className="text-sm font-semibold text-slate-700">
+                                www.jbengineeringcorporation.com · GST No. 02AAHCJ0645C1Z7
+                            </p>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex items-center gap-4">
+                        <img src={jbEngineeringLogo} alt="JB Engineering" className="h-16 w-24 rounded-lg border object-contain" />
+                        <div>
+                            <h1 className="text-2xl font-extrabold text-red-700 sm:text-3xl">RE-Bar Couplers India Private Limited</h1>
+                            <p className="mt-1 font-semibold text-slate-800">VPO Palkwaha, Tehsil Haroli, District Una, Himachal Pradesh - 177220</p>
+                            <p className="font-semibold text-slate-800">HO: 10 A&amp;B, Block 23, Industrial Area, Nangal Jarialan, Distt. Una - 177212</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-700">Cell: +91 9888603791 · seema@jbengineeringcorporation.com</p>
+                            <p className="text-sm font-semibold text-slate-700">www.jbengineeringcorporation.com · GST No. 02AAFCR5621L1ZG</p>
+                        </div>
+                    </div>
+                )}
                 <div className="flex shrink-0 gap-2">{onBack && <Button type="button" variant="outline" onClick={onBack}><ArrowLeft className="mr-2 h-4 w-4" />{backLabel || "PO List"}</Button>}</div>
             </div>
             <div className="mt-5 border-t pt-5"><p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-700">Vendor document</p><h2 className="mt-1 text-3xl font-bold text-slate-950">{editingOrder ? "Edit Purchase Order" : "Create Purchase Order"}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{editingOrder ? "Update vendor, material lines, rates, quantities, status and PO terms. Items/Stock records are independent from this Purchase Order." : "Enter the vendor details, item lines, GST, totals and terms to create the purchase order."}</p></div>
@@ -566,7 +603,7 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
             <table className="po-print-table"><thead><tr><th>Sr. No.</th><th>Item Description</th><th>Quantity</th><th>UoM</th><th>Unit Rate (INR)</th><th>Amount (INR)</th></tr></thead><tbody>{form.items.map((line, index) => <tr key={index}><td>{index + 1}</td><td>{getItemOnlyName(line.item_description, itemMasterList) || "—"}</td><td>{formatNumber(line.quantity)}</td><td>{line.uom || "—"}</td><td>{money(Number(line.unit_rate) || 0)}</td><td>{money((Number(line.quantity) || 0) * (Number(line.unit_rate) || 0))}</td></tr>)}</tbody></table>
             <div className="po-print-totals"><p><span>Total</span><b>{money(totals.subtotal)}</b></p><p><span>IGST ({form.gst_rate}%)</span><b>{money(totals.gstAmount)}</b></p>{totals.freightCharges > 0 && <p><span>Freight Charges</span><b>{money(totals.freightCharges)}</b></p>}{totals.freightCharges > 0 && <p><span>GST on Freight ({form.freight_gst_type === "Without GST" ? "Without GST" : `${form.gst_rate}%`})</span><b>{money(totals.freightGst)}</b></p>}<p><span>Rounded off</span><b>{money(Number(form.round_off) || 0)}</b></p><p className="grand"><span>Total Amount Including Taxes</span><b>{money(totals.grandTotal)}</b></p></div>
             <section className="po-print-terms"><h3>Terms and Conditions</h3><p><b>Price:</b> {form.price_basis || "—"}</p><p><b>Packing &amp; Forwarding:</b> {form.packing_terms || "—"}</p><p><b>Freight &amp; Transportation:</b> {form.freight_terms || "—"}</p><p><b>Insurance:</b> {form.insurance_terms || "—"}</p><p><b>Delivery:</b> {form.delivery_terms || "—"}</p><p><b>Inspection:</b> {form.inspection_terms || "—"}</p><p><b>Guarantee / Warranty:</b> {form.warranty_terms || "—"}</p><p><b>Payment Terms:</b> {form.payment_terms || "—"}</p><p><b>Quantity Variance:</b> {form.quantity_variance || "—"}</p>{form.notes && <p><b>Notes:</b> {form.notes}</p>}</section>
-            <div className="po-print-signatures"><span>Prepared By</span><span>Approved By</span><span>Final Approved By</span><span>For RE-Bar Couplers India Private Limited</span></div>
+            <div className="po-print-signatures"><span>Prepared By</span><span>Approved By</span><span>Final Approved By</span><span>For {companyTitle}</span></div>
         </div>
         <style>{`.local-vendor-po > section:nth-of-type(2) > div:nth-of-type(2) > label:nth-child(4), .local-vendor-po > section:nth-of-type(2) > div:nth-of-type(2) > label:nth-child(5), .local-vendor-po > section:nth-of-type(2) > div:nth-of-type(2) > label:nth-child(6), .local-vendor-po > section:nth-of-type(2) > div:nth-of-type(2) > label:nth-child(7), .local-vendor-po > section:nth-of-type(2) > div:nth-of-type(3), .local-vendor-po > section:nth-of-type(4) { display: none; }`}</style>
         <form onSubmit={submit} className={`po-edit-form mt-6 space-y-6 ${isLocalVendor ? "local-vendor-po" : ""}`}>
@@ -872,7 +909,52 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
                     </div>
                 </div>
             </section>
-            <section className="rounded-xl border bg-card p-5 shadow-sm sm:p-6"><h2 className="font-bold">Terms and conditions</h2><p className="mt-1 text-xs text-muted-foreground">Update the standard terms from the Excel format as needed.</p><div className="mt-5 grid gap-4 md:grid-cols-2 lg:grid-cols-3"><Field label="Price"><input disabled={!admin} value={form.price_basis} onChange={e => change("price_basis", e.target.value)} className={inputClass} /></Field><Field label="Packing & Forwarding"><input disabled={!admin} value={form.packing_terms} onChange={e => change("packing_terms", e.target.value)} className={inputClass} /></Field><Field label="Freight & Transportation"><input disabled={!admin} value={form.freight_terms} onChange={e => change("freight_terms", e.target.value)} className={inputClass} /></Field><Field label="Insurance"><input disabled={!admin} value={form.insurance_terms} onChange={e => change("insurance_terms", e.target.value)} className={inputClass} /></Field><Field label="Inspection"><input disabled={!admin} value={form.inspection_terms} onChange={e => change("inspection_terms", e.target.value)} className={inputClass} /></Field><Field label="Guarantee / Warranty"><input disabled={!admin} value={form.warranty_terms} onChange={e => change("warranty_terms", e.target.value)} className={inputClass} /></Field><Field label="Payment Terms" className="!justify-start"><input disabled={!admin} list="po-payment-terms-list" value={form.payment_terms} onChange={e => change("payment_terms", e.target.value)} className={inputClass} placeholder="e.g. 30 Days After Delivery" /><datalist id="po-payment-terms-list">{PAYMENT_TERM_PRESETS.map(opt => <option key={opt} value={opt} />)}</datalist>{admin && <div className="mt-1.5 flex flex-wrap gap-1">{PAYMENT_TERM_PRESETS.map(preset => <button key={preset} type="button" onClick={() => change("payment_terms", preset)} className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition ${form.payment_terms === preset ? "bg-cyan-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>{preset}</button>)}</div>}</Field><Field label="Quantity Variance"><input disabled={!admin} value={form.quantity_variance} onChange={e => change("quantity_variance", e.target.value)} className={inputClass} /></Field><Field label="Additional notes" className="!justify-start"><textarea disabled={!admin} value={form.notes} onChange={e => change("notes", e.target.value)} className={`${inputClass} min-h-[2.5rem] h-10 py-2 resize-y`} /></Field></div><Field label="Delivery" className="mt-4"><textarea disabled={!admin} value={form.delivery_terms} onChange={e => change("delivery_terms", e.target.value)} className={`${inputClass} h-20 py-2 resize-y`} placeholder="Delivery period and location" /></Field><Field label="Remark 1" className="mt-4"><textarea disabled={!admin} value={form.remark_1} onChange={e => change("remark_1", e.target.value)} className={`${inputClass} h-12 py-2`} placeholder="e.g. Steel Material`s � 10% Quantity Will Be Allowed." /></Field><Field label="Remark 2 (Red)" className="mt-4"><textarea disabled={!admin} value={form.remark_2} onChange={e => change("remark_2", e.target.value)} className={`${inputClass} h-12 py-2 border-red-300 focus:border-red-500 focus:ring-red-200 text-red-700 placeholder-red-300`} placeholder="e.g. 1. MTC to be supplied along with the Consignment." /></Field></section>
+            <section className="rounded-xl border bg-card p-5 shadow-sm sm:p-6"><h2 className="font-bold">Terms and conditions</h2><p className="mt-1 text-xs text-muted-foreground">Update the standard terms from the Excel format as needed.</p>                <div className="mt-5 grid gap-4 md:grid-cols-2 lg:grid-cols-3 items-start">
+                    <Field label="Price" className="!justify-start">
+                        <input disabled={!admin} value={form.price_basis} onChange={e => change("price_basis", e.target.value)} className={inputClass} />
+                    </Field>
+                    <Field label="Packing & Forwarding" className="!justify-start">
+                        <input disabled={!admin} value={form.packing_terms} onChange={e => change("packing_terms", e.target.value)} className={inputClass} />
+                    </Field>
+                    <Field label="Freight & Transportation" className="!justify-start">
+                        <input disabled={!admin} value={form.freight_terms} onChange={e => change("freight_terms", e.target.value)} className={inputClass} />
+                    </Field>
+                    <Field label="Insurance" className="!justify-start">
+                        <input disabled={!admin} value={form.insurance_terms} onChange={e => change("insurance_terms", e.target.value)} className={inputClass} />
+                    </Field>
+                    <Field label="Inspection" className="!justify-start">
+                        <input disabled={!admin} value={form.inspection_terms} onChange={e => change("inspection_terms", e.target.value)} className={inputClass} />
+                    </Field>
+                    <Field label="Guarantee / Warranty" className="!justify-start">
+                        <input disabled={!admin} value={form.warranty_terms} onChange={e => change("warranty_terms", e.target.value)} className={inputClass} />
+                    </Field>
+                    <Field label="Payment Terms" className="!justify-start">
+                        <input disabled={!admin} list="po-payment-terms-list" value={form.payment_terms} onChange={e => change("payment_terms", e.target.value)} className={inputClass} placeholder="e.g. 30 Days After Delivery" />
+                        <datalist id="po-payment-terms-list">
+                            {PAYMENT_TERM_PRESETS.map(opt => <option key={opt.value} value={opt.value} />)}
+                        </datalist>
+                        {admin && (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                                {PAYMENT_TERM_PRESETS.map(preset => (
+                                    <button
+                                        key={preset.value}
+                                        type="button"
+                                        onClick={() => change("payment_terms", preset.value)}
+                                        className={`rounded px-1.5 py-0.5 text-[9.5px] font-medium leading-none transition ${form.payment_terms === preset.value ? "bg-cyan-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
+                                    >
+                                        {preset.label}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </Field>
+                    <Field label="Quantity Variance" className="!justify-start">
+                        <input disabled={!admin} value={form.quantity_variance} onChange={e => change("quantity_variance", e.target.value)} className={inputClass} />
+                    </Field>
+                    <Field label="Additional notes" className="!justify-start">
+                        <textarea disabled={!admin} value={form.notes} onChange={e => change("notes", e.target.value)} className={`${inputClass} min-h-[2.5rem] h-10 py-2 resize-y`} />
+                    </Field>
+                </div><Field label="Delivery" className="mt-4"><textarea disabled={!admin} value={form.delivery_terms} onChange={e => change("delivery_terms", e.target.value)} className={`${inputClass} h-20 py-2 resize-y`} placeholder="Delivery period and location" /></Field><Field label="Remark 1" className="mt-4"><textarea disabled={!admin} value={form.remark_1} onChange={e => change("remark_1", e.target.value)} className={`${inputClass} h-12 py-2`} placeholder="e.g. Steel Material`s � 10% Quantity Will Be Allowed." /></Field><Field label="Remark 2 (Red)" className="mt-4"><textarea disabled={!admin} value={form.remark_2} onChange={e => change("remark_2", e.target.value)} className={`${inputClass} h-12 py-2 border-red-300 focus:border-red-500 focus:ring-red-200 text-red-700 placeholder-red-300`} placeholder="e.g. 1. MTC to be supplied along with the Consignment." /></Field></section>
             <div className="flex flex-wrap justify-end gap-3">{onBack && <Button type="button" variant="outline" onClick={onBack}>Cancel</Button>}{admin && <Button type="submit" disabled={save.isPending}>{save.isPending ? "Sending..." : editingOrder ? "Update & Send Approval" : "Send Approval"}</Button>}</div>
         </form>
         <ItemMasterManageDialog open={manageItemsOpen} onOpenChange={setManageItemsOpen} type="STORE" />
