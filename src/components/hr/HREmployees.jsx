@@ -131,7 +131,21 @@ export default function HREmployees() {
     const [panDocFile, setPanDocFile] = useState(null);
     const [bankDocFile, setBankDocFile] = useState(null);
     const [qualificationDocFile, setQualificationDocFile] = useState(null);
+    const [fileErrors, setFileErrors] = useState({});
     const [submitting, setSubmitting] = useState(false);
+
+    const MAX_FILE_SIZE = 50 * 1024; // 50 KB
+    const handleFileChange = (fieldName, setter, inputRef) => (e) => {
+        const file = e.target.files[0];
+        if (file && file.size > MAX_FILE_SIZE) {
+            setFileErrors(prev => ({ ...prev, [fieldName]: "File size must not exceed 50 KB. Please choose a smaller file." }));
+            e.target.value = "";
+            setter(null);
+            return;
+        }
+        setFileErrors(prev => ({ ...prev, [fieldName]: null }));
+        setter(file || null);
+    };
     const [deleteConfirmEmployee, setDeleteConfirmEmployee] = useState(null);
     const [deleting, setDeleting] = useState(false);
     const [deactivateModalEmployee, setDeactivateModalEmployee] = useState(null);
@@ -803,9 +817,11 @@ export default function HREmployees() {
                                     <Input
                                         type="file"
                                         accept="image/*,application/pdf"
-                                        onChange={(e) => setQualificationDocFile(e.target.files[0] || null)}
+                                        onChange={handleFileChange("qualification", setQualificationDocFile)}
                                         className="h-8 text-xs bg-background file:text-xs file:py-0"
                                     />
+                                     <p className="text-[10px] text-muted-foreground mt-0.5">Max file size: 50 KB</p>
+                                     {fileErrors.qualification && <p className="text-xs text-red-600 mt-1">{fileErrors.qualification}</p>}
                                 </div>
                                 <div className="sm:col-span-3">
                                     <Label className="text-xs">Full Address</Label>
@@ -890,9 +906,11 @@ export default function HREmployees() {
                                     <Input
                                         type="file"
                                         accept="image/*,application/pdf"
-                                        onChange={(e) => setAadhaarDocFile(e.target.files[0] || null)}
+                                        onChange={handleFileChange("aadhaar", setAadhaarDocFile)}
                                         className="h-8 text-xs bg-background file:text-xs file:py-0"
                                     />
+                                     <p className="text-[10px] text-muted-foreground mt-0.5">Max file size: 50 KB</p>
+                                     {fileErrors.aadhaar && <p className="text-xs text-red-600 mt-1">{fileErrors.aadhaar}</p>}
                                 </div>
                                 <div>
                                     <Label className="text-xs">PAN Card Number (10 Alphanumeric)</Label>
@@ -909,9 +927,11 @@ export default function HREmployees() {
                                     <Input
                                         type="file"
                                         accept="image/*,application/pdf"
-                                        onChange={(e) => setPanDocFile(e.target.files[0] || null)}
+                                        onChange={handleFileChange("pan", setPanDocFile)}
                                         className="h-8 text-xs bg-background file:text-xs file:py-0"
                                     />
+                                     <p className="text-[10px] text-muted-foreground mt-0.5">Max file size: 50 KB</p>
+                                     {fileErrors.pan && <p className="text-xs text-red-600 mt-1">{fileErrors.pan}</p>}
                                 </div>
                             </div>
                         </div>
@@ -973,9 +993,11 @@ export default function HREmployees() {
                                     <Input
                                         type="file"
                                         accept="image/*,application/pdf"
-                                        onChange={(e) => setBankDocFile(e.target.files[0] || null)}
+                                        onChange={handleFileChange("bank", setBankDocFile)}
                                         className="h-8 text-xs bg-background file:text-xs file:py-0"
                                     />
+                                     <p className="text-[10px] text-muted-foreground mt-0.5">Max file size: 50 KB</p>
+                                     {fileErrors.bank && <p className="text-xs text-red-600 mt-1">{fileErrors.bank}</p>}
                                 </div>
                             </div>
                         </div>
@@ -989,10 +1011,12 @@ export default function HREmployees() {
                                 <Input
                                     type="file"
                                     accept="image/*"
-                                    onChange={(e) => setProfileImageFile(e.target.files[0] || null)}
+                                    onChange={handleFileChange("profileImage", setProfileImageFile)}
                                     className="h-8 text-xs bg-background file:text-xs file:py-0"
                                 />
-                                <p className="text-[10px] text-muted-foreground mt-1">JPEG/PNG format recommended (max 1MB).</p>
+                                     <p className="text-[10px] text-muted-foreground mt-0.5">Max file size: 50 KB</p>
+                                     {fileErrors.profileImage && <p className="text-xs text-red-600 mt-1">{fileErrors.profileImage}</p>}
+                                <p className="text-[10px] text-muted-foreground mt-1">JPEG/PNG format only. Max file size: 50 KB.</p>
                             </div>
                         </div>
 
