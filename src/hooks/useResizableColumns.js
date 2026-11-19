@@ -15,20 +15,22 @@ const loadWidths = (storageKey, defaultWidths) => {
 // Column widths persist per-table in localStorage (keyed by storageKey), so a
 // drag survives a page refresh. Widths are only written back on mouseup, not
 // on every pixel of movement, to avoid thrashing storage while dragging.
-export function useResizableColumns(storageKey, defaultWidths) {
+export function useResizableColumns(storageKey, defaultWidths, options = {}) {
     const [widths, setWidths] = useState(() => loadWidths(storageKey, defaultWidths));
     const dragRef = useRef(null);
 
-    const startResize = useCallback((columnKey) => (e) => {
+    const startResize = useCallback((columnKey, colMin, colMax) => (e) => {
         e.preventDefault();
         const startX = e.clientX;
         const startWidth = widths[columnKey] ?? defaultWidths[columnKey] ?? 120;
-        dragRef.current = { columnKey, startX, startWidth };
+        const minW = colMin ?? options.minWidth ?? MIN_COL_WIDTH;
+        const maxW = colMax ?? options.maxWidth ?? MAX_COL_WIDTH;
+        dragRef.current = { columnKey, startX, startWidth, minW, maxW };
 
         const onMouseMove = (moveEvent) => {
             if (!dragRef.current) return;
             const delta = moveEvent.clientX - dragRef.current.startX;
-            const next = Math.min(MAX_COL_WIDTH, Math.max(MIN_COL_WIDTH, dragRef.current.startWidth + delta));
+            const next = Math.min(dragRef.current.maxW, Math.max(dragRef.current.minW, dragRef.current.startWidth + delta));
             setWidths((w) => ({ ...w, [dragRef.current.columnKey]: next }));
         };
 

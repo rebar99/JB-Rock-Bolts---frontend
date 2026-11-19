@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
+import ErrorBoundary from "@/components/common/ErrorBoundary";
 import { AppLayout } from "@/components/layout/AppLayout";
 import Dashboard from "./pages/Dashboard";
 import PurchaseOrders from "./pages/PurchaseOrders";
@@ -25,6 +26,7 @@ import RecentlyDeleted from "./pages/RecentlyDeleted";
 import SoftwareSelection from "./pages/SoftwareSelection";
 import StorePurchase from "./pages/StorePurchase";
 import Accounts from "./pages/Accounts";
+import HR from "./pages/HR";
 import ApplicationAccessManagement from "./pages/ApplicationAccessManagement";
 import POApprovalSettings from "./pages/POApprovalSettings";
 import POSignatureConfig from "./pages/POSignatureConfig";
@@ -83,6 +85,12 @@ const AccountsRoute = ({ children }) => {
     return applicationRole("accounts") === "none" ? <Navigate to="/" replace /> : children;
 };
 
+const HRRoute = ({ children }) => {
+    const { isAuthenticated, applicationRole } = useAuth();
+    if (!isAuthenticated) return <Navigate to="/login" replace />;
+    return applicationRole("hr") === "none" ? <Navigate to="/" replace /> : children;
+};
+
 const App = () => (
     <QueryClientProvider client={queryClient}>
         <ThemeProvider>
@@ -116,6 +124,7 @@ const App = () => (
                             <Route path="/admin/po-signature-config" element={<SuperAdminRoute><POSignatureConfig /></SuperAdminRoute>} />
                             <Route path="/store-purchase/*" element={<StorePurchaseRoute><StorePurchase /></StorePurchaseRoute>} />
                             <Route path="/accounts/*" element={<AccountsRoute><Accounts /></AccountsRoute>} />
+                            <Route path="/hr/*" element={<HRRoute><ErrorBoundary><HR /></ErrorBoundary></HRRoute>} />
                             <Route path="*" element={<NotFound />} />
                         </Routes>
                     </AuthProvider>

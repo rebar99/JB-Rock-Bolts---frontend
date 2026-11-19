@@ -566,6 +566,8 @@ export const fetchStockStatusList = () => get("/api/store-purchase/stock-status"
 export const updateItemStockLimit = (id, payload) => put(`/api/store-purchase/stock-status/${id}`, typeof payload === "object" ? payload : { out_of_stock_limit: Number(payload) });
 export const batchUpdateStockLimits = (items) => put("/api/store-purchase/stock-status/batch", { items });
 export const fetchStoreOrders = () => get("/api/store-purchase/purchase-orders");
+export const fetchStorePOSequenceConfig = () => get("/api/store-purchase/po-sequence-config");
+export const updateStorePOSequenceConfig = (body) => post("/api/store-purchase/po-sequence-config", body);
 export const fetchLastPoPrice = (itemDescription, excludeOrderId = null) => {
     const params = new URLSearchParams({ item_description: itemDescription });
     if (excludeOrderId) params.append("exclude_order_id", excludeOrderId);
@@ -771,3 +773,72 @@ export const fetchAccountsStore = () => get("/api/accounts/store");
 export const fetchAccountsStoreDetail = (poId) => get(`/api/accounts/store/${poId}`);
 export const fetchAccountsMarketing = () => get("/api/accounts/marketing");
 export const updateAccountsAccess = (userId, payload) => put(`/api/application-access/users/${userId}`, payload);
+
+// ── HR Department Workspace ───────────────────────────────────────────────────
+export const fetchHRDashboard = (params = {}) => get("/api/hr/dashboard", params);
+
+export const fetchHREmployees = (params = {}) => get("/api/hr/employees", params);
+export const fetchHREmployee = (id) => get(`/api/hr/employees/${id}`);
+export const createHREmployee = (body) => post("/api/hr/employees", body);
+export const updateHREmployee = (id, body) => put(`/api/hr/employees/${id}`, body);
+export const toggleHREmployeeStatus = (id, body = null) =>
+    request(`/api/hr/employees/${id}/toggle-status`, {
+        method: "PATCH",
+        body: body ? JSON.stringify(body) : undefined,
+    });
+export const deleteHREmployee = (id) => del(`/api/hr/employees/${id}`);
+export const fetchHRDesignations = () => get("/api/hr/employees/meta/designations");
+export const fetchHRLocations = () => get("/api/hr/employees/meta/locations");
+export const fetchNextHREmployeeCode = () => get("/api/hr/employees/meta/next-code");
+
+export const uploadHREmployeeDoc = async (empId, docType, file) => {
+    const token = getToken();
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`${BASE}/api/hr/employees/${empId}/upload/${docType}`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "Upload failed");
+    }
+    return res.json();
+};
+
+export const fetchHRAttendance = (params = {}) => get("/api/hr/attendance", params);
+export const markHRAttendance = (body) => post("/api/hr/attendance/mark", body);
+export const bulkMarkHRAttendance = (body) => post("/api/hr/attendance/bulk-mark", body);
+export const fetchHRAttendanceCloseStatus = (month, year) => get("/api/hr/attendance/close-status", { month, year });
+export const closeHRAttendance = (body) => post("/api/hr/attendance/close", body);
+export const reopenHRAttendance = (body) => post("/api/hr/attendance/reopen", body);
+
+export const fetchHRSalaryConfig = () => get("/api/hr/salary/config");
+export const updateHRSalaryConfig = (body) => put("/api/hr/salary/config", body);
+
+export const previewHRSalary = (body) => post("/api/hr/salary/preview", body);
+export const generateHRSalary = (body) => post("/api/hr/salary/generate", body);
+export const fetchHRSalaries = (params = {}) => get("/api/hr/salary", params);
+export const fetchHRSalary = (id) => get(`/api/hr/salary/${id}`);
+export const updateHRSalary = (id, body) => put(`/api/hr/salary/${id}`, body);
+export const approveHRSalary = (id) => post(`/api/hr/salary/${id}/approve`);
+export const markHRSalaryPaid = (id, body) => post(`/api/hr/salary/${id}/mark-paid`, body);
+export const holdHRSalary = (id) => post(`/api/hr/salary/${id}/hold`);
+export const deleteHRSalary = (id) => del(`/api/hr/salary/${id}`);
+export const fetchHRSalarySlip = (id) => get(`/api/hr/salary/${id}/slip`);
+export const uploadHRSalaryProof = async (salId, file) => {
+    const token = getToken();
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`${BASE}/api/hr/salary/${salId}/upload-proof`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "Proof upload failed");
+    }
+    return res.json();
+};

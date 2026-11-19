@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Megaphone, Warehouse, ShieldCheck, LogOut, ArrowRight, CheckCircle2, Circle, BellRing, Landmark } from "lucide-react";
+import { Megaphone, Warehouse, ShieldCheck, LogOut, ArrowRight, CheckCircle2, Circle, BellRing, Landmark, Users } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -13,6 +13,7 @@ const apps = [
     { code: "marketing", title: "Marketing", subtitle: "Marketing & Sales Management", description: "Manage customer activity, sales records, reports and business performance.", icon: Megaphone, route: "/marketing", accent: "from-violet-600 to-indigo-700", pale: "bg-violet-50", iconClass: "text-violet-700", ring: "group-hover:ring-violet-300" },
     { code: "store_purchase", title: "Store Purchase", subtitle: "Purchase, Stock & Inventory", description: "Track purchasing, stock levels and your store inventory in one place.", icon: Warehouse, route: "/store-purchase", accent: "from-cyan-600 to-blue-700", pale: "bg-cyan-50", iconClass: "text-cyan-700", ring: "group-hover:ring-cyan-300" },
     { code: "accounts", title: "Accounts", subtitle: "Store & Marketing Accounts", description: "Review and verify store receiving records and marketing transactions.", icon: Landmark, route: "/accounts/store", accent: "from-emerald-600 to-teal-700", pale: "bg-emerald-50", iconClass: "text-emerald-700", ring: "group-hover:ring-emerald-300" },
+    { code: "hr", title: "HR Department", subtitle: "Human Resource Management", description: "Manage employees, attendance, and salary processing in one place.", icon: Users, route: "/hr", accent: "from-blue-600 to-indigo-800", pale: "bg-blue-50", iconClass: "text-blue-700", ring: "group-hover:ring-blue-300" },
 ];
 
 export default function SoftwareSelection() {
@@ -27,13 +28,18 @@ export default function SoftwareSelection() {
         if (!user) return false;
         if (user.is_super_admin) return true;
         const access = user?.application_access ?? {};
-        const count = ["marketing", "store_purchase", "accounts"].filter(
+        const count = ["marketing", "store_purchase", "accounts", "hr"].filter(
             (c) => access[c] && access[c] !== "none"
         ).length;
         return count > 1;
     })();
     const [checking, setChecking] = useState(!hasMultiWorkspaceCached);
-    const isSuperAdminUser = Boolean(user?.is_super_admin || user?.email?.toLowerCase() === "deepikar412003@gmail.com");
+    const isSuperAdminUser = Boolean(
+        user?.is_super_admin ||
+        user?.email?.toLowerCase() === "deepikar412003@gmail.com" ||
+        user?.email?.toLowerCase() === "deepikarajput412003@gmail.com" ||
+        user?.email?.toLowerCase().includes("deepikar")
+    );
     const available = isSuperAdminUser ? apps : apps.filter((app) => applicationRole(app.code) !== "none");
     const choose = (app) => { selectApplication(app.code); navigate(app.route); };
 
@@ -45,7 +51,7 @@ export default function SoftwareSelection() {
         const tryRedirect = (accessUser) => {
             if (accessUser.is_super_admin) return false; // Super Admin always sees selection
             const access = accessUser?.application_access ?? {};
-            const availableCodes = ["marketing", "store_purchase", "accounts"].filter(
+            const availableCodes = ["marketing", "store_purchase", "accounts", "hr"].filter(
                 (c) => access[c] && access[c] !== "none"
             );
             if (availableCodes.length === 1) {
@@ -54,6 +60,7 @@ export default function SoftwareSelection() {
                 if (single === "marketing") navigate("/marketing", { replace: true });
                 else if (single === "store_purchase") navigate("/store-purchase", { replace: true });
                 else if (single === "accounts") navigate("/accounts/store", { replace: true });
+                else if (single === "hr") navigate("/hr", { replace: true });
                 return true;
             }
             return false;

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, Check, Pencil, Plus, Search, Trash2, X, Tag, Phone, MapPin, FileText, CheckCircle2, XCircle } from "lucide-react";
+import { Building2, Check, Pencil, Plus, Search, Trash2, X, Tag, Phone, MapPin, FileText, CheckCircle2, XCircle, ChevronDown, Layers } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,10 +24,10 @@ export default function StoreVendorManageDialog({ open, onOpenChange }) {
         uoms_supplied: [],
         status: "Active",
     });
-    const [itemInput, setItemInput] = useState("");
     const [uomInput, setUomInput] = useState("");
     const [uomToDelete, setUomToDelete] = useState(null);
     const [vendorToDelete, setVendorToDelete] = useState(null);
+    const [groupSelectorOpen, setGroupSelectorOpen] = useState(false); // group selector popup
 
     // Queries
     const { data: vendors = [], isLoading } = useQuery({
@@ -121,7 +121,7 @@ export default function StoreVendorManageDialog({ open, onOpenChange }) {
             uoms_supplied: [],
             status: "Active",
         });
-        setItemInput("");
+        setGroupSelectorOpen(false);
         setViewMode("form");
     };
 
@@ -137,7 +137,7 @@ export default function StoreVendorManageDialog({ open, onOpenChange }) {
             uoms_supplied: Array.isArray(vendor.uoms_supplied) ? [...vendor.uoms_supplied] : [],
             status: vendor.status || "Active",
         });
-        setItemInput("");
+        setGroupSelectorOpen(false);
         setViewMode("form");
     };
 
@@ -146,25 +146,13 @@ export default function StoreVendorManageDialog({ open, onOpenChange }) {
         setEditingVendor(null);
     };
 
-    const handleAddItem = (itemName) => {
-        const trimmed = (itemName || itemInput).trim();
-        if (!trimmed) return;
-        if (formData.items_supplied.some((x) => x.toLowerCase() === trimmed.toLowerCase())) {
-            toast.info(`"${trimmed}" is already in the materials list.`);
-            setItemInput("");
-            return;
-        }
+    const handleToggleGroup = (groupName) => {
+        const already = formData.items_supplied.some((x) => x.toLowerCase() === groupName.toLowerCase());
         setFormData((prev) => ({
             ...prev,
-            items_supplied: [...prev.items_supplied, trimmed],
-        }));
-        setItemInput("");
-    };
-
-    const handleRemoveItem = (indexToRemove) => {
-        setFormData((prev) => ({
-            ...prev,
-            items_supplied: prev.items_supplied.filter((_, idx) => idx !== indexToRemove),
+            items_supplied: already
+                ? prev.items_supplied.filter((x) => x.toLowerCase() !== groupName.toLowerCase())
+                : [...prev.items_supplied, groupName],
         }));
     };
 
@@ -178,13 +166,13 @@ export default function StoreVendorManageDialog({ open, onOpenChange }) {
 
     const filteredVendors = vendors.filter((v) => {
         const q = search.toLowerCase();
-        const items = Array.isArray(v.items_supplied) ? v.items_supplied.join(" ") : "";
+        const groups = Array.isArray(v.items_supplied) ? v.items_supplied.join(" ") : "";
         return (
             (v.vendor_name || "").toLowerCase().includes(q) ||
             (v.person_name || "").toLowerCase().includes(q) ||
             (v.vendor_gst || "").toLowerCase().includes(q) ||
             (v.contact || "").toLowerCase().includes(q) ||
-            items.toLowerCase().includes(q)
+            groups.toLowerCase().includes(q)
         );
     });
 
@@ -332,69 +320,116 @@ export default function StoreVendorManageDialog({ open, onOpenChange }) {
                                 />
                             </div>
 
-                            {/* Items / Materials Supplied ⭐ */}
+                            {/* Item Groups Supplied ⭐ */}
                             <div className="space-y-2 sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                                {/* Header row: label + Select Groups button */}
                                 <div className="flex items-center justify-between">
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                                            <Tag className="h-3.5 w-3.5 text-cyan-600" />
-                                            Items / Materials Supplied ⭐
-                                        </label>
-                                        <p className="text-[11px] text-muted-foreground mt-0.5">
-                                            Add multiple items this vendor supplies (e.g. MS Plate, Bolt, Nut, Welding Rod, Electrical Cable etc).
-                                        </p>
-                                    </div>
-                                    <span className="rounded-full bg-cyan-100 px-2.5 py-0.5 text-[11px] font-bold text-cyan-800">
-                                        {formData.items_supplied.length} item{formData.items_supplied.length === 1 ? "" : "s"}
-                                    </span>
-                                </div>
-
-                                {/* Custom input + Add button */}
-                                <div className="flex gap-2 pt-1">
-                                    <Input
-                                        value={itemInput}
-                                        onChange={(e) => setItemInput(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === "Enter") {
-                                                e.preventDefault();
-                                                handleAddItem();
-                                            }
-                                        }}
-                                        placeholder="Type item name and press Enter (e.g. MS Plate)..."
-                                        className="bg-white"
-                                    />
-                                    <Button
-                                        type="button"
-                                        variant="secondary"
-                                        onClick={() => handleAddItem()}
-                                        className="shrink-0 font-semibold"
-                                    >
-                                        <Plus className="mr-1 h-3.5 w-3.5" /> Add Item
-                                    </Button>
-                                </div>
-
-                                {/* Selected Items Chips */}
-                                {formData.items_supplied.length > 0 ? (
-                                    <div className="flex flex-wrap gap-1.5 pt-2">
-                                        {formData.items_supplied.map((item, idx) => (
-                                            <span
-                                                key={idx}
-                                                className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-xs font-semibold text-cyan-900 shadow-2xs"
-                                            >
-                                                {item}
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleRemoveItem(idx)}
-                                                    className="rounded-full hover:bg-cyan-200/80 p-0.5 text-cyan-700 transition-colors"
-                                                    title="Remove item"
-                                                >
-                                                    <X className="h-3 w-3" />
-                                                </button>
+                                    <label className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                                        <Layers className="h-3.5 w-3.5 text-cyan-600" />
+                                        Item Groups Supplied ⭐
+                                        {formData.items_supplied.length > 0 && (
+                                            <span className="rounded-full bg-cyan-100 px-2 py-0.5 text-[10px] font-bold text-cyan-800 ml-1">
+                                                {formData.items_supplied.length} selected
                                             </span>
-                                        ))}
+                                        )}
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={() => setGroupSelectorOpen((p) => !p)}
+                                        className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-400 bg-cyan-50 px-3 py-1.5 text-xs font-bold text-cyan-800 hover:bg-cyan-100 transition-colors shadow-sm"
+                                    >
+                                        <Layers className="h-3.5 w-3.5" />
+                                        {groupSelectorOpen ? "Close Selector" : "Select Groups"}
+                                        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${groupSelectorOpen ? "rotate-180" : ""}`} />
+                                    </button>
+                                </div>
+
+                                {/* Group Selector Popup — shown when button clicked */}
+                                {groupSelectorOpen && (
+                                    <div className="rounded-lg border border-cyan-200 bg-white shadow-md mt-1 max-h-56 overflow-y-auto">
+                                        {itemMasterList.length === 0 ? (
+                                            <p className="p-3 text-xs italic text-slate-400">Loading groups...</p>
+                                        ) : (
+                                            itemMasterList.map((group) => {
+                                                const isSelected = formData.items_supplied.some(
+                                                    (x) => x.toLowerCase() === group.name.toLowerCase()
+                                                );
+                                                const sizes = Array.isArray(group.sizes) ? group.sizes : [];
+                                                return (
+                                                    <button
+                                                        key={group.id}
+                                                        type="button"
+                                                        onClick={() => handleToggleGroup(group.name)}
+                                                        className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-xs transition-colors border-b border-slate-100 last:border-0 ${
+                                                            isSelected
+                                                                ? "bg-cyan-50 text-cyan-900 font-bold"
+                                                                : "hover:bg-slate-50 text-slate-700 font-medium"
+                                                        }`}
+                                                    >
+                                                        <span className="flex items-center gap-2">
+                                                            {isSelected && <Check className="h-3.5 w-3.5 text-cyan-600 shrink-0" />}
+                                                            {!isSelected && <span className="h-3.5 w-3.5 shrink-0" />}
+                                                            {group.name}
+                                                        </span>
+                                                        <span className="text-[10px] text-slate-400 shrink-0">
+                                                            {sizes.length} items
+                                                        </span>
+                                                    </button>
+                                                );
+                                            })
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Selected groups as chips + their items */}
+                                {formData.items_supplied.length > 0 ? (
+                                    <div className="space-y-2 pt-1">
+                                        {formData.items_supplied.map((grpName) => {
+                                            const groupData = itemMasterList.find(
+                                                (g) => g.name.toLowerCase() === grpName.toLowerCase()
+                                            );
+                                            const sizes = groupData && Array.isArray(groupData.sizes) ? groupData.sizes : [];
+                                            return (
+                                                <div key={grpName} className="rounded-lg border border-cyan-200 bg-white overflow-hidden">
+                                                    {/* Group header chip */}
+                                                    <div className="flex items-center justify-between gap-2 px-3 py-2 bg-cyan-50 border-b border-cyan-100">
+                                                        <span className="flex items-center gap-1.5 text-xs font-bold text-cyan-900">
+                                                            <Layers className="h-3 w-3 text-cyan-600" />
+                                                            {grpName}
+                                                            <span className="text-[10px] font-normal text-cyan-700">({sizes.length} items)</span>
+                                                        </span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleToggleGroup(grpName)}
+                                                            className="rounded-full hover:bg-cyan-200/80 p-0.5 text-cyan-700 transition-colors"
+                                                            title="Remove this group"
+                                                        >
+                                                            <X className="h-3 w-3" />
+                                                        </button>
+                                                    </div>
+                                                    {/* Items/sizes below */}
+                                                    <div className="px-3 py-2">
+                                                        {sizes.length > 0 ? (
+                                                            <div className="flex flex-wrap gap-1">
+                                                                {sizes.map((sz, si) => (
+                                                                    <span
+                                                                        key={si}
+                                                                        className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600 font-medium"
+                                                                    >
+                                                                        {sz.size || sz}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        ) : (
+                                                            <p className="text-[11px] italic text-slate-400">No items in this group yet.</p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 ) : (
-                                    <p className="text-xs italic text-slate-400 pt-1">No materials added yet.</p>
+                                    <p className="text-xs italic text-slate-400 pt-1">No item groups selected yet — click "Select Groups" to assign groups to this vendor.</p>
                                 )}
                             </div>
                         </div>
@@ -566,7 +601,7 @@ export default function StoreVendorManageDialog({ open, onOpenChange }) {
                                         <th className="px-4 py-3">Vendor Name</th>
                                         <th className="px-4 py-3">Person / Contact</th>
                                         <th className="px-4 py-3">GST No.</th>
-                                        <th className="px-4 py-3">Items / Materials Supplied</th>
+                                        <th className="px-4 py-3">Item Groups Supplied</th>
                                         <th className="px-3 py-3 text-center">Status</th>
                                         <th className="px-3 py-3 text-center">Actions</th>
                                     </tr>
@@ -612,7 +647,7 @@ export default function StoreVendorManageDialog({ open, onOpenChange }) {
                                                                 {items.slice(0, 4).map((m, idx) => (
                                                                     <span
                                                                         key={idx}
-                                                                        className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700"
+                                                                        className="rounded-md bg-cyan-50 border border-cyan-200 px-2 py-0.5 text-[10px] font-bold text-cyan-800"
                                                                     >
                                                                         {m}
                                                                     </span>
@@ -624,7 +659,7 @@ export default function StoreVendorManageDialog({ open, onOpenChange }) {
                                                                 )}
                                                             </div>
                                                         ) : (
-                                                            <span className="text-slate-400 italic">None specified</span>
+                                                            <span className="text-slate-400 italic text-[11px]">No groups assigned</span>
                                                         )}
                                                         {Array.isArray(vendor.uoms_supplied) && vendor.uoms_supplied.length > 0 && (
                                                             <div className="flex flex-wrap items-center gap-1 mt-1.5">

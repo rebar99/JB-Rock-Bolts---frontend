@@ -42,7 +42,22 @@ function StatusBadge({ status }) {
     );
 }
 
-export default function StoreStockStatusDialog({ open, onOpenChange }) {
+const normalizeItem = (item) => ({
+    id: item.id,
+    group_name: item.group_name || item.name || "General",
+    item_name: item.item_name || item.stock_item || item.name || "General",
+    full_item_name: item.full_item_name || `${item.group_name || item.name || ""} - ${item.item_name || item.stock_item || ""}`.trim(),
+    uom: item.uom || "Nos",
+    available_quantity: Number(item.available_quantity ?? item.quantity ?? 0),
+    out_of_stock_limit: Number(item.out_of_stock_limit || 0),
+    low_stock_limit: Number(item.low_stock_limit ?? item.reorder_level ?? 0),
+    reorder_level: Number(item.low_stock_limit ?? item.reorder_level ?? 0),
+    status: item.status || "In Stock",
+    location: item.location || "",
+    rate: Number(item.rate || 0),
+});
+
+export default function StoreStockStatusDialog({ open, onOpenChange, fallbackItems = [] }) {
     const client = useQueryClient();
     const formRef = useRef(null);
 
@@ -57,11 +72,20 @@ export default function StoreStockStatusDialog({ open, onOpenChange }) {
     const [groupFilter, setGroupFilter] = useState("");
 
     // Fetch items list
-    const { data: items = [], isLoading } = useQuery({
+    const { data: rawItems = [], isLoading, isError, error, refetch } = useQuery({
         queryKey: ["stock-status"],
         queryFn: fetchStockStatusList,
         enabled: open,
     });
+
+    const items = useMemo(() => {
+        const source = (Array.isArray(rawItems) && rawItems.length > 0)
+            ? rawItems
+            : (Array.isArray(fallbackItems) && fallbackItems.length > 0)
+                ? fallbackItems
+                : [];
+        return source.map(normalizeItem);
+    }, [rawItems, fallbackItems]);
 
     // Currently selected item in the form
     const selectedItem = useMemo(() => {
@@ -494,10 +518,22 @@ export default function StoreStockStatusDialog({ open, onOpenChange }) {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 bg-white">
-                                {isLoading ? (
+                                {isLoading && items.length === 0 ? (
                                     <tr>
                                         <td colSpan="9" className="py-8 text-center text-muted-foreground">
                                             Loading stock data...
+                                        </td>
+                                    </tr>
+                                ) : isError && items.length === 0 ? (
+                                    <tr>
+                                        <td colSpan="9" className="py-8 text-center text-rose-600">
+                                            <AlertCircle className="mx-auto mb-2 h-6 w-6 text-rose-500" />
+                                            {error?.message || "Failed to load stock data."}
+                                            <div className="mt-3">
+                                                <Button size="sm" variant="outline" onClick={() => refetch()}>
+                                                    Retry
+                                                </Button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ) : filtered.length === 0 ? (

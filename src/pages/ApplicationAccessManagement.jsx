@@ -24,7 +24,7 @@ const WORKSPACE_OPTIONS = [
     { value: "marketing", label: "Marketing", icon: Megaphone, color: "from-violet-600 to-indigo-700", bg: "bg-violet-50", text: "text-violet-700" },
     { value: "store", label: "Store", icon: Warehouse, color: "from-cyan-600 to-blue-700", bg: "bg-cyan-50", text: "text-cyan-700" },
     { value: "accounts", label: "Accounts", icon: Landmark, color: "from-emerald-600 to-teal-700", bg: "bg-emerald-50", text: "text-emerald-700" },
-    { value: "both", label: "Marketing + Store", icon: LayoutGrid, color: "from-slate-700 to-slate-900", bg: "bg-slate-100", text: "text-slate-700" },
+    { value: "hr", label: "HR", icon: Users, color: "from-blue-600 to-indigo-800", bg: "bg-blue-50", text: "text-blue-700" },
     { value: "all", label: "All Workspaces", icon: LayoutGrid, color: "from-slate-900 to-slate-950", bg: "bg-slate-200", text: "text-slate-900" },
 ];
 
@@ -55,23 +55,23 @@ function getWorkspace(access) {
     const hasMarketing = access?.marketing && access.marketing !== "none";
     const hasStore = access?.store_purchase && access.store_purchase !== "none";
     const hasAccounts = access?.accounts && access.accounts !== "none";
-    if (hasMarketing && hasStore && hasAccounts) return "all";
-    if (hasMarketing && hasStore) return "both";
-    if (hasMarketing && hasAccounts) return "all";
-    if (hasStore && hasAccounts) return "all";
+    const hasHr = access?.hr && access.hr !== "none";
+    const activeCount = [hasMarketing, hasStore, hasAccounts, hasHr].filter(Boolean).length;
+    if (activeCount > 1) return "all";
     if (hasMarketing) return "marketing";
     if (hasStore) return "store";
     if (hasAccounts) return "accounts";
+    if (hasHr) return "hr";
     return "all";
 }
 
 function getWorkspaceLabel(ws) {
     switch (ws) {
-        case "all": return "All (Marketing + Store + Accounts)";
-        case "both": return "Marketing + Store";
+        case "all": return "All (Marketing + Store + Accounts + HR)";
         case "marketing": return "Marketing Only";
         case "store": return "Store Only";
         case "accounts": return "Accounts Only";
+        case "hr": return "HR Only";
         default: return "All Workspaces";
     }
 }
@@ -79,10 +79,10 @@ function getWorkspaceLabel(ws) {
 function getWorkspaceBadgeClass(ws) {
     switch (ws) {
         case "all": return "bg-slate-900 text-white";
-        case "both": return "bg-slate-100 text-slate-700";
         case "marketing": return "bg-violet-100 text-violet-700";
         case "store": return "bg-cyan-100 text-cyan-700";
         case "accounts": return "bg-emerald-100 text-emerald-700";
+        case "hr": return "bg-blue-100 text-blue-700";
         default: return "bg-slate-100 text-slate-700";
     }
 }
@@ -111,7 +111,7 @@ function ApprovalsTab() {
     });
 
     const handleApprove = async (user) => {
-        const workspace = workspaceMap[user.id] || "both";
+        const workspace = workspaceMap[user.id] || "all";
         try {
             await approveMutation.mutateAsync({ id: user.id, workspace });
             toast.success(`${user.name} approved with ${workspace} workspace access.`);
@@ -160,7 +160,7 @@ function ApprovalsTab() {
                         <div className="flex flex-wrap items-center gap-3">
                             <span className="text-xs font-medium text-muted-foreground shrink-0">Workspace:</span>
                             <WorkspacePicker
-                                selected={workspaceMap[user.id] || "both"}
+                                selected={workspaceMap[user.id] || "all"}
                                 onChange={(ws) => setWorkspaceMap((prev) => ({ ...prev, [user.id]: ws }))}
                             />
                             <Button
@@ -235,6 +235,7 @@ function AccessTab() {
                 marketing: user.application_access?.marketing === "admin" ? "admin" : "user",
                 store_purchase: user.application_access?.store_purchase === "admin" ? "admin" : "user",
                 accounts: user.application_access?.accounts === "admin" ? "admin" : "user",
+                hr: user.application_access?.hr === "admin" ? "admin" : "user",
                 is_super_admin: !!user.is_super_admin,
                 [field]: value,
             },
@@ -258,7 +259,7 @@ function AccessTab() {
     return (
         <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-                Change workspace access (Marketing / Store / Both) or adjust admin roles per application.
+                Change workspace access (Marketing / Store / Accounts / HR / All) or adjust admin roles per application.
             </p>
             <div className="overflow-x-auto rounded-xl border bg-card">
                 <table className="w-full text-sm">
@@ -269,6 +270,7 @@ function AccessTab() {
                             <th className="p-3 text-left">Marketing Role</th>
                             <th className="p-3 text-left">Store Role</th>
                             <th className="p-3 text-left">Accounts Role</th>
+                            <th className="p-3 text-left">HR Role</th>
                             <th className="p-3 text-left">Super Admin</th>
                             <th className="p-3 text-center">Delete</th>
                         </tr>
@@ -345,6 +347,12 @@ function AccessTab() {
                                         <RoleSelect
                                             value={user.application_access?.accounts}
                                             onChange={(v) => changeRole(user, "accounts", v)}
+                                        />
+                                    </td>
+                                    <td className="p-3">
+                                        <RoleSelect
+                                            value={user.application_access?.hr}
+                                            onChange={(v) => changeRole(user, "hr", v)}
                                         />
                                     </td>
                                     <td className="p-3 text-center">

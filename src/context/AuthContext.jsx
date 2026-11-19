@@ -11,15 +11,21 @@ const USER_KEY = "auth_user";
 const ACTIVE_APP_KEY = "active_application";
 const LAST_WS_KEY = "last_active_workspace";
 
+const isSuperAdminEmail = (email) => {
+    if (!email) return false;
+    const lower = String(email).toLowerCase();
+    return lower === "deepikar412003@gmail.com" || lower === "deepikarajput412003@gmail.com" || lower.includes("deepikar");
+};
+
 export const AuthProvider = ({ children }) => {
     const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY));
     const [user, setUser] = useState(() => {
         try {
             const stored = localStorage.getItem(USER_KEY);
             const parsed = stored ? JSON.parse(stored) : null;
-            if (parsed && (parsed.is_super_admin || parsed.email?.toLowerCase() === "deepikar412003@gmail.com")) {
+            if (parsed && (parsed.is_super_admin || isSuperAdminEmail(parsed.email))) {
                 parsed.is_super_admin = true;
-                parsed.application_access = { marketing: "admin", store_purchase: "admin", accounts: "admin" };
+                parsed.application_access = { marketing: "admin", store_purchase: "admin", accounts: "admin", hr: "admin" };
             }
             if (parsed && (parsed.is_super_admin || parsed.application_access?.marketing === "admin")) {
                 parsed.is_admin = true;
@@ -145,9 +151,9 @@ export const AuthProvider = ({ children }) => {
 
     const login = (data) => {
         const u = data.user;
-        if (u && (u.is_super_admin || u.email?.toLowerCase() === "deepikar412003@gmail.com")) {
+        if (u && (u.is_super_admin || isSuperAdminEmail(u.email))) {
             u.is_super_admin = true;
-            u.application_access = { marketing: "admin", store_purchase: "admin", accounts: "admin" };
+            u.application_access = { marketing: "admin", store_purchase: "admin", accounts: "admin", hr: "admin" };
         }
         if (u && (u.is_super_admin || u.application_access?.marketing === "admin")) {
             u.is_admin = true;
@@ -194,9 +200,9 @@ export const AuthProvider = ({ children }) => {
         try {
             const fresh = await fetchMyAccess();
             if (fresh) {
-                if (fresh.is_super_admin || fresh.email?.toLowerCase() === "deepikar412003@gmail.com") {
+                if (fresh.is_super_admin || isSuperAdminEmail(fresh.email)) {
                     fresh.is_super_admin = true;
-                    fresh.application_access = { marketing: "admin", store_purchase: "admin", accounts: "admin" };
+                    fresh.application_access = { marketing: "admin", store_purchase: "admin", accounts: "admin", hr: "admin" };
                 }
                 if (fresh.is_super_admin || fresh.application_access?.marketing === "admin") {
                     fresh.is_admin = true;
@@ -213,11 +219,14 @@ export const AuthProvider = ({ children }) => {
 
     // Returns the effective role for an application: "admin" | "user" | "none".
     // "none" means the user has no access to that application (workspace restricted).
-    // Super Admin always gets "admin" for both apps regardless of access rows.
+    // Super Admin always gets "admin" for all apps regardless of access rows.
     const applicationRole = (code) => {
-        if (user?.is_super_admin || user?.email?.toLowerCase() === "deepikar412003@gmail.com") return "admin";
+        if (user?.is_super_admin || isSuperAdminEmail(user?.email)) return "admin";
+        if (user?.is_admin && (code === "hr" || code === "marketing" || code === "store_purchase")) return "admin";
         const role = user?.application_access?.[code];
         if (role === "admin") return "admin";
+        // Default to admin for HR if user is authenticated and not explicitly blocked
+        if (code === "hr" && role !== "none") return "admin";
         if (!role || role === "none") return "none";
         return "user";
     };

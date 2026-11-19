@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Plus, Printer, Settings, ShoppingCart, Trash2, Building2 } from "lucide-react";
+import { ArrowLeft, Plus, Printer, Settings, ShoppingCart, Trash2, Building2, Sliders } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ItemCombobox } from "@/components/ItemCombobox";
 import { ItemMasterManageDialog } from "@/components/ItemMasterManageDialog";
 import { UomManageDialog } from "@/components/UomManageDialog";
-import { createStoreOrder, fetchItemMasterList, fetchUomOptions, updateStoreOrder, fetchStoreVendors, fetchStoreInventory, fetchStoreOrders } from "@/lib/api";
+import { createStoreOrder, fetchItemMasterList, fetchUomOptions, updateStoreOrder, fetchStoreVendors, fetchStoreInventory, fetchStoreOrders, fetchStorePOSequenceConfig } from "@/lib/api";
 import { toast } from "sonner";
 import jbEngineeringLogo from "@/assets/jb-engineering-logo.jpg";
 import { getItemOnlyName } from "@/components/store/StorePurchaseOrders";
 import { amountInWords } from "@/components/store/PurchaseOrderSheet";
+import { useAuth } from "@/context/AuthContext";
+import StorePOSequenceDialog from "@/components/store/StorePOSequenceDialog";
 
 
 const emptyLine = () => ({ item_description: "", quantity: 1, uom: "Nos", unit_rate: 0 });
@@ -63,8 +65,10 @@ function buildPONumber(series, fyTag, prefix = "STR/0199/") {
 
 export default function PurchaseOrderForm({ orders = [], admin = false, onBack, editingOrder = null, initialPoType = null, initialCompany = null, initialItem = null, backLabel = null }) {
     const queryClient = useQueryClient();
+    const { user: currentUser } = useAuth();
     const [manageItemsOpen, setManageItemsOpen] = useState(false);
     const [manageUomOpen, setManageUomOpen] = useState(false);
+    const [poSequenceModalOpen, setPoSequenceModalOpen] = useState(false);
     // Store PO items have their own master. Marketing PO items are never
     // shown or changed from this Store Purchase workflow.
     const { data: itemMasterList = [] } = useQuery({ queryKey: ["item-master", "STORE"], queryFn: () => fetchItemMasterList("STORE") });
@@ -75,6 +79,10 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
         queryKey: ["store-orders"],
         queryFn: fetchStoreOrders,
         initialData: orders.length > 0 ? orders : undefined,
+    });
+    const { data: poSequenceConfigs = [] } = useQuery({
+        queryKey: ["store-po-sequence-config"],
+        queryFn: fetchStorePOSequenceConfig,
     });
 
     // Final approved / completed POs hide the Last PO Price column
@@ -128,13 +136,25 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
         if (editingOrder?.order_number) {
             return parsePONumber(editingOrder.order_number);
         }
-        const defaultSeries = String((orders?.length || 0) + 1).padStart(2, "0");
+        const targetComp = initialCompany || "RE-Bar Couplers India Private Limited";
+        // Check if Super Admin configured a starting sequence for this company
+        const cfg = (poSequenceConfigs || []).find(c => c.company === targetComp);
+        if (cfg && cfg.next_number) {
+            const prefix = cfg.prefix || "STR/0199/";
+            const series = String(cfg.next_number).padStart(2, "0");
+            return { prefix, series, fy: defaultFYTag() };
+        }
+        // Fallback: count company orders
+        const companyOrders = (orders || []).filter(o =>
+            (o.company || "RE-Bar Couplers India Private Limited") === targetComp
+        );
+        const defaultSeries = String(companyOrders.length + 1).padStart(2, "0");
         return { prefix: "STR/0199/", series: defaultSeries, fy: defaultFYTag() };
-    }, [editingOrder, orders]);
+    }, [editingOrder, orders, initialCompany, poSequenceConfigs]);
 
     // Financial year and PO series number are both editable
     const [financialYear, setFinancialYear] = useState(() => initialParsed.fy || defaultFYTag());
-    const [poSeries, setPoSeries] = useState(() => initialParsed.series || String((orders?.length || 0) + 1).padStart(2, "0"));
+    const [poSeries, setPoSeries] = useState(() => initialParsed.series || "01");
 
     const [form, setForm] = useState(() => {
         if (editingOrder) {
@@ -213,6 +233,16 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
             status: "Pending Approval",
         };
     });
+
+    // Sync PO series & order_number once configs/orders finish loading
+    useEffect(() => {
+        if (editingOrder) return; // Don't auto-change when editing
+        setPoSeries(initialParsed.series);
+        setForm(curr => ({
+            ...curr,
+            order_number: buildPONumber(initialParsed.series, financialYear || initialParsed.fy || defaultFYTag(), initialParsed.prefix),
+        }));
+    }, [initialParsed.series, initialParsed.prefix, editingOrder]);
 
     // When PO Series / sequence number changes (e.g. user changes "21" to another number)
     const handleSeriesChange = (newSeries) => {
@@ -664,7 +694,23 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
                         </div>
                     </Field>
 
-                    <Field label="PO Number *">
+                    <Field
+                        label={
+                            <span className="flex items-center justify-between w-full">
+                                <span>PO Number *</span>
+                                {currentUser?.is_super_admin && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setPoSequenceModalOpen(true)}
+                                        className="text-[11px] text-cyan-700 hover:text-cyan-900 font-semibold underline inline-flex items-center gap-1 cursor-pointer"
+                                        title="Super Admin: Setup starting sequence"
+                                    >
+                                        <Sliders className="h-3 w-3" /> Setup Sequence
+                                    </button>
+                                )}
+                            </span>
+                        }
+                    >
                         <input
                             required
                             disabled={!admin}
@@ -959,6 +1005,7 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
         </form>
         <ItemMasterManageDialog open={manageItemsOpen} onOpenChange={setManageItemsOpen} type="STORE" />
         <UomManageDialog open={manageUomOpen} onOpenChange={setManageUomOpen} type="STORE" />
+        <StorePOSequenceDialog open={poSequenceModalOpen} onOpenChange={setPoSequenceModalOpen} activeCompany={form.company || initialCompany} />
     </main>;
 }
 

@@ -5,12 +5,14 @@ import { Button } from "@/components/ui/button";
 import { fetchPendingUsers, approveUser, rejectUser } from "@/lib/api";
 import { fmtDateTime } from "@/lib/format";
 import { toast } from "sonner";
-import { UserCheck, UserX, Mail, Clock, Megaphone, Warehouse, LayoutGrid } from "lucide-react";
+import { UserCheck, UserX, Mail, Clock, Megaphone, Warehouse, LayoutGrid, Landmark, Users } from "lucide-react";
 
 const WORKSPACE_OPTIONS = [
     { value: "marketing", label: "Marketing", icon: Megaphone, color: "from-violet-600 to-indigo-700", bg: "bg-violet-50", text: "text-violet-700" },
     { value: "store", label: "Store", icon: Warehouse, color: "from-cyan-600 to-blue-700", bg: "bg-cyan-50", text: "text-cyan-700" },
-    { value: "both", label: "Both", icon: LayoutGrid, color: "from-slate-700 to-slate-900", bg: "bg-slate-100", text: "text-slate-700" },
+    { value: "accounts", label: "Accounts", icon: Landmark, color: "from-emerald-600 to-teal-700", bg: "bg-emerald-50", text: "text-emerald-700" },
+    { value: "hr", label: "HR", icon: Users, color: "from-blue-600 to-indigo-800", bg: "bg-blue-50", text: "text-blue-700" },
+    { value: "all", label: "All Workspaces", icon: LayoutGrid, color: "from-slate-900 to-slate-950", bg: "bg-slate-200", text: "text-slate-900" },
 ];
 
 function WorkspacePicker({ selected, onChange }) {
@@ -55,7 +57,7 @@ const UserApprovals = () => {
     });
 
     const handleApprove = async (user) => {
-        const workspace = workspaceMap[user.id] || "both";
+        const workspace = workspaceMap[user.id] || "all";
         try {
             await approveMutation.mutateAsync({ id: user.id, workspace });
             toast.success(`${user.name} approved with ${workspace} workspace access.`);
@@ -120,7 +122,7 @@ const UserApprovals = () => {
                                 <div className="flex flex-wrap items-center gap-3">
                                     <span className="text-xs font-medium text-muted-foreground shrink-0">Workspace:</span>
                                     <WorkspacePicker
-                                        selected={workspaceMap[user.id] || "both"}
+                                        selected={workspaceMap[user.id] || "all"}
                                         onChange={(ws) => setWorkspaceMap((prev) => ({ ...prev, [user.id]: ws }))}
                                     />
                                     <Button

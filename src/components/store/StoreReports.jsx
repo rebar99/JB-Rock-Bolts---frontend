@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, BarChart3, ChevronDown, ChevronUp, Download, PackageCheck, Search } from "lucide-react";
+import { AlertTriangle, BarChart3, ChevronDown, ChevronUp, ChevronRight, Boxes, Download, PackageCheck, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fetchStoreMaterialReceipts } from "@/lib/api";
 
@@ -40,6 +40,19 @@ export default function StoreReports({ inventory = [], orders = [] }) {
     const [tab, setTab] = useState("stock");
     const [search, setSearch] = useState("");
     const [expandedRows, setExpandedRows] = useState({}); // track which vendor+po rows are expanded
+    const [expandedStockGroups, setExpandedStockGroups] = useState(new Set()); // track expanded stock valuation groups
+
+    const toggleStockGroup = (groupName) => {
+        setExpandedStockGroups(prev => {
+            const next = new Set(prev);
+            if (next.has(groupName)) {
+                next.delete(groupName);
+            } else {
+                next.add(groupName);
+            }
+            return next;
+        });
+    };
 
     const totals = useMemo(() => ({
         stock: inventory.reduce((sum, x) => sum + Number(x.available_quantity || 0), 0),
@@ -50,6 +63,40 @@ export default function StoreReports({ inventory = [], orders = [] }) {
     }), [inventory, orders]);
 
     const stockRows = inventory.filter(x => `${x.name} ${x.stock_item || ""} ${x.location || ""}`.toLowerCase().includes(search.toLowerCase()));
+
+    const groupedStock = useMemo(() => {
+        const map = new Map();
+        stockRows.forEach(item => {
+            const groupName = (item.name || "").trim() || "Uncategorized";
+            if (!map.has(groupName)) {
+                map.set(groupName, {
+                    groupName,
+                    items: [],
+                    totalItems: 0,
+                    totalReceived: 0,
+                    issued: 0,
+                    available: 0,
+                    totalValue: 0,
+                    hasOutOfStock: false,
+                    hasLowStock: false,
+                });
+            }
+            const g = map.get(groupName);
+            g.items.push(item);
+            g.totalItems += 1;
+            g.totalReceived += Number(item.total_quantity || 0);
+            g.issued += Number(item.issued_quantity || 0);
+            g.available += Number(item.available_quantity || 0);
+            g.totalValue += Number(item.remaining_stock_amount || 0);
+            if (item.status === "Out of Stock") g.hasOutOfStock = true;
+            if (item.status === "Low Stock") g.hasLowStock = true;
+        });
+
+        return Array.from(map.values()).map(g => ({
+            ...g,
+            status: g.hasOutOfStock ? "Out of Stock" : g.hasLowStock ? "Low Stock" : "In Stock"
+        }));
+    }, [stockRows]);
     const alerts = stockRows.filter(x => x.status !== "In Stock");
     const consumption = stockRows.filter(x => Number(x.issued_quantity) > 0);
 
@@ -65,9 +112,11 @@ export default function StoreReports({ inventory = [], orders = [] }) {
             const amountPaid = Number(receipt.amount_paid || 0);
             const invoiceTotal = Number(receipt.invoice_total || 0);
             const pending = Math.max(0, invoiceTotal - amountPaid);
+            const comp = receipt.company || poOrder?.company || "RE-Bar Couplers India Private Limited";
             const existing = poMap.get(key) || {
                 vendor: receipt.vendor_name || poOrder?.supplier || "—",
                 po_number: receipt.order_number || poOrder?.order_number || "—",
+                company: comp,
                 items: [], // { name, po_qty, received_qty, value }
                 value: invoiceTotal > 0 ? invoiceTotal : Number(poOrder?.grand_total || 0),
                 po_qty: 0,
@@ -76,6 +125,9 @@ export default function StoreReports({ inventory = [], orders = [] }) {
                 amount_pending: pending,
                 payment_status: receipt.payment_status || (pending <= 0 && amountPaid > 0 ? "Paid" : amountPaid > 0 ? "Partially Paid" : "Unpaid"),
             };
+            if (!existing.company && comp) {
+                existing.company = comp;
+            }
             (receipt.lines || []).forEach(line => {
                 const poItem = (poOrder?.items || []).find(i => i.item_description === line.item_description);
                 const lineAmt = Number(line.amount || (Number(line.received_quantity || 0) * Number(line.unit_rate || 0)) || poItem?.amount || 0);
@@ -99,7 +151,7 @@ export default function StoreReports({ inventory = [], orders = [] }) {
         });
         const rows = [];
         poMap.forEach(row => {
-            if (!q || `${row.vendor} ${row.po_number} ${row.items.map(i => i.name).join(" ")}`.toLowerCase().includes(q)) {
+            if (!q || `${row.vendor} ${row.po_number} ${row.company || ""} ${row.items.map(i => i.name).join(" ")}`.toLowerCase().includes(q)) {
                 rows.push(row);
             }
         });
@@ -127,8 +179,8 @@ export default function StoreReports({ inventory = [], orders = [] }) {
             ]);
         } else if (tab === "suppliers") {
             csv("supplier-purchases-report.csv", [
-                ["S.No.", "Vendor Name", "PO No.", "Items", "Value", "Total PO Qty", "Materials Received Qty", "Amount Paid", "Payment Outstanding", "Status"],
-                ...supplierPurchaseRows.map((x, i) => [i + 1, x.vendor, x.po_number, x.items.map(it => it.name).join("; "), x.value, x.po_qty, x.received_qty, x.amount_paid, x.amount_pending, x.payment_status])
+                ["S.No.", "Vendor Name", "PO No.", "Company", "Items", "Value", "Total PO Qty", "Materials Received Qty", "Amount Paid", "Payment Outstanding", "Status"],
+                ...supplierPurchaseRows.map((x, i) => [i + 1, x.vendor, x.po_number, (x.company || "").toLowerCase().includes("jbec") ? "JBEC" : "RE-Bar", x.items.map(it => it.name).join("; "), x.value, x.po_qty, x.received_qty, x.amount_paid, x.amount_pending, x.payment_status])
             ]);
         }
     };
@@ -190,22 +242,162 @@ export default function StoreReports({ inventory = [], orders = [] }) {
                     </div>
 
                     {tab === "stock" && (
-                        <ReportTable
-                            headers={["Groups Name", "Items Name", "U/M", "Location", "Total Received", "Issued", "Available", "Rate", "Available Value", "Status"]}
-                            rows={stockRows.map(x => [
-                                x.name,
-                                x.stock_item || "—",
-                                x.uom || "Nos",
-                                x.location || "—",
-                                qty(x.total_quantity),
-                                qty(x.issued_quantity),
-                                <strong className="text-emerald-700">{qty(x.available_quantity)}</strong>,
-                                money(x.rate),
-                                <strong>{money(x.remaining_stock_amount)}</strong>,
-                                <Status value={x.status} />
-                            ])}
-                            empty="No material stock records found."
-                        />
+                        <div className="p-4 sm:p-5">
+                            <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div className="text-xs text-muted-foreground">
+                                    Showing <strong>{groupedStock.length}</strong> Groups ({stockRows.length} total items)
+                                </div>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                        if (groupedStock.length > 0 && expandedStockGroups.size === groupedStock.length) {
+                                            setExpandedStockGroups(new Set());
+                                        } else {
+                                            setExpandedStockGroups(new Set(groupedStock.map(g => g.groupName)));
+                                        }
+                                    }}
+                                    className="h-8 text-xs border-slate-200 text-slate-700 hover:bg-slate-100 self-end sm:self-auto"
+                                >
+                                    {groupedStock.length > 0 && expandedStockGroups.size === groupedStock.length ? (
+                                        <><ChevronUp className="mr-1.5 h-3.5 w-3.5" /> Collapse All Groups</>
+                                    ) : (
+                                        <><ChevronDown className="mr-1.5 h-3.5 w-3.5" /> Expand All Groups</>
+                                    )}
+                                </Button>
+                            </div>
+
+                            <div className="overflow-x-auto rounded-lg border border-slate-200">
+                                <table className="w-full min-w-[1000px] text-sm">
+                                    <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wider text-slate-500">
+                                        <tr>
+                                            <th className="border-b px-3 py-3 w-14 text-center">S.No.</th>
+                                            <th className="border-b px-4 py-3 min-w-[240px]">Groups Name</th>
+                                            <th className="border-b px-4 py-3 text-center">Total Items</th>
+                                            <th className="border-b px-4 py-3 text-right">Total Received</th>
+                                            <th className="border-b px-4 py-3 text-right">Issued</th>
+                                            <th className="border-b px-4 py-3 text-right">Available</th>
+                                            <th className="border-b px-4 py-3 text-right">Available Value</th>
+                                            <th className="border-b px-4 py-3 text-center">Overall Status</th>
+                                            <th className="border-b px-4 py-3 text-center">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {groupedStock.length ? groupedStock.map((group, groupIdx) => {
+                                            const isExpanded = expandedStockGroups.has(group.groupName);
+                                            return (
+                                                <Fragment key={group.groupName}>
+                                                    {/* Main Group Summary Row */}
+                                                    <tr
+                                                        onClick={() => toggleStockGroup(group.groupName)}
+                                                        className={`border-b transition-colors cursor-pointer select-none ${
+                                                            isExpanded ? "bg-cyan-50/40 hover:bg-cyan-50/60" : "hover:bg-slate-50"
+                                                        }`}
+                                                    >
+                                                        <td className="px-3 py-3.5 text-center font-medium text-muted-foreground">{groupIdx + 1}</td>
+                                                        <td className="px-4 py-3.5">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className={`grid h-6 w-6 place-items-center rounded transition-transform ${isExpanded ? "rotate-90 text-cyan-700 bg-cyan-100" : "text-slate-400 hover:text-slate-700"}`}>
+                                                                    <ChevronRight className="h-4 w-4" />
+                                                                </span>
+                                                                <span className="font-semibold text-slate-900 hover:text-cyan-700 text-sm">{group.groupName}</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-3.5 text-center">
+                                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                                                                {group.totalItems} {group.totalItems === 1 ? "Item" : "Items"}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3.5 text-right font-medium text-slate-700">{qty(group.totalReceived)}</td>
+                                                        <td className="px-4 py-3.5 text-right font-bold text-amber-700">{qty(group.issued)}</td>
+                                                        <td className="px-4 py-3.5 text-right font-bold text-emerald-700">{qty(group.available)}</td>
+                                                        <td className="px-4 py-3.5 text-right font-bold text-slate-900">{money(group.totalValue)}</td>
+                                                        <td className="px-4 py-3.5 text-center">
+                                                            <Status value={group.status} />
+                                                        </td>
+                                                        <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
+                                                            <Button
+                                                                variant={isExpanded ? "secondary" : "outline"}
+                                                                size="sm"
+                                                                onClick={() => toggleStockGroup(group.groupName)}
+                                                                className={`h-7 px-2.5 text-xs font-medium ${
+                                                                    isExpanded ? "bg-cyan-100 text-cyan-800 hover:bg-cyan-200" : "border-cyan-300 text-cyan-700 hover:bg-cyan-50"
+                                                                }`}
+                                                            >
+                                                                {isExpanded ? (
+                                                                    <><ChevronUp className="mr-1 h-3 w-3" />Hide Items</>
+                                                                ) : (
+                                                                    <><ChevronDown className="mr-1 h-3 w-3" />View Items</>
+                                                                )}
+                                                            </Button>
+                                                        </td>
+                                                    </tr>
+
+                                                    {/* Expanded Items Sub-Table */}
+                                                    {isExpanded && (
+                                                        <tr className="bg-slate-50/80">
+                                                            <td colSpan={9} className="p-0 border-b">
+                                                                <div className="p-3.5 bg-slate-50/90 border-t border-slate-200 space-y-2">
+                                                                    <div className="flex items-center gap-2 px-1">
+                                                                        <span className="h-2 w-2 rounded-full bg-cyan-600" />
+                                                                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                                                                            Items under &quot;{group.groupName}&quot; ({group.totalItems} {group.totalItems === 1 ? "item" : "items"})
+                                                                        </h3>
+                                                                    </div>
+                                                                    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                                                                        <table className="w-full text-xs">
+                                                                            <thead className="bg-slate-100/70 text-slate-600 uppercase font-semibold">
+                                                                                <tr>
+                                                                                    <th className="px-3 py-2 w-10 text-center">#</th>
+                                                                                    <th className="px-3 py-2 text-left">Items Name</th>
+                                                                                    <th className="px-3 py-2 text-center">U/M</th>
+                                                                                    <th className="px-3 py-2 text-left">Location</th>
+                                                                                    <th className="px-3 py-2 text-right">Total Received</th>
+                                                                                    <th className="px-3 py-2 text-right">Issued</th>
+                                                                                    <th className="px-3 py-2 text-right font-bold text-emerald-800">Available</th>
+                                                                                    <th className="px-3 py-2 text-right">Rate</th>
+                                                                                    <th className="px-3 py-2 text-right font-bold">Available Value</th>
+                                                                                    <th className="px-3 py-2 text-center">Status</th>
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody className="divide-y divide-slate-100">
+                                                                                {group.items.map((it, itemIdx) => (
+                                                                                    <tr key={it.id || `${group.groupName}-${itemIdx}`} className="hover:bg-slate-50">
+                                                                                        <td className="px-3 py-2 text-center text-muted-foreground">{itemIdx + 1}</td>
+                                                                                        <td className="px-3 py-2 font-medium text-slate-900">{it.stock_item || it.name || "—"}</td>
+                                                                                        <td className="px-3 py-2 text-center text-slate-600">{it.uom || "Nos"}</td>
+                                                                                        <td className="px-3 py-2 text-slate-600">{it.location || "—"}</td>
+                                                                                        <td className="px-3 py-2 text-right text-slate-700">{qty(it.total_quantity)}</td>
+                                                                                        <td className="px-3 py-2 text-right text-amber-700 font-semibold">{qty(it.issued_quantity)}</td>
+                                                                                        <td className="px-3 py-2 text-right text-emerald-700 font-bold">{qty(it.available_quantity)}</td>
+                                                                                        <td className="px-3 py-2 text-right text-slate-600">{money(it.rate)}</td>
+                                                                                        <td className="px-3 py-2 text-right font-semibold text-slate-900">{money(it.remaining_stock_amount)}</td>
+                                                                                        <td className="px-3 py-2 text-center">
+                                                                                            <Status value={it.status} />
+                                                                                        </td>
+                                                                                    </tr>
+                                                                                ))}
+                                                                            </tbody>
+                                                                        </table>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                </Fragment>
+                                            );
+                                        }) : (
+                                            <tr>
+                                                <td colSpan={9} className="p-12 text-center text-muted-foreground">
+                                                    No material stock records found.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     )}
 
                     {tab === "alerts" && (
@@ -259,7 +451,23 @@ export default function StoreReports({ inventory = [], orders = [] }) {
                                                     <tr key={`row-${i}`} className="hover:bg-slate-50">
                                                         <td className="px-3 py-3.5 text-center text-muted-foreground">{i + 1}</td>
                                                         <td className="px-4 py-3.5 font-semibold text-slate-900">{row.vendor}</td>
-                                                        <td className="px-4 py-3.5 font-medium text-cyan-700">{row.po_number}</td>
+                                                        <td className="px-4 py-3.5">
+                                                            <div className="flex flex-col gap-1 items-start">
+                                                                <span className="font-semibold text-cyan-700">{row.po_number}</span>
+                                                                {row.company && (
+                                                                    <span
+                                                                        className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wide border ${
+                                                                            row.company.toLowerCase().includes("jbec")
+                                                                                ? "bg-red-50 text-red-700 border-red-200"
+                                                                                : "bg-blue-50 text-blue-700 border-blue-200"
+                                                                        }`}
+                                                                        title={row.company}
+                                                                    >
+                                                                        {row.company.toLowerCase().includes("jbec") ? "JBEC" : "RE-Bar"}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </td>
                                                         {/* Items column — dropdown trigger */}
                                                         <td className="px-4 py-3.5">
                                                             {itemCount === 0 ? (

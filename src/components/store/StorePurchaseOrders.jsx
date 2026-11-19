@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowDownUp, CheckCircle2, ChevronDown, ChevronUp, Clock3, Eye, FileText, GripVertical, Package, Pencil, Plus, Printer, Search, Trash2, Truck, ClipboardCheck, BellRing, AlertCircle, XCircle, PackageCheck, ExternalLink, AlertTriangle, Boxes } from "lucide-react";
+import { ArrowDownUp, CheckCircle2, ChevronDown, ChevronUp, Clock3, Eye, FileText, GripVertical, Package, Pencil, Plus, Printer, Search, Trash2, Truck, ClipboardCheck, BellRing, AlertCircle, XCircle, PackageCheck, ExternalLink, AlertTriangle, Boxes, Sliders, Hash } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import PurchaseOrderForm from "@/components/store/PurchaseOrderForm";
+import StorePOSequenceDialog from "@/components/store/StorePOSequenceDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { completeStoreOrder, deleteStoreOrder, fetchItemMasterList, fetchMyPendingPOApprovals, fetchMyPONotifications, markPONotificationsRead, openLogStream, resolveFileUrl } from "@/lib/api";
@@ -100,6 +101,7 @@ export default function StorePurchaseOrders({ orders = [], ordersError = null, a
     const [selectedCompany, setSelectedCompany] = useState(null);
     const [createType, setCreateType] = useState(null);
     const [reorderItem, setReorderItem] = useState(null);
+    const [poSequenceModalOpen, setPoSequenceModalOpen] = useState(false);
 
     // Auto-open PO form pre-filled when navigated here via Re-Order button from Inventory
     useEffect(() => {
@@ -398,7 +400,27 @@ export default function StorePurchaseOrders({ orders = [], ordersError = null, a
     }
 
     if (screen === "create" || screen === "edit") return <PurchaseOrderForm orders={orders} admin={admin || (editingOrder && ["Rejected by Approved By", "Rejected by Final Approved By", "Rejected"].includes(editingOrder.status) && (Number(editingOrder.created_by_user_id) === Number(currentUser?.id) || (editingOrder.created_by_user_id == null && Boolean(currentUser?.name && editingOrder.created_by) && (editingOrder.created_by || "").toLowerCase() === (currentUser?.name || "").toLowerCase())))} editingOrder={editingOrder} initialCompany={selectedCompany || editingOrder?.company} initialPoType={createType} initialItem={reorderItem} backLabel={reorderItem ? "Back to Inventory" : "PO List"} onBack={() => { setScreen("list"); setEditingOrder(null); setCreateType(null); setSelectedCompany(null); if (reorderItem) { setReorderItem(null); navigate("/store-purchase/items"); } else { setReorderItem(null); } }} />;
-    return <main className="min-h-[calc(100vh-4rem)] w-full bg-white px-4 py-7 sm:px-6 lg:px-8"><div className="w-full"><div className="relative text-center"><h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">Purchase Orders</h1><p className="mt-2 text-sm text-muted-foreground">Create vendor POs, track ordered quantities and view purchase details.</p><div className="mt-6 flex flex-wrap justify-end gap-2"><Button variant="outline" onClick={() => navigate("/store-purchase/approvals")}><ClipboardCheck className="mr-2 h-4 w-4" />PO Approvals</Button>{admin && <Button onClick={() => { setSelectedCompany(null); setCreateType(null); setScreen("create"); }} className="bg-gradient-primary shadow-elegant hover:opacity-90"><Plus className="mr-2 h-4 w-4" />Create PO</Button>}</div></div>
+    return <main className="min-h-[calc(100vh-4rem)] w-full bg-white px-4 py-7 sm:px-6 lg:px-8"><div className="w-full"><div className="relative text-center"><h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">Purchase Orders</h1><p className="mt-2 text-sm text-muted-foreground">Create vendor POs, track ordered quantities and view purchase details.</p><div className="mt-6 flex flex-wrap justify-end gap-2">
+    {currentUser?.is_super_admin && (
+        <Button
+            variant="outline"
+            onClick={() => setPoSequenceModalOpen(true)}
+            className="border-amber-300 bg-amber-50/80 text-amber-900 hover:bg-amber-100 font-semibold shadow-2xs"
+            title="Setup starting sequence number for RE-Bar and JBEC"
+        >
+            <Hash className="mr-1.5 h-4 w-4 text-amber-700" />
+            PO Number Setup
+        </Button>
+    )}
+    <Button variant="outline" onClick={() => navigate("/store-purchase/approvals")}>
+        <ClipboardCheck className="mr-2 h-4 w-4" />PO Approvals
+    </Button>
+    {admin && (
+        <Button onClick={() => { setSelectedCompany(null); setCreateType(null); setScreen("create"); }} className="bg-gradient-primary shadow-elegant hover:opacity-90">
+            <Plus className="mr-2 h-4 w-4" />Create PO
+        </Button>
+    )}
+</div></div>
         <div className="mt-6 grid gap-4 sm:grid-cols-3"><StatCard label="Total Purchase Orders" value={formatNumber(totals.count)} icon={FileText} color="bg-primary/10 text-primary" /><StatCard label="Total Purchase Value" value={`₹${formatNumber(totals.value)}`} icon={Truck} color="bg-success/15 text-success" /><StatCard label="Approval Pending PO" value={formatNumber(totals.pending)} icon={Clock3} color="bg-warning/15 text-warning" onClick={() => { if (myPendingApprovals.length > 0) setApprovalPopupOpen(true); else navigate("/store-purchase/approvals"); }} /></div>
         {myPendingApprovals.length > 0 && (
             <div className="mt-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50/90 p-4 shadow-sm">
@@ -749,7 +771,9 @@ export default function StorePurchaseOrders({ orders = [], ordersError = null, a
                     })()}
                 </div>
             </DialogContent>
-        </Dialog></div></main>;
+        </Dialog>
+        <StorePOSequenceDialog open={poSequenceModalOpen} onOpenChange={setPoSequenceModalOpen} />
+    </div></main>;
 }
 
 function Detail({ label, value, full }) { return <div className={full ? "sm:col-span-2 lg:col-span-3" : ""}><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 whitespace-pre-line font-medium">{value || "—"}</p></div>; }
