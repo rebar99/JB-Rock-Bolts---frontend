@@ -166,16 +166,29 @@ export const Topbar = ({ onMenu, title = "JB Engineering Dashboard", subtitle = 
             if (window.location.pathname.startsWith("/accounts") || title.toLowerCase().includes("account")) {
                 return "Accounts";
             }
+            if (
+                window.location.pathname.startsWith("/hr") ||
+                title.toLowerCase().includes("employee") ||
+                title.toLowerCase().includes("attendance") ||
+                title.toLowerCase().includes("salary") ||
+                title.toLowerCase().includes("hr department")
+            ) {
+                return "HR";
+            }
         }
         return "Marketing";
     }, [title]);
 
+    // In HR workspace — show only the current logged-in user's own activity logs
+    const isHRWorkspace = currentWorkspace === "HR";
+
     // ── Polled logs (workspace-filtered to match the SSE stream) ─────────────
     const { data: queryLogs = [] } = useQuery({
-        queryKey: ["system_logs", currentWorkspace],
-        queryFn: () => fetchLogs(100, currentWorkspace),
+        queryKey: ["system_logs", currentWorkspace, isHRWorkspace ? user?.name : null],
+        queryFn: () => fetchLogs(100, currentWorkspace, isHRWorkspace ? (user?.name || "") : ""),
         refetchInterval: 30_000,
         staleTime: 25_000,
+        enabled: !!user,
     });
 
     // ── Online users (SSE-tracked, polled every 10 s as fallback) ─────────────
@@ -220,6 +233,8 @@ export const Topbar = ({ onMenu, title = "JB Engineering Dashboard", subtitle = 
                     queryClient.invalidateQueries({ queryKey: ["my-pending-po-approvals"] });
                     return;
                 }
+                // In HR workspace: only keep SSE logs that belong to the current logged-in user
+                if (isHRWorkspace && log.user && user?.name && log.user !== user.name) return;
                 setSseBuffer((prev) => [log, ...prev].slice(0, 100));
                 setNewCount((n) => n + 1);
                 // Refresh the online list AND history whenever any user logs in or out
@@ -427,16 +442,19 @@ export const Topbar = ({ onMenu, title = "JB Engineering Dashboard", subtitle = 
                                 </>
                             )}
                             
-                            {activeTab === "logins" && (
-                                filteredRecentLogins.length === 0
+                            {activeTab === "logins" && (() => {
+                                const loginList = isHRWorkspace
+                                    ? filteredRecentLogins.filter(s => s.user_id === user?.id)
+                                    : filteredRecentLogins;
+                                return loginList.length === 0
                                     ? <div className="p-6 text-center text-sm text-muted-foreground">No recent logins in this workspace.</div>
                                     : <div className="flex flex-col">
-                                        {filteredRecentLogins.map((s) => (
+                                        {loginList.map((s) => (
                                             <OnlineUserRow key={s.id} session={s}
                                                 isCurrentUser={s.user_id === user?.id} />
                                         ))}
-                                    </div>
-                            )}
+                                    </div>;
+                            })()}
                         </div>
                     </PopoverContent>
                 </Popover>

@@ -668,7 +668,7 @@ export const heartbeat = () => request("/api/users/heartbeat", { method: "POST" 
 export const fetchActiveSessions = () => get("/api/users/active-sessions");
 
 // ── Logs ─────────────────────────────────────────────────────────────────────
-export const fetchLogs = (limit = 100, workspace = "") => get("/api/logs", { limit, ...(workspace ? { workspace } : {}) });
+export const fetchLogs = (limit = 100, workspace = "", user_name = "") => get("/api/logs", { limit, ...(workspace ? { workspace } : {}), ...(user_name ? { user_name } : {}) });
 
 // Returns users who currently have the app open (SSE-based, instant)
 export const fetchOnlineUsers = () => get("/api/logs/online-users");
