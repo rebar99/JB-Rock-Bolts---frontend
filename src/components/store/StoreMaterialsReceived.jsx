@@ -772,6 +772,20 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
     const [invoiceNumber, setInvoiceNumber] = useState("");
     const [freightCharge, setFreightCharge] = useState("0");
     const [bill, setBill]                   = useState(null);
+    const [billSizeError, setBillSizeError]  = useState(null);
+
+    const MAX_BILL_SIZE = 50 * 1024; // 50 KB
+    const handleBillChange = (e) => {
+        const file = e.target.files?.[0] || null;
+        if (file && file.size > MAX_BILL_SIZE) {
+            setBillSizeError("File size must not exceed 50 KB. Please choose a smaller file.");
+            e.target.value = "";
+            setBill(null);
+            return;
+        }
+        setBillSizeError(null);
+        setBill(file);
+    };
     const [lines, setLines]                 = useState([]);
     const [remarks, setRemarks]             = useState("");
 
@@ -1040,7 +1054,7 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
                                                     type="file"
                                                     className="hidden"
                                                     accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls"
-                                                    onChange={e => setBill(e.target.files?.[0] || null)}
+                                                    onChange={handleBillChange}
                                                 />
                                             </label>
                                             <button
@@ -1067,10 +1081,12 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
                                         type="file"
                                         className="hidden"
                                         accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls"
-                                        onChange={e => setBill(e.target.files?.[0] || null)}
+                                        onChange={handleBillChange}
                                     />
                                 </label>
                             )}
+                            <p className="text-[10px] text-muted-foreground mt-1">Max file size: 50 KB (PDF / Image / Excel)</p>
+                            {billSizeError && <p className="text-xs text-red-600 mt-1">{billSizeError}</p>}
                         </Field>
                     </div>
                     <Field label="Remarks"><textarea disabled={!admin} value={remarks} onChange={e => setRemarks(e.target.value)} className="mt-1.5 min-h-20 w-full rounded-md border border-slate-200 p-3 text-sm outline-none focus:border-cyan-500" placeholder="Delivery challan, condition or other remarks" /></Field>
