@@ -29,9 +29,10 @@ export function useResizableColumns(storageKey, defaultWidths, options = {}) {
 
         const onMouseMove = (moveEvent) => {
             if (!dragRef.current) return;
-            const delta = moveEvent.clientX - dragRef.current.startX;
-            const next = Math.min(dragRef.current.maxW, Math.max(dragRef.current.minW, dragRef.current.startWidth + delta));
-            setWidths((w) => ({ ...w, [dragRef.current.columnKey]: next }));
+            const { columnKey, startX, startWidth, minW, maxW } = dragRef.current;
+            const delta = moveEvent.clientX - startX;
+            const next = Math.min(maxW, Math.max(minW, startWidth + delta));
+            setWidths((w) => ({ ...w, [columnKey]: next }));
         };
 
         const onMouseUp = () => {

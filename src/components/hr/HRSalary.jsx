@@ -493,7 +493,7 @@ export default function HRSalary() {
                         <div className="overflow-x-auto">
                             <table className="w-full border-collapse text-left text-xs">
                                 <thead>
-                                    <tr className="border-b border-border bg-muted/50 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                                    <tr className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-[11px] font-bold uppercase tracking-wider select-none border-b border-slate-300 dark:border-slate-700">
                                         <th className="p-3 pl-4">S.No</th>
                                         <th className="p-3">Code</th>
                                         <th className="p-3">Employee Name</th>
@@ -677,7 +677,7 @@ export default function HRSalary() {
                         <div className="overflow-x-auto">
                             <table className="w-full border-collapse text-left text-xs">
                                 <thead>
-                                    <tr className="border-b border-border bg-muted/50 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                                    <tr className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-[11px] font-bold uppercase tracking-wider select-none border-b border-slate-300 dark:border-slate-700">
                                         <th className="p-3 pl-4">S.No</th>
                                         <th className="p-3">Emp Code</th>
                                         <th className="p-3">Employee Name</th>

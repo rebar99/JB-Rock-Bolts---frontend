@@ -29,9 +29,10 @@ export function useResizableRows(storageKey, defaultHeight = 44) {
 
         const onMouseMove = (moveEvent) => {
             if (!dragRef.current) return;
-            const delta = moveEvent.clientY - dragRef.current.startY;
-            const next = Math.min(MAX_ROW_HEIGHT, Math.max(MIN_ROW_HEIGHT, dragRef.current.startHeight + delta));
-            setHeights((h) => ({ ...h, [dragRef.current.rowId]: next }));
+            const { rowId, startY, startHeight } = dragRef.current;
+            const delta = moveEvent.clientY - startY;
+            const next = Math.min(MAX_ROW_HEIGHT, Math.max(MIN_ROW_HEIGHT, startHeight + delta));
+            setHeights((h) => ({ ...h, [rowId]: next }));
         };
 
         const onMouseUp = () => {

@@ -115,10 +115,10 @@ function ResizableHeader({
             {onResizeStart && (
                 <div
                     onMouseDown={onResizeStart}
-                    className="group absolute right-0 top-0 h-full w-2.5 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 z-30 flex items-center justify-center"
+                    className="group/resize absolute right-0 top-0 h-full w-2.5 cursor-col-resize z-30 flex items-center justify-center hover:bg-blue-500/20"
                     title="Drag to resize column width"
                 >
-                    <div className="w-[2px] h-3/4 bg-border/80 group-hover:bg-primary group-active:bg-primary transition-colors" />
+                    <div className="w-[2px] h-full bg-blue-500 shadow-[0_0_4px_#3b82f6] group-hover/resize:w-[3px] group-hover/resize:bg-blue-400 transition-all" />
                 </div>
             )}
         </th>
@@ -598,13 +598,13 @@ export default function HRAttendance() {
                 <div className="overflow-x-auto">
                     <table style={{ width: totalTableWidth, minWidth: "100%" }} className="w-full border-collapse text-left text-xs table-fixed">
                         <thead>
-                            <tr className="border-b border-border bg-muted/60 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                            <tr className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-[10px] font-bold uppercase tracking-wider border-b border-slate-300 dark:border-slate-700 select-none">
                                 <ResizableHeader
                                     label="Employee Name"
                                     width={widths.name}
                                     onResizeStart={startResize("name", 120, 400)}
                                     style={{ left: 0 }}
-                                    className="sticky left-0 z-30 bg-muted dark:bg-slate-900 border-r border-border shadow-[2px_0_4px_-1px_rgba(0,0,0,0.1)] pl-3"
+                                    className="sticky left-0 z-30 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 border-r border-slate-300 dark:border-slate-700 shadow-[2px_0_4px_-1px_rgba(0,0,0,0.08)] pl-3"
                                 />
 
                                 <ResizableHeader
@@ -612,21 +612,21 @@ export default function HRAttendance() {
                                     width={widths.code}
                                     onResizeStart={startResize("code", 60, 200)}
                                     style={{ left: widths.name }}
-                                    className="sticky z-30 bg-muted dark:bg-slate-900 border-r border-border shadow-[2px_0_4px_-1px_rgba(0,0,0,0.1)]"
+                                    className="sticky z-30 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 border-r border-slate-300 dark:border-slate-700 shadow-[2px_0_4px_-1px_rgba(0,0,0,0.08)]"
                                 />
 
                                 <ResizableHeader
                                     label="Designation"
                                     width={widths.designation}
                                     onResizeStart={startResize("designation", 80, 300)}
-                                    className="bg-muted/80"
+                                    className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 border-r border-slate-200 dark:border-slate-700"
                                 />
 
                                 <ResizableHeader
-                                    label="Location"
+                                    label="Office Location"
                                     width={widths.location}
                                     onResizeStart={startResize("location", 70, 250)}
-                                    className="bg-muted/80"
+                                    className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 border-r border-slate-200 dark:border-slate-700"
                                 />
 
                                 {Array.from({ length: daysInMonth }, (_, i) => {
@@ -643,10 +643,10 @@ export default function HRAttendance() {
                                             onResizeStart={startResize("day", 24, 60)}
                                             align="center"
                                             className={cn(
-                                                "p-0.5 transition-colors border-r border-border/40",
+                                                "p-0.5 transition-colors border-r border-slate-200 dark:border-slate-700",
                                                 isToday && "bg-blue-100 text-blue-900 dark:bg-blue-950 dark:text-blue-200 font-black ring-1 ring-blue-500",
                                                 isSun && !isToday && "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 font-extrabold",
-                                                !isSun && !isToday && "text-muted-foreground bg-muted/40"
+                                                !isSun && !isToday && "text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800"
                                             )}
                                             title={isToday ? `Today (Day ${dayNum})` : isFuture ? `Future Date (Day ${dayNum}) - Attendance blocked` : `Day ${dayNum}`}
                                         >
@@ -668,7 +668,7 @@ export default function HRAttendance() {
                                     width={widths.p}
                                     onResizeStart={startResize("p", 28, 70)}
                                     align="center"
-                                    className="bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 border-l border-border"
+                                    className="bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 border-l border-r border-slate-200 dark:border-slate-700 font-black"
                                 />
                                 <ResizableHeader
                                     label="TR"
@@ -676,21 +676,21 @@ export default function HRAttendance() {
                                     onResizeStart={startResize("tr", 28, 70)}
                                     align="center"
                                     title="Travel (TR) — Official Work Travel / 100% Paid"
-                                    className="bg-teal-50 text-teal-800 dark:bg-teal-950/50 dark:text-teal-300"
+                                    className="bg-teal-50 text-teal-800 dark:bg-teal-950/50 dark:text-teal-300 border-r border-slate-200 dark:border-slate-700 font-black"
                                 />
                                 <ResizableHeader
                                     label="A"
                                     width={widths.a}
                                     onResizeStart={startResize("a", 28, 70)}
                                     align="center"
-                                    className="bg-red-50 text-red-800 dark:bg-red-950/50 dark:text-red-300"
+                                    className="bg-red-50 text-red-800 dark:bg-red-950/50 dark:text-red-300 border-r border-slate-200 dark:border-slate-700 font-black"
                                 />
                                 <ResizableHeader
                                     label="H"
                                     width={widths.h}
                                     onResizeStart={startResize("h", 28, 70)}
                                     align="center"
-                                    className="bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300"
+                                    className="bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 border-r border-slate-200 dark:border-slate-700 font-black"
                                 />
                                 <ResizableHeader
                                     label="PL"
@@ -698,7 +698,7 @@ export default function HRAttendance() {
                                     onResizeStart={startResize("pl", 28, 70)}
                                     align="center"
                                     title="Paid Leave (PL) — No Deduction"
-                                    className="bg-blue-50 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300"
+                                    className="bg-blue-50 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300 border-r border-slate-200 dark:border-slate-700 font-black"
                                 />
                                 <ResizableHeader
                                     label="UL"
@@ -706,35 +706,35 @@ export default function HRAttendance() {
                                     onResizeStart={startResize("ul", 28, 70)}
                                     align="center"
                                     title="Unpaid Leave (UL) — Salary Deducted (LWP)"
-                                    className="bg-rose-50 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300"
+                                    className="bg-rose-50 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300 border-r border-slate-200 dark:border-slate-700 font-black"
                                 />
                                 <ResizableHeader
                                     label="WO"
                                     width={widths.wo}
                                     onResizeStart={startResize("wo", 28, 80)}
                                     align="center"
-                                    className="bg-muted text-muted-foreground"
+                                    className="bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700 font-black"
                                 />
                                 <ResizableHeader
                                     label="HD"
                                     width={widths.hd}
                                     onResizeStart={startResize("hd", 28, 80)}
                                     align="center"
-                                    className="bg-purple-50 text-purple-800 dark:bg-purple-950/50 dark:text-purple-300"
+                                    className="bg-purple-50 text-purple-800 dark:bg-purple-950/50 dark:text-purple-300 border-r border-slate-200 dark:border-slate-700 font-black"
                                 />
                                 <ResizableHeader
                                     label="Present Days"
                                     width={widths.present_days}
                                     onResizeStart={startResize("present_days", 80, 160)}
                                     align="center"
-                                    className="bg-muted/90 text-foreground border-l border-border font-bold"
+                                    className="bg-slate-200/80 text-slate-900 dark:bg-slate-700 dark:text-white border-l border-r border-slate-300 font-bold"
                                 />
                                 <ResizableHeader
                                     label="Salary Calculation"
                                     width={widths.salary_calc}
                                     onResizeStart={startResize("salary_calc", 110, 220)}
                                     align="center"
-                                    className="bg-indigo-50 text-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-300 border-l border-border font-bold"
+                                    className="bg-indigo-50 text-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-300 border-l border-slate-300 font-bold"
                                 />
                             </tr>
                         </thead>
