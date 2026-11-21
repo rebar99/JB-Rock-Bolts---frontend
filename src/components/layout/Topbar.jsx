@@ -25,6 +25,11 @@ const ENTITY_COLORS = {
     StorePurchaseOrder: { bg: "bg-amber-500/15",   text: "text-amber-600 dark:text-amber-400",    dot: "bg-amber-500"  },
     StoreInventory:     { bg: "bg-teal-500/15",    text: "text-teal-600 dark:text-teal-400",      dot: "bg-teal-500"   },
     StoreVendor:        { bg: "bg-purple-500/15",  text: "text-purple-600 dark:text-purple-400",  dot: "bg-purple-500" },
+    HREmployee:         { bg: "bg-blue-500/15",    text: "text-blue-600 dark:text-blue-400",      dot: "bg-blue-500"   },
+    HRAttendance:       { bg: "bg-emerald-500/15", text: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
+    HRAttendanceClose:  { bg: "bg-purple-500/15",  text: "text-purple-600 dark:text-purple-400",  dot: "bg-purple-500" },
+    HRSalary:           { bg: "bg-amber-500/15",   text: "text-amber-600 dark:text-amber-400",    dot: "bg-amber-500"  },
+    HRSalaryConfig:     { bg: "bg-pink-500/15",    text: "text-pink-600 dark:text-pink-400",      dot: "bg-pink-500"   },
 };
 const entityStyle = (type) =>
     ENTITY_COLORS[type] || { bg: "bg-muted", text: "text-muted-foreground", dot: "bg-muted-foreground" };
@@ -54,15 +59,15 @@ function LogItem({ log, isNew }) {
                 </span>
             )}
             {log.details && (
-                <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
+                <p className="text-[11px] text-muted-foreground line-clamp-3 leading-relaxed break-words">
                     {log.details}
                 </p>
             )}
             {log.changed_fields && (
-                <p className="text-[10px] text-muted-foreground">
-                    <span className="font-medium text-foreground/70">Changed:</span>{" "}
+                <div className="text-[10px] text-muted-foreground bg-muted/40 px-2 py-1 rounded border border-border/50 break-words mt-0.5">
+                    <span className="font-semibold text-foreground/80">Changes:</span>{" "}
                     {log.changed_fields}
-                </p>
+                </div>
             )}
             <div className="flex items-center justify-between">
                 <span className="text-[10px] text-muted-foreground">
@@ -179,13 +184,19 @@ export const Topbar = ({ onMenu, title = "JB Engineering Dashboard", subtitle = 
         return "Marketing";
     }, [title]);
 
-    // In HR workspace — show only the current logged-in user's own activity logs
-    const isHRWorkspace = currentWorkspace === "HR";
+    const canViewHistory = Boolean(
+        user?.is_super_admin ||
+        user?.is_admin ||
+        user?.application_access?.hr === "admin" ||
+        user?.application_access?.store_purchase === "admin" ||
+        user?.application_access?.marketing === "admin" ||
+        user?.application_access?.accounts === "admin"
+    );
 
     // ── Polled logs (workspace-filtered to match the SSE stream) ─────────────
     const { data: queryLogs = [] } = useQuery({
-        queryKey: ["system_logs", currentWorkspace, isHRWorkspace ? user?.name : null],
-        queryFn: () => fetchLogs(100, currentWorkspace, isHRWorkspace ? (user?.name || "") : ""),
+        queryKey: ["system_logs", currentWorkspace],
+        queryFn: () => fetchLogs(100, currentWorkspace),
         refetchInterval: 30_000,
         staleTime: 25_000,
         enabled: !!user,
@@ -204,13 +215,13 @@ export const Topbar = ({ onMenu, title = "JB Engineering Dashboard", subtitle = 
 
     // ── Recent Logins (polled every 60s, workspace-filtered by backend) ─────────
     // Backend uses system_logs to decide which workspace each user logged into.
-    // Users with BOTH workspace access (e.g. Deepika) appear in BOTH History tabs.
+    // Users with access to this workspace appear in the History tab.
     const { data: recentLogins = [] } = useQuery({
         queryKey: ["recent_logins", currentWorkspace],
         queryFn: () => fetchRecentLogins(currentWorkspace),
         refetchInterval: 60_000,
         staleTime: 30_000,
-        enabled: !!user?.is_super_admin,
+        enabled: !!canViewHistory,
     });
 
     // Backend already filters by workspace — just use the result directly.
@@ -233,12 +244,10 @@ export const Topbar = ({ onMenu, title = "JB Engineering Dashboard", subtitle = 
                     queryClient.invalidateQueries({ queryKey: ["my-pending-po-approvals"] });
                     return;
                 }
-                // In HR workspace: only keep SSE logs that belong to the current logged-in user
-                if (isHRWorkspace && log.user && user?.name && log.user !== user.name) return;
                 setSseBuffer((prev) => [log, ...prev].slice(0, 100));
                 setNewCount((n) => n + 1);
                 // Refresh the online list AND history whenever any user logs in or out
-                if (log.entity_type === "User" && user?.is_super_admin) {
+                if (log.entity_type === "User" && canViewHistory) {
                     queryClient.invalidateQueries({ queryKey: ["online_users"] });
                     queryClient.invalidateQueries({ queryKey: ["recent_logins", currentWorkspace] });
                 }
@@ -400,7 +409,7 @@ export const Topbar = ({ onMenu, title = "JB Engineering Dashboard", subtitle = 
                                 <Users className="h-3.5 w-3.5" />
                                 Online{onlineCount > 0 && ` (${onlineCount})`}
                             </button>
-                            {user?.is_super_admin && (
+                            {canViewHistory && (
                                 <button onClick={() => setActiveTab("logins")}
                                     className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors ${
                                         activeTab === "logins"
@@ -432,7 +441,7 @@ export const Topbar = ({ onMenu, title = "JB Engineering Dashboard", subtitle = 
                                             {activeSessions.map((s) => (
                                                 <OnlineUserRow key={s.user_id} session={s}
                                                     isCurrentUser={s.user_id === user?.id}
-                                                    showWorkspace={!!user?.is_super_admin} />
+                                                    showWorkspace={!!canViewHistory} />
                                             ))}
                                         </div>
                                     }
@@ -443,9 +452,7 @@ export const Topbar = ({ onMenu, title = "JB Engineering Dashboard", subtitle = 
                             )}
                             
                             {activeTab === "logins" && (() => {
-                                const loginList = isHRWorkspace
-                                    ? filteredRecentLogins.filter(s => s.user_id === user?.id)
-                                    : filteredRecentLogins;
+                                const loginList = filteredRecentLogins;
                                 return loginList.length === 0
                                     ? <div className="p-6 text-center text-sm text-muted-foreground">No recent logins in this workspace.</div>
                                     : <div className="flex flex-col">

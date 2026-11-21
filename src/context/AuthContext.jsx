@@ -85,7 +85,9 @@ export const AuthProvider = ({ children }) => {
                 ? "Store"
                 : (activeApplication === "accounts" || window.location.pathname.startsWith("/accounts")
                     ? "Accounts"
-                    : (activeApplication === "marketing" || window.location.pathname.startsWith("/marketing") ? "Marketing" : null))
+                    : (activeApplication === "hr" || window.location.pathname.startsWith("/hr")
+                        ? "HR"
+                        : (activeApplication === "marketing" || window.location.pathname.startsWith("/marketing") ? "Marketing" : null)))
         );
         try {
             await logoutUser(ws);

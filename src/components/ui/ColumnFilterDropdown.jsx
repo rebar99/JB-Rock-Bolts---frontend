@@ -31,25 +31,66 @@ export default function ColumnFilterDropdown({
     }, [open]);
 
     const filtered = useMemo(() => {
-        const q = search.toLowerCase();
+        const q = search.trim().toLowerCase();
+        if (!q) return allValues;
         return allValues.filter((v) => String(v ?? "").toLowerCase().includes(q));
     }, [allValues, search]);
 
-    const selectedSet = activeFilters[colKey] || null; // null = all selected
-    const allSelected = !selectedSet;
+    const totalUniqueCount = useMemo(() => new Set(allValues).size, [allValues]);
+    const selectedList = activeFilters[colKey];
+    const isFiltered = Array.isArray(selectedList);
+
+    const selectedSet = useMemo(() => {
+        return isFiltered ? new Set(selectedList) : null;
+    }, [isFiltered, selectedList]);
+
+    const isValSelected = (val) => {
+        if (!isFiltered) return true;
+        return selectedSet.has(val);
+    };
+
+    const visibleSelectedCount = useMemo(() => {
+        if (!filtered.length) return 0;
+        if (!isFiltered) return filtered.length;
+        return filtered.filter((v) => selectedSet.has(v)).length;
+    }, [filtered, isFiltered, selectedSet]);
+
+    const allVisibleSelected = filtered.length > 0 && visibleSelectedCount === filtered.length;
+    const someVisibleSelected = visibleSelectedCount > 0 && visibleSelectedCount < filtered.length;
 
     const toggle = (val) => {
         setActiveFilters((prev) => {
-            const cur = prev[colKey] ? new Set(prev[colKey]) : new Set(allValues);
+            const currentSelected = prev[colKey];
+            const cur = Array.isArray(currentSelected)
+                ? new Set(currentSelected)
+                : new Set(allValues);
+
             if (cur.has(val)) cur.delete(val);
             else cur.add(val);
-            if (cur.size === allValues.length) return { ...prev, [colKey]: null };
-            return { ...prev, [colKey]: [...cur] };
+
+            if (cur.size === totalUniqueCount) return { ...prev, [colKey]: null };
+            return { ...prev, [colKey]: Array.from(cur) };
         });
     };
 
     const toggleAll = () => {
-        setActiveFilters((prev) => ({ ...prev, [colKey]: null }));
+        setActiveFilters((prev) => {
+            const currentSelected = prev[colKey];
+            const currentSet = Array.isArray(currentSelected)
+                ? new Set(currentSelected)
+                : new Set(allValues);
+
+            if (allVisibleSelected) {
+                // If all visible are selected, uncheck them
+                filtered.forEach((v) => currentSet.delete(v));
+            } else {
+                // Otherwise check all visible
+                filtered.forEach((v) => currentSet.add(v));
+            }
+
+            if (currentSet.size === totalUniqueCount) return { ...prev, [colKey]: null };
+            return { ...prev, [colKey]: Array.from(currentSet) };
+        });
     };
 
     const clearFilter = () => {
@@ -57,7 +98,6 @@ export default function ColumnFilterDropdown({
         setOpen(false);
     };
 
-    const isFiltered = !!selectedSet;
     const isSorted = sortKey === colKey;
 
     const alignBtnClass =
@@ -188,7 +228,10 @@ export default function ColumnFilterDropdown({
                         <label className="flex items-center gap-2.5 px-2.5 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer font-semibold text-slate-900 dark:text-slate-100">
                             <input
                                 type="checkbox"
-                                checked={allSelected}
+                                ref={(el) => {
+                                    if (el) el.indeterminate = someVisibleSelected;
+                                }}
+                                checked={allVisibleSelected}
                                 onChange={toggleAll}
                                 className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 accent-blue-600 focus:ring-0 cursor-pointer"
                             />
@@ -198,7 +241,7 @@ export default function ColumnFilterDropdown({
                             <div className="px-3 py-2 text-center text-xs text-slate-400">No matches found</div>
                         ) : (
                             filtered.map((val) => {
-                                const checked = allSelected || (selectedSet && selectedSet.includes(val));
+                                const checked = isValSelected(val);
                                 return (
                                     <label
                                         key={val}
@@ -206,7 +249,7 @@ export default function ColumnFilterDropdown({
                                     >
                                         <input
                                             type="checkbox"
-                                            checked={!!checked}
+                                            checked={checked}
                                             onChange={() => toggle(val)}
                                             className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 accent-blue-600 focus:ring-0 cursor-pointer"
                                         />
