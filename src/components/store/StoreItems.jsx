@@ -216,7 +216,7 @@ function AllIssueHistoryDialog({ open, onClose }) {
     );
 }
 
-export default function StoreItems({ inventory = [], admin = false, initialStockStatusOpen = false }) {
+export default function StoreItems({ inventory = [], admin = false, initialStockStatusOpen = false, loading = false, error = null, onRetry = null }) {
     const navigate = useNavigate();
     const { user } = useAuth();
     const isSuperAdmin = Boolean(
@@ -661,7 +661,15 @@ export default function StoreItems({ inventory = [], admin = false, initialStock
                     )}
                 </Fragment>
             );
-        }) : <tr><td colSpan={11} className="p-12 text-center text-muted-foreground"><Package className="mx-auto mb-3 h-8 w-8 text-slate-300" />No materials or groups found. Add the first material receipt to begin stock management.</td></tr>}</tbody></table></div></section></div>
+        }) : loading ? (
+            <tr><td colSpan={11} className="p-12 text-center text-muted-foreground"><div className="mx-auto mb-3 h-7 w-7 animate-spin rounded-full border-2 border-primary border-t-transparent" />Loading inventory items...</td></tr>
+        ) : error ? (
+            <tr><td colSpan={11} className="p-12 text-center text-destructive">
+                <p className="font-semibold">Unable to load inventory data</p>
+                <p className="mt-1 text-xs text-muted-foreground">{String(error?.message || "Server error occurred while loading inventory.")}</p>
+                {onRetry && <Button variant="outline" size="sm" onClick={onRetry} className="mt-3">Retry</Button>}
+            </td></tr>
+        ) : <tr><td colSpan={11} className="p-12 text-center text-muted-foreground"><Package className="mx-auto mb-3 h-8 w-8 text-slate-300" />No materials or groups found. Add the first material receipt to begin stock management.</td></tr>}</tbody></table></div></section></div>
         <Dialog open={formOpen} onOpenChange={setFormOpen}><DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto"><DialogHeader><DialogTitle>{editing ? "Edit Material Details" : formMode === "stock" ? "Receive New Stock" : "Add Inventory / Receive Material"}</DialogTitle><DialogDescription>{editing ? "Update the material master fields. Stock balance is protected by the transaction ledger." : formMode === "stock" ? "Select an existing material to add a new stock receipt. Its available quantity and rate history will update automatically." : "A matching material name updates its stock instead of creating a duplicate master."}</DialogDescription></DialogHeader><form onSubmit={submit} className="space-y-5">                    <section className="rounded-xl border bg-card p-5">
                         <div className="flex items-center gap-2.5">
                             <Building2 className="h-5 w-5 text-cyan-700" />
