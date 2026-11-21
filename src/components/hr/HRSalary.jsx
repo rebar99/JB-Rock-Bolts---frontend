@@ -1,5 +1,6 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import ColumnFilterDropdown from "@/components/ui/ColumnFilterDropdown";
 import {
     IndianRupee,
     Search,
@@ -149,6 +150,95 @@ export default function HRSalary() {
                 s.transaction_ref?.toLowerCase().includes(lower)
         );
     }, [salaryList, searchTerm]);
+
+    // Column sort & filter state for tables
+    const [sortKey, setSortKey] = useState(null);
+    const [sortDir, setSortDir] = useState("asc");
+    const [colFilters, setColFilters] = useState({});
+
+    const handleColSort = useCallback((key, dir) => {
+        setSortKey(key);
+        setSortDir(dir);
+    }, []);
+
+    const getSalaryColDisplayValue = useCallback((sal, key) => {
+        switch (key) {
+            case "code": return sal.employee_code || "";
+            case "name": return sal.employee_name || "";
+            case "designation": return sal.designation || "";
+            case "present_salary": return `₹${Number(sal.present_salary || 0).toLocaleString("en-IN")}`;
+            case "basic_salary": return `₹${Number(sal.basic_salary || 0).toLocaleString("en-IN")}`;
+            case "total_deductions": return `₹${Number(sal.total_deductions || 0).toLocaleString("en-IN")}`;
+            case "net_salary": return `₹${Number(sal.net_salary || 0).toLocaleString("en-IN")}`;
+            case "status": return sal.payment_status || "";
+            case "payment_mode": return sal.payment_mode || "";
+            case "payment_date": return sal.payment_date ? new Date(sal.payment_date).toLocaleDateString("en-IN") : "";
+            case "transaction_ref": return sal.transaction_ref || "";
+            default: return "";
+        }
+    }, []);
+
+    const columnUniqueValues = useMemo(() => {
+        const keys = [
+            "code",
+            "name",
+            "designation",
+            "present_salary",
+            "basic_salary",
+            "total_deductions",
+            "net_salary",
+            "status",
+            "payment_mode",
+            "payment_date",
+            "transaction_ref",
+        ];
+        const map = {};
+        keys.forEach((k) => {
+            const set = new Set();
+            filteredSalaries.forEach((sal) => {
+                const val = getSalaryColDisplayValue(sal, k);
+                if (val !== undefined && val !== null && String(val).trim() !== "") {
+                    set.add(String(val).trim());
+                }
+            });
+            map[k] = Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+        });
+        return map;
+    }, [filteredSalaries, getSalaryColDisplayValue]);
+
+    const processedSalaries = useMemo(() => {
+        let list = [...filteredSalaries];
+
+        // Apply column filters
+        Object.entries(colFilters).forEach(([colKey, allowedValues]) => {
+            if (allowedValues && Array.isArray(allowedValues)) {
+                const allowedSet = new Set(allowedValues.map((v) => String(v).trim()));
+                list = list.filter((sal) => allowedSet.has(String(getSalaryColDisplayValue(sal, colKey)).trim()));
+            }
+        });
+
+        // Apply column sorting
+        if (sortKey) {
+            list.sort((a, b) => {
+                if (["present_salary", "basic_salary", "total_deductions", "net_salary"].includes(sortKey)) {
+                    const valA = Number(a[sortKey] || 0);
+                    const valB = Number(b[sortKey] || 0);
+                    return sortDir === "asc" ? valA - valB : valB - valA;
+                } else if (sortKey === "payment_date") {
+                    const valA = a.payment_date ? new Date(a.payment_date).getTime() : 0;
+                    const valB = b.payment_date ? new Date(b.payment_date).getTime() : 0;
+                    return sortDir === "asc" ? valA - valB : valB - valA;
+                } else {
+                    const valA = String(getSalaryColDisplayValue(a, sortKey) || "").toLowerCase();
+                    const valB = String(getSalaryColDisplayValue(b, sortKey) || "").toLowerCase();
+                    const cmp = valA.localeCompare(valB, undefined, { numeric: true });
+                    return sortDir === "asc" ? cmp : -cmp;
+                }
+            });
+        }
+
+        return list;
+    }, [filteredSalaries, colFilters, sortKey, sortDir, getSalaryColDisplayValue]);
 
     const handleOpenGenerate = () => {
         if (!isAttendanceClosed) {
@@ -490,20 +580,116 @@ export default function HRSalary() {
 
                     {/* Payroll Table - Full width */}
                     <div className="overflow-hidden rounded-xl border border-border bg-card shadow-xs">
-                        <div className="overflow-x-auto">
+                        <div className="overflow-x-auto min-h-[440px]">
                             <table className="w-full border-collapse text-left text-xs">
                                 <thead>
                                     <tr className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-[11px] font-bold uppercase tracking-wider select-none border-b border-slate-300 dark:border-slate-700">
                                         <th className="p-3 pl-4">S.No</th>
-                                        <th className="p-3">Code</th>
-                                        <th className="p-3">Employee Name</th>
-                                        <th className="p-3">Designation</th>
-                                        <th className="p-3 text-right">Present Salary</th>
+                                        <th className="p-3">
+                                            <ColumnFilterDropdown
+                                                label="Code"
+                                                colKey="code"
+                                                allValues={columnUniqueValues.code || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align="left"
+                                            />
+                                        </th>
+                                        <th className="p-3">
+                                            <ColumnFilterDropdown
+                                                label="Employee Name"
+                                                colKey="name"
+                                                allValues={columnUniqueValues.name || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align="left"
+                                            />
+                                        </th>
+                                        <th className="p-3">
+                                            <ColumnFilterDropdown
+                                                label="Designation"
+                                                colKey="designation"
+                                                allValues={columnUniqueValues.designation || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align="left"
+                                            />
+                                        </th>
+                                        <th className="p-3 text-right">
+                                            <ColumnFilterDropdown
+                                                label="Present Salary"
+                                                colKey="present_salary"
+                                                allValues={columnUniqueValues.present_salary || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align="right"
+                                            />
+                                        </th>
                                         <th className="p-3 text-center">Days (P / L / A)</th>
-                                        <th className="p-3 text-right">Basic Earned</th>
-                                        <th className="p-3 text-right">Deductions</th>
-                                        <th className="p-3 text-right font-black">Net Payable</th>
-                                        <th className="p-3 text-center">Status</th>
+                                        <th className="p-3 text-right">
+                                            <ColumnFilterDropdown
+                                                label="Basic Earned"
+                                                colKey="basic_salary"
+                                                allValues={columnUniqueValues.basic_salary || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align="right"
+                                            />
+                                        </th>
+                                        <th className="p-3 text-right">
+                                            <ColumnFilterDropdown
+                                                label="Deductions"
+                                                colKey="total_deductions"
+                                                allValues={columnUniqueValues.total_deductions || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align="right"
+                                            />
+                                        </th>
+                                        <th className="p-3 text-right font-black">
+                                            <ColumnFilterDropdown
+                                                label="Net Payable"
+                                                colKey="net_salary"
+                                                allValues={columnUniqueValues.net_salary || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align="right"
+                                            />
+                                        </th>
+                                        <th className="p-3 text-center">
+                                            <ColumnFilterDropdown
+                                                label="Status"
+                                                colKey="status"
+                                                allValues={columnUniqueValues.status || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align="center"
+                                            />
+                                        </th>
                                         <th className="p-3 pr-4 text-center">Actions</th>
                                     </tr>
                                 </thead>
@@ -515,20 +701,22 @@ export default function HRSalary() {
                                                 <p className="mt-2 text-xs">Loading payroll...</p>
                                             </td>
                                         </tr>
-                                    ) : filteredSalaries.length === 0 ? (
+                                    ) : processedSalaries.length === 0 ? (
                                         <tr>
                                             <td colSpan={11} className="p-8 text-center text-muted-foreground">
                                                 <IndianRupee className="mx-auto h-8 w-8 text-muted-foreground/40" />
-                                                <p className="mt-2 text-sm font-semibold text-foreground">No salary records generated</p>
+                                                <p className="mt-2 text-sm font-semibold text-foreground">No salary records found</p>
                                                 <p className="text-xs text-muted-foreground">
-                                                    {isAttendanceClosed
+                                                    {Object.values(colFilters).some(Boolean)
+                                                        ? "Try clearing column filters."
+                                                        : isAttendanceClosed
                                                         ? "Generate payroll from the Attendance register for each employee."
                                                         : "Attendance must be verified & closed first."}
                                                 </p>
                                             </td>
                                         </tr>
                                     ) : (
-                                        filteredSalaries.map((sal, idx) => {
+                                        processedSalaries.map((sal, idx) => {
                                             const statusStyle =
                                                 sal.payment_status === "Paid"
                                                     ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
@@ -674,32 +862,130 @@ export default function HRSalary() {
 
                     {/* Payment Register Table */}
                     <div className="overflow-hidden rounded-xl border border-border bg-card shadow-xs">
-                        <div className="overflow-x-auto">
+                        <div className="overflow-x-auto min-h-[440px]">
                             <table className="w-full border-collapse text-left text-xs">
                                 <thead>
                                     <tr className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-[11px] font-bold uppercase tracking-wider select-none border-b border-slate-300 dark:border-slate-700">
                                         <th className="p-3 pl-4">S.No</th>
-                                        <th className="p-3">Emp Code</th>
-                                        <th className="p-3">Employee Name</th>
-                                        <th className="p-3">Designation</th>
+                                        <th className="p-3">
+                                            <ColumnFilterDropdown
+                                                label="Emp Code"
+                                                colKey="code"
+                                                allValues={columnUniqueValues.code || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align="left"
+                                            />
+                                        </th>
+                                        <th className="p-3">
+                                            <ColumnFilterDropdown
+                                                label="Employee Name"
+                                                colKey="name"
+                                                allValues={columnUniqueValues.name || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align="left"
+                                            />
+                                        </th>
+                                        <th className="p-3">
+                                            <ColumnFilterDropdown
+                                                label="Designation"
+                                                colKey="designation"
+                                                allValues={columnUniqueValues.designation || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align="left"
+                                            />
+                                        </th>
                                         <th className="p-3">Salary Month</th>
-                                        <th className="p-3 text-right">Net Salary</th>
-                                        <th className="p-3">Payment Date</th>
-                                        <th className="p-3">Payment Mode</th>
-                                        <th className="p-3">Transaction ID / Ref</th>
-                                        <th className="p-3 text-center">Status</th>
+                                        <th className="p-3 text-right">
+                                            <ColumnFilterDropdown
+                                                label="Net Salary"
+                                                colKey="net_salary"
+                                                allValues={columnUniqueValues.net_salary || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align="right"
+                                            />
+                                        </th>
+                                        <th className="p-3">
+                                            <ColumnFilterDropdown
+                                                label="Payment Date"
+                                                colKey="payment_date"
+                                                allValues={columnUniqueValues.payment_date || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align="left"
+                                            />
+                                        </th>
+                                        <th className="p-3">
+                                            <ColumnFilterDropdown
+                                                label="Payment Mode"
+                                                colKey="payment_mode"
+                                                allValues={columnUniqueValues.payment_mode || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align="left"
+                                            />
+                                        </th>
+                                        <th className="p-3">
+                                            <ColumnFilterDropdown
+                                                label="Transaction ID / Ref"
+                                                colKey="transaction_ref"
+                                                allValues={columnUniqueValues.transaction_ref || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align="left"
+                                            />
+                                        </th>
+                                        <th className="p-3 text-center">
+                                            <ColumnFilterDropdown
+                                                label="Status"
+                                                colKey="status"
+                                                allValues={columnUniqueValues.status || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align="center"
+                                            />
+                                        </th>
                                         <th className="p-3 pr-4 text-center">Slip</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border/60">
-                                    {filteredSalaries.length === 0 ? (
+                                    {processedSalaries.length === 0 ? (
                                         <tr>
                                             <td colSpan={11} className="p-8 text-center text-muted-foreground">
-                                                No records in payment history for this filter.
+                                                {Object.values(colFilters).some(Boolean)
+                                                    ? "No records matching column filters. Try clearing filters."
+                                                    : "No records in payment history for this filter."}
                                             </td>
                                         </tr>
                                     ) : (
-                                        filteredSalaries.map((sal, idx) => (
+                                        processedSalaries.map((sal, idx) => (
                                             <tr key={sal.id} className="hover:bg-muted/30">
                                                 <td className="p-3 pl-4 text-muted-foreground">{idx + 1}</td>
                                                 <td className="p-3 font-mono font-bold text-[#183260] dark:text-cyan-400">{sal.employee_code}</td>

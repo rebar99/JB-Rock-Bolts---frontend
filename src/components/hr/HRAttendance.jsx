@@ -1,5 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import ColumnFilterDropdown from "@/components/ui/ColumnFilterDropdown";
 import {
     Calendar,
     ChevronLeft,
@@ -177,6 +178,77 @@ export default function HRAttendance() {
     const daysInMonth = attendanceData?.days_in_month || new Date(selectedYear, selectedMonth, 0).getDate();
     const isClosed = Boolean(attendanceData?.is_closed);
     const employees = useMemo(() => (Array.isArray(attendanceData?.employees) ? attendanceData.employees : []), [attendanceData]);
+
+    // Column sort & filter state
+    const [sortKey, setSortKey] = useState(null);
+    const [sortDir, setSortDir] = useState("asc");
+    const [colFilters, setColFilters] = useState({});
+
+    const handleColSort = useCallback((key, dir) => {
+        setSortKey(key);
+        setSortDir(dir);
+    }, []);
+
+    const getAttendanceColDisplayValue = useCallback((emp, key) => {
+        const s = emp.summary || {};
+        switch (key) {
+            case "name": return emp.name || "";
+            case "code": return emp.employee_code || "";
+            case "designation": return emp.designation || "";
+            case "location": return emp.location || "";
+            case "present_days": {
+                const pt = (s.P || 0) + (s.TR || 0) + (s.PL || 0) + (s.L || 0) + (s.H || 0) * 0.5;
+                return String(pt);
+            }
+            default: return "";
+        }
+    }, []);
+
+    const columnUniqueValues = useMemo(() => {
+        const keys = ["name", "code", "designation", "location", "present_days"];
+        const map = {};
+        keys.forEach((k) => {
+            const set = new Set();
+            employees.forEach((emp) => {
+                const val = getAttendanceColDisplayValue(emp, k);
+                if (val !== undefined && val !== null && String(val).trim() !== "") {
+                    set.add(String(val).trim());
+                }
+            });
+            map[k] = Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+        });
+        return map;
+    }, [employees, getAttendanceColDisplayValue]);
+
+    const processedEmployees = useMemo(() => {
+        let list = [...employees];
+
+        // Apply column filters
+        Object.entries(colFilters).forEach(([colKey, allowedValues]) => {
+            if (allowedValues && Array.isArray(allowedValues)) {
+                const allowedSet = new Set(allowedValues.map((v) => String(v).trim()));
+                list = list.filter((emp) => allowedSet.has(String(getAttendanceColDisplayValue(emp, colKey)).trim()));
+            }
+        });
+
+        // Apply column sorting
+        if (sortKey) {
+            list.sort((a, b) => {
+                if (sortKey === "present_days") {
+                    const ptA = (a.summary?.P || 0) + (a.summary?.TR || 0) + (a.summary?.PL || 0) + (a.summary?.L || 0) + (a.summary?.H || 0) * 0.5;
+                    const ptB = (b.summary?.P || 0) + (b.summary?.TR || 0) + (b.summary?.PL || 0) + (b.summary?.L || 0) + (b.summary?.H || 0) * 0.5;
+                    return sortDir === "asc" ? ptA - ptB : ptB - ptA;
+                } else {
+                    const valA = String(getAttendanceColDisplayValue(a, sortKey) || "").toLowerCase();
+                    const valB = String(getAttendanceColDisplayValue(b, sortKey) || "").toLowerCase();
+                    const cmp = valA.localeCompare(valB, undefined, { numeric: true });
+                    return sortDir === "asc" ? cmp : -cmp;
+                }
+            });
+        }
+
+        return list;
+    }, [employees, colFilters, sortKey, sortDir, getAttendanceColDisplayValue]);
 
     const { widths, startResize, resetWidths } = useResizableColumns(
         "colw:hr-attendance-v1",
@@ -595,7 +667,7 @@ export default function HRAttendance() {
 
             {/* Attendance Register Grid - Full width */}
             <div className="overflow-hidden rounded-xl border border-border bg-card shadow-xs">
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto min-h-[440px]">
                     <table style={{ width: totalTableWidth, minWidth: "100%" }} className="w-full border-collapse text-left text-xs table-fixed">
                         <thead>
                             <tr className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-[10px] font-bold uppercase tracking-wider border-b border-slate-300 dark:border-slate-700 select-none">
@@ -605,7 +677,19 @@ export default function HRAttendance() {
                                     onResizeStart={startResize("name", 120, 400)}
                                     style={{ left: 0 }}
                                     className="sticky left-0 z-30 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 border-r border-slate-300 dark:border-slate-700 shadow-[2px_0_4px_-1px_rgba(0,0,0,0.08)] pl-3"
-                                />
+                                >
+                                    <ColumnFilterDropdown
+                                        label="Employee Name"
+                                        colKey="name"
+                                        allValues={columnUniqueValues.name || []}
+                                        activeFilters={colFilters}
+                                        setActiveFilters={setColFilters}
+                                        sortKey={sortKey}
+                                        sortDir={sortDir}
+                                        onSort={handleColSort}
+                                        align="left"
+                                    />
+                                </ResizableHeader>
 
                                 <ResizableHeader
                                     label="Code"
@@ -613,21 +697,57 @@ export default function HRAttendance() {
                                     onResizeStart={startResize("code", 60, 200)}
                                     style={{ left: widths.name }}
                                     className="sticky z-30 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 border-r border-slate-300 dark:border-slate-700 shadow-[2px_0_4px_-1px_rgba(0,0,0,0.08)]"
-                                />
+                                >
+                                    <ColumnFilterDropdown
+                                        label="Code"
+                                        colKey="code"
+                                        allValues={columnUniqueValues.code || []}
+                                        activeFilters={colFilters}
+                                        setActiveFilters={setColFilters}
+                                        sortKey={sortKey}
+                                        sortDir={sortDir}
+                                        onSort={handleColSort}
+                                        align="left"
+                                    />
+                                </ResizableHeader>
 
                                 <ResizableHeader
                                     label="Designation"
                                     width={widths.designation}
                                     onResizeStart={startResize("designation", 80, 300)}
                                     className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 border-r border-slate-200 dark:border-slate-700"
-                                />
+                                >
+                                    <ColumnFilterDropdown
+                                        label="Designation"
+                                        colKey="designation"
+                                        allValues={columnUniqueValues.designation || []}
+                                        activeFilters={colFilters}
+                                        setActiveFilters={setColFilters}
+                                        sortKey={sortKey}
+                                        sortDir={sortDir}
+                                        onSort={handleColSort}
+                                        align="left"
+                                    />
+                                </ResizableHeader>
 
                                 <ResizableHeader
                                     label="Office Location"
                                     width={widths.location}
                                     onResizeStart={startResize("location", 70, 250)}
                                     className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 border-r border-slate-200 dark:border-slate-700"
-                                />
+                                >
+                                    <ColumnFilterDropdown
+                                        label="Office Location"
+                                        colKey="location"
+                                        allValues={columnUniqueValues.location || []}
+                                        activeFilters={colFilters}
+                                        setActiveFilters={setColFilters}
+                                        sortKey={sortKey}
+                                        sortDir={sortDir}
+                                        onSort={handleColSort}
+                                        align="left"
+                                    />
+                                </ResizableHeader>
 
                                 {Array.from({ length: daysInMonth }, (_, i) => {
                                     const dayNum = i + 1;
@@ -728,7 +848,19 @@ export default function HRAttendance() {
                                     onResizeStart={startResize("present_days", 80, 160)}
                                     align="center"
                                     className="bg-slate-200/80 text-slate-900 dark:bg-slate-700 dark:text-white border-l border-r border-slate-300 font-bold"
-                                />
+                                >
+                                    <ColumnFilterDropdown
+                                        label="Present Days"
+                                        colKey="present_days"
+                                        allValues={columnUniqueValues.present_days || []}
+                                        activeFilters={colFilters}
+                                        setActiveFilters={setColFilters}
+                                        sortKey={sortKey}
+                                        sortDir={sortDir}
+                                        onSort={handleColSort}
+                                        align="center"
+                                    />
+                                </ResizableHeader>
                                 <ResizableHeader
                                     label="Salary Calculation"
                                     width={widths.salary_calc}
@@ -747,16 +879,18 @@ export default function HRAttendance() {
                                         <p className="mt-2 text-xs">Loading attendance register...</p>
                                     </td>
                                 </tr>
-                            ) : employees.length === 0 ? (
+                            ) : processedEmployees.length === 0 ? (
                                 <tr>
                                     <td colSpan={daysInMonth + 13} className="p-8 text-center text-muted-foreground">
                                         <CalendarCheck className="mx-auto h-8 w-8 text-muted-foreground/40" />
                                         <p className="mt-2 text-sm font-semibold text-foreground">No active employees found</p>
-                                        <p className="text-xs text-muted-foreground">Register employees in Employee Details first.</p>
+                                        <p className="text-xs text-muted-foreground">
+                                            {Object.values(colFilters).some(Boolean) ? "Try clearing column filters." : "Register employees in Employee Details first."}
+                                        </p>
                                     </td>
                                 </tr>
                             ) : (
-                                employees.map((emp) => {
+                                processedEmployees.map((emp) => {
                                     const s = emp.summary || {};
                                     const presentTotal = (s.P || 0) + (s.TR || 0) + (s.PL || 0) + (s.L || 0) + (s.H || 0) * 0.5;
                                     const isInactive = !emp.is_active;

@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useResizableColumns } from "@/hooks/useResizableColumns";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -32,6 +32,11 @@ import {
     Plus,
     Camera,
     User,
+    ChevronDown,
+    ArrowUpDown,
+    ArrowUpAZ,
+    ArrowDownAZ,
+    FilterX,
 } from "lucide-react";
 import {
     fetchHREmployees,
@@ -59,6 +64,23 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import ColumnFilterDropdown from "@/components/ui/ColumnFilterDropdown";
+
+// ─── Excel-style Column Filter Display Value Helper ────────────────────────
+const getColDisplayValue = (emp, key) => {
+    switch (key) {
+        case "code": return emp.employee_code || "";
+        case "name": return emp.name || "";
+        case "designation": return emp.designation || "";
+        case "location": return emp.location || "";
+        case "mobile": return emp.mobile ? `+91 ${emp.mobile}` : "";
+        case "joining": return emp.date_of_joining ? new Date(emp.date_of_joining).toLocaleDateString("en-IN") : "";
+        case "experience": return emp.experience || "";
+        case "salary": return emp.present_salary !== undefined && emp.present_salary !== null ? `₹${Number(emp.present_salary).toLocaleString("en-IN")}` : "₹0";
+        case "status": return emp.is_active ? "Active" : "Inactive";
+        default: return "";
+    }
+};
 
 // Calculate age from DOB
 const calculateAge = (dobString) => {
@@ -116,6 +138,16 @@ export default function HREmployees() {
     const [selectedDesignation, setSelectedDesignation] = useState("all");
     const [selectedLocation, setSelectedLocation] = useState("all");
     const [statusFilter, setStatusFilter] = useState("all"); // "all", "active", "inactive"
+
+    // Column sort & filter state
+    const [sortKey, setSortKey] = useState(null);
+    const [sortDir, setSortDir] = useState("asc");
+    const [colFilters, setColFilters] = useState({});
+
+    const handleColSort = useCallback((key, dir) => {
+        setSortKey(key);
+        setSortDir(dir);
+    }, []);
 
     // Dialog state
     const [formModalOpen, setFormModalOpen] = useState(false);
@@ -233,6 +265,58 @@ export default function HREmployees() {
     });
 
     const employees = useMemo(() => (Array.isArray(rawEmployees) ? rawEmployees : []), [rawEmployees]);
+
+    // Unique values per column for Excel-like column filter dropdowns
+    const columnUniqueValues = useMemo(() => {
+        const keys = ["code", "name", "designation", "location", "mobile", "joining", "experience", "salary", "status"];
+        const map = {};
+        keys.forEach(k => {
+            const set = new Set();
+            employees.forEach(emp => {
+                const val = getColDisplayValue(emp, k);
+                if (val !== undefined && val !== null && String(val).trim() !== "") {
+                    set.add(String(val).trim());
+                }
+            });
+            map[k] = Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+        });
+        return map;
+    }, [employees]);
+
+    // Process employees with column filters and sorting
+    const processedEmployees = useMemo(() => {
+        let list = [...employees];
+
+        // Apply column filters
+        Object.entries(colFilters).forEach(([colKey, allowedValues]) => {
+            if (allowedValues && Array.isArray(allowedValues)) {
+                const allowedSet = new Set(allowedValues.map(v => String(v).trim()));
+                list = list.filter(emp => allowedSet.has(String(getColDisplayValue(emp, colKey)).trim()));
+            }
+        });
+
+        // Apply column sorting
+        if (sortKey) {
+            list.sort((a, b) => {
+                if (sortKey === "salary") {
+                    const valA = Number(a.present_salary || 0);
+                    const valB = Number(b.present_salary || 0);
+                    return sortDir === "asc" ? valA - valB : valB - valA;
+                } else if (sortKey === "joining") {
+                    const valA = a.date_of_joining ? new Date(a.date_of_joining).getTime() : 0;
+                    const valB = b.date_of_joining ? new Date(b.date_of_joining).getTime() : 0;
+                    return sortDir === "asc" ? valA - valB : valB - valA;
+                } else {
+                    const valA = String(getColDisplayValue(a, sortKey) || "").toLowerCase();
+                    const valB = String(getColDisplayValue(b, sortKey) || "").toLowerCase();
+                    const cmp = valA.localeCompare(valB, undefined, { numeric: true });
+                    return sortDir === "asc" ? cmp : -cmp;
+                }
+            });
+        }
+
+        return list;
+    }, [employees, colFilters, sortKey, sortDir]);
 
     // Query designations & locations for filter dropdowns - Safe Array Guards
     const { data: rawDesignations = [] } = useQuery({
@@ -567,7 +651,7 @@ export default function HREmployees() {
 
             {/* Employee List Table - Full width */}
             <div className="overflow-hidden rounded-xl border border-border bg-card shadow-xs">
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto min-h-[440px]">
                     <table className="w-full table-fixed border-collapse text-xs" style={{ minWidth: "1100px" }}>
                         <colgroup>
                             <col style={{ width: colWidths.sno }} />
@@ -602,7 +686,21 @@ export default function HREmployees() {
                                         style={{ width: colWidths[key], minWidth: colWidths[key], maxWidth: colWidths[key] }}
                                         className={cn("relative py-3 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 border-r border-slate-200 dark:border-slate-700 group/col", alignClass)}
                                     >
-                                        <span className="truncate block">{label}</span>
+                                        {["sno", "actions"].includes(key) ? (
+                                            <span className="truncate block">{label}</span>
+                                        ) : (
+                                            <ColumnFilterDropdown
+                                                label={label}
+                                                colKey={key}
+                                                allValues={columnUniqueValues[key] || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align={alignClass.includes("text-right") ? "right" : alignClass.includes("text-center") ? "center" : "left"}
+                                            />
+                                        )}
                                         {/* Bright Blue vertical line handle — full height, clearly visible */}
                                         <div
                                             onMouseDown={startResize(key)}
@@ -623,18 +721,18 @@ export default function HREmployees() {
                                         <p className="mt-2 text-xs">Loading employees...</p>
                                     </td>
                                 </tr>
-                            ) : employees.length === 0 ? (
+                            ) : processedEmployees.length === 0 ? (
                                 <tr>
                                     <td colSpan={11} className="p-8 text-center text-muted-foreground">
                                         <Users className="mx-auto h-8 w-8 text-muted-foreground/40" />
                                         <p className="mt-2 text-sm font-semibold text-foreground">No employees found</p>
                                         <p className="text-xs text-muted-foreground">
-                                            Click "Add Employee" to register the first employee.
+                                            {Object.values(colFilters).some(Boolean) ? "Try clearing column filters." : "Click \"Add Employee\" to register the first employee."}
                                         </p>
                                     </td>
                                 </tr>
                             ) : (
-                                employees.map((emp, idx) => (
+                                processedEmployees.map((emp, idx) => (
                                     <tr key={emp.id} className="transition hover:bg-muted/30">
                                         <td
                                             style={{ width: colWidths.sno, minWidth: colWidths.sno, maxWidth: colWidths.sno }}
@@ -644,13 +742,17 @@ export default function HREmployees() {
                                         </td>
                                         <td
                                             style={{ width: colWidths.code, minWidth: colWidths.code, maxWidth: colWidths.code }}
-                                            className="py-3 px-3 text-left font-mono font-bold text-[#183260] dark:text-cyan-400 truncate"
+                                            className="py-3 px-3 text-left font-mono font-bold text-[#183260] dark:text-cyan-400 truncate cursor-pointer hover:text-blue-700"
+                                            onClick={() => handleOpenView(emp)}
+                                            title="Click to view profile"
                                         >
                                             {emp.employee_code}
                                         </td>
                                         <td
                                             style={{ width: colWidths.name, minWidth: colWidths.name, maxWidth: colWidths.name }}
-                                            className="py-3 px-3 text-left overflow-hidden"
+                                            className="py-3 px-3 text-left overflow-hidden cursor-pointer"
+                                            onClick={() => handleOpenView(emp)}
+                                            title="Click to view profile"
                                         >
                                             <div className="flex items-center gap-2 min-w-0">
                                                 {emp.profile_image_url ? (
@@ -666,58 +768,55 @@ export default function HREmployees() {
                                                 )}
                                                 <div className="min-w-0 truncate">
                                                     <p className="font-semibold text-foreground truncate">{emp.name}</p>
-                                                    {emp.qualification && (
-                                                        <p className="text-[10px] text-muted-foreground flex items-center gap-1 truncate">
-                                                            <span className="truncate">{emp.qualification}</span>
-                                                            {emp.qualification_doc_url && (
-                                                                <a
-                                                                    href={resolveFileUrl(emp.qualification_doc_url)}
-                                                                    target="_blank"
-                                                                    rel="noreferrer"
-                                                                    className="text-cyan-700 hover:text-cyan-900 font-semibold shrink-0"
-                                                                    title="View Qualification Certificate"
-                                                                >
-                                                                    (Doc)
-                                                                </a>
-                                                            )}
-                                                        </p>
-                                                    )}
+                                                    
                                                 </div>
                                             </div>
                                         </td>
                                         <td
                                             style={{ width: colWidths.designation, minWidth: colWidths.designation, maxWidth: colWidths.designation }}
-                                            className="py-3 px-3 text-left font-medium text-foreground truncate"
+                                            className="py-3 px-3 text-left font-medium text-foreground truncate cursor-pointer hover:text-blue-700"
+                                            onClick={() => handleOpenView(emp)}
+                                            title="Click to view profile"
                                         >
                                             {emp.designation || "—"}
                                         </td>
                                         <td
                                             style={{ width: colWidths.location, minWidth: colWidths.location, maxWidth: colWidths.location }}
-                                            className="py-3 px-3 text-left text-muted-foreground truncate"
+                                            className="py-3 px-3 text-left text-muted-foreground truncate cursor-pointer hover:text-blue-700"
+                                            onClick={() => handleOpenView(emp)}
+                                            title="Click to view profile"
                                         >
                                             {emp.location || "—"}
                                         </td>
                                         <td
                                             style={{ width: colWidths.mobile, minWidth: colWidths.mobile, maxWidth: colWidths.mobile }}
-                                            className="py-3 px-3 text-center text-muted-foreground font-mono truncate"
+                                            className="py-3 px-3 text-center text-muted-foreground font-mono truncate cursor-pointer hover:text-blue-700"
+                                            onClick={() => handleOpenView(emp)}
+                                            title="Click to view profile"
                                         >
                                             {emp.mobile ? `+91 ${emp.mobile}` : "—"}
                                         </td>
                                         <td
                                             style={{ width: colWidths.joining, minWidth: colWidths.joining, maxWidth: colWidths.joining }}
-                                            className="py-3 px-3 text-center text-muted-foreground truncate"
+                                            className="py-3 px-3 text-center text-muted-foreground truncate cursor-pointer hover:text-blue-700"
+                                            onClick={() => handleOpenView(emp)}
+                                            title="Click to view profile"
                                         >
                                             {emp.date_of_joining ? new Date(emp.date_of_joining).toLocaleDateString("en-IN") : "—"}
                                         </td>
                                         <td
                                             style={{ width: colWidths.experience, minWidth: colWidths.experience, maxWidth: colWidths.experience }}
-                                            className="py-3 px-3 text-center text-muted-foreground truncate"
+                                            className="py-3 px-3 text-center text-muted-foreground truncate cursor-pointer hover:text-blue-700"
+                                            onClick={() => handleOpenView(emp)}
+                                            title="Click to view profile"
                                         >
                                             {emp.experience || "—"}
                                         </td>
                                         <td
                                             style={{ width: colWidths.salary, minWidth: colWidths.salary, maxWidth: colWidths.salary }}
-                                            className="py-3 px-3 pr-4 text-right font-semibold text-foreground truncate"
+                                            className="py-3 px-3 pr-4 text-right font-semibold text-foreground truncate cursor-pointer hover:text-blue-700"
+                                            onClick={() => handleOpenView(emp)}
+                                            title="Click to view profile"
                                         >
                                             ₹{Number(emp.present_salary || 0).toLocaleString("en-IN")}
                                         </td>

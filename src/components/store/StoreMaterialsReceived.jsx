@@ -795,7 +795,7 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
     const freightAmount = Number(freightCharge || 0);
     const gstRate       = Number(selected?.gst_rate || 0);
     const gstAmount     = (taxableAmount + freightAmount) * gstRate / 100;
-    const approvedOrders = useMemo(() => orders.filter(o => ["Approved", "Final Approved", "Finally Approved"].includes(o.status)), [orders]);
+    const approvedOrders = useMemo(() => orders.filter(o => ["Approved", "Final Approved", "Finally Approved", "Partially Received"].includes(o.status)), [orders]);
     const vendors        = useMemo(() => [...new Set(approvedOrders.map(o => o.supplier).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [approvedOrders]);
     const vendorOrders   = useMemo(() => approvedOrders.filter(o => o.supplier === vendorName), [approvedOrders, vendorName]);
 
