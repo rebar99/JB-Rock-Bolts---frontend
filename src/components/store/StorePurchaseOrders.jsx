@@ -65,8 +65,8 @@ const approvalFlowFor = order => {
 };
 
 
-function StatCard({ label, value, icon: Icon, color, onClick }) {
-    return <div onClick={onClick} className={`rounded-xl border bg-white p-5 shadow-card transition-all ${onClick ? "cursor-pointer hover:shadow-md hover:border-amber-300 active:scale-[0.99]" : ""}`}><div className="flex items-center gap-3"><div className={`grid h-11 w-11 place-items-center rounded-xl ${color}`}><Icon className="h-5 w-5" /></div><div><p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p><p className="mt-0.5 text-2xl font-bold text-foreground">{value}</p></div></div></div>;
+function StatCard({ label, value, icon: Icon, color, onClick, className = "" }) {
+    return <div onClick={onClick} className={`rounded-xl border bg-white p-5 shadow-card transition-all ${onClick ? "cursor-pointer hover:shadow-md hover:border-amber-300 active:scale-[0.99]" : ""} ${className}`}><div className="flex items-center gap-3"><div className={`grid h-11 w-11 place-items-center rounded-xl ${color}`}><Icon className="h-5 w-5" /></div><div><p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p><p className="mt-0.5 text-2xl font-bold text-foreground">{value}</p></div></div></div>;
 }
 
 function SortHeader({ column, sort, onSort, width, onResizeStart }) {
@@ -102,6 +102,16 @@ export default function StorePurchaseOrders({ orders = [], ordersError = null, a
     const [createType, setCreateType] = useState(null);
     const [reorderItem, setReorderItem] = useState(null);
     const [poSequenceModalOpen, setPoSequenceModalOpen] = useState(false);
+    const [showPendingOnly, setShowPendingOnly] = useState(false);
+
+    // Auto-activate pending filter when navigated from Approval Pending PO card
+    useEffect(() => {
+        if (location.state?.filterPending) {
+            setShowPendingOnly(true);
+            window.history.replaceState({}, document.title);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // Auto-open PO form pre-filled when navigated here via Re-Order button from Inventory
     useEffect(() => {
@@ -245,7 +255,25 @@ export default function StorePurchaseOrders({ orders = [], ordersError = null, a
         table.querySelectorAll(".store-filter-header").forEach(node => node.classList.remove("store-filter-header"));
         table.dataset.storeEnhanced = "purchase-native";
     }, []);
+    const parseStoreDate = (val) => {
+        if (!val) return 0;
+        const s = String(val).trim();
+        const dMmmY = s.match(/^(\d{1,2})[\s\-\/]([A-Za-z]{3,})[\s\-\/](\d{4})/);
+        if (dMmmY) {
+            const months = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+            const day = parseInt(dMmmY[1], 10);
+            const monStr = dMmmY[2].toLowerCase().slice(0, 3);
+            const month = months[monStr];
+            const year = parseInt(dMmmY[3], 10);
+            if (month !== undefined && !isNaN(day) && !isNaN(year)) return new Date(year, month, day).getTime();
+        }
+        const d = new Date(val).getTime();
+        return isNaN(d) ? 0 : d;
+    };
+
+    const pendingStatuses = ["Approved", "Final Approved", "Finally Approved", "Completed"];
     const filtered = useMemo(() => orders.filter(order => {
+        if (showPendingOnly && (pendingStatuses.includes(order.status) || (order.status || "").startsWith("Rejected"))) return false;
         const text = `${order.order_number} ${order.supplier} ${order.company || ""} ${order.reference || ""} ${itemText(order)}`.toLowerCase();
         return text.includes(search.toLowerCase());
     }).sort((a, b) => {
@@ -253,9 +281,10 @@ export default function StorePurchaseOrders({ orders = [], ordersError = null, a
             sno: [Number(a.id || 0), Number(b.id || 0)],
             supplier: [a.supplier, b.supplier], item: [itemText(a), itemText(b)], order_number: [a.order_number, b.order_number],
             company: [a.company || "", b.company || ""],
-            date: [a.po_date || a.created_at || "", b.po_date || b.created_at || ""], quantity: [quantityFor(a), quantityFor(b)], received_quantity: [Number(a.received_quantity || 0), Number(b.received_quantity || 0)],
+            date: [parseStoreDate(a.po_date || a.created_at), parseStoreDate(b.po_date || b.created_at)],
+            quantity: [quantityFor(a), quantityFor(b)], received_quantity: [Number(a.received_quantity || 0), Number(b.received_quantity || 0)],
             amount: [Number(a.grand_total || 0), Number(b.grand_total || 0)], status: [a.status, b.status],
-            activity: [a.created_at || "", b.created_at || ""],
+            activity: [parseStoreDate(a.created_at), parseStoreDate(b.created_at)],
         };
         const pair = values[sort.key];
         if (!pair) return Number(b.id || 0) - Number(a.id || 0);
@@ -263,7 +292,7 @@ export default function StorePurchaseOrders({ orders = [], ordersError = null, a
         const result = typeof left === "number" ? left - right : String(left || "").localeCompare(String(right || ""));
         if (result !== 0) return sort.direction === "asc" ? result : -result;
         return Number(b.id || 0) - Number(a.id || 0);
-    }), [orders, search, sort]);
+    }), [orders, search, sort, showPendingOnly]);
     const totals = useMemo(() => ({ count: orders.length, quantity: orders.reduce((sum, order) => sum + quantityFor(order), 0), value: orders.reduce((sum, order) => sum + Number(order.grand_total || 0), 0), pending: orders.filter(order => !["Approved", "Final Approved", "Finally Approved", "Completed"].includes(order.status) && !(order.status || "").startsWith("Rejected")).length }), [orders]);
     const toggleSort = key => setSort(current => current.key === key ? { key, direction: current.direction === "asc" ? "desc" : "asc" } : { key, direction: "asc" });
     const toggleSelected = id => setSelectedIds(current => { const next = new Set(current); next.has(id) ? next.delete(id) : next.add(id); return next; });
@@ -421,7 +450,7 @@ export default function StorePurchaseOrders({ orders = [], ordersError = null, a
         </Button>
     )}
 </div></div>
-        <div className="mt-6 grid gap-4 sm:grid-cols-3"><StatCard label="Total Purchase Orders" value={formatNumber(totals.count)} icon={FileText} color="bg-primary/10 text-primary" /><StatCard label="Total Purchase Value" value={`₹${formatNumber(totals.value)}`} icon={Truck} color="bg-success/15 text-success" /><StatCard label="Approval Pending PO" value={formatNumber(totals.pending)} icon={Clock3} color="bg-warning/15 text-warning" onClick={() => { if (myPendingApprovals.length > 0) setApprovalPopupOpen(true); else navigate("/store-purchase/approvals"); }} /></div>
+        <div className="mt-6 grid gap-4 sm:grid-cols-3"><StatCard label="Total Purchase Orders" value={formatNumber(totals.count)} icon={FileText} color="bg-primary/10 text-primary" /><StatCard label="Total Purchase Value" value={`₹${formatNumber(totals.value)}`} icon={Truck} color="bg-success/15 text-success" /><StatCard label="Approval Pending PO" value={formatNumber(totals.pending)} icon={Clock3} color="bg-warning/15 text-warning" onClick={() => navigate("/store-purchase/approvals")} /></div>
         {myPendingApprovals.length > 0 && (
             <div className="mt-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50/90 p-4 shadow-sm">
                 <div className="flex items-center gap-3">
@@ -449,7 +478,7 @@ export default function StorePurchaseOrders({ orders = [], ordersError = null, a
                         size="sm"
                         variant="outline"
                         className="border-amber-400 bg-white hover:bg-amber-100 text-amber-950 font-semibold"
-                        onClick={() => navigate("/store-purchase/approvals")}
+                        onClick={() => navigate("/store-purchase/purchase", { state: { filterPending: true } })}
                     >
                         <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" />
                         PO Approvals ({myPendingApprovals.length})

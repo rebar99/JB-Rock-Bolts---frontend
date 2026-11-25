@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Eye, FileText, FileUp, PackageCheck, Pencil, Plus, Save, Trash2, Upload, CreditCard, X, Calendar, AlertCircle, Clock, CheckCircle2, ChevronDown, ChevronUp, Search } from "lucide-react";
+import { ArrowLeft, Eye, FileText, FileUp, PackageCheck, Pencil, Plus, Save, Trash2, Upload, CreditCard, X, Calendar, AlertCircle, Clock, CheckCircle2, ChevronDown, ChevronUp, Search, Ruler, ShieldCheck, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { createStoreMaterialReceipt, deleteStoreMaterialReceipt, fetchStoreMaterialReceipts, patchStoreMaterialReceiptBill, patchStoreMaterialReceiptPayment, resolveFileUrl, updateStoreMaterialReceipt, uploadStoreMaterialReceiptBill } from "@/lib/api";
+import { createStoreMaterialReceipt, deleteStoreMaterialReceipt, fetchStoreMaterialReceipts, patchStoreMaterialReceiptBill, patchStoreMaterialReceiptPayment, resolveFileUrl, updateStoreMaterialReceipt, uploadStoreMaterialReceiptBill, fetchUnitConversionConfig } from "@/lib/api";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { getCurrentUser } from "@/lib/currentUser";
+import { useAuth } from "@/context/AuthContext";
+import ManualUnitConversionDialog from "./ManualUnitConversionDialog";
+import ManualMeterEntryModal from "./ManualMeterEntryModal";
+import MaterialReceiptSheet, { printMaterialReceipt } from "./MaterialReceiptSheet";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const money = value => `₹${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -268,7 +272,7 @@ function Metric({ label, value }) {
     );
 }
 
-function MaterialsReceivedList({ admin, isLoading, onAdd, onBack, onDelete, onEdit, onDeleteBill, onView, onPayment, receipts }) {
+function MaterialsReceivedList({ admin, isSuperAdmin, onOpenConfig, isLoading, onAdd, onBack, onDelete, onEdit, onDeleteBill, onView, onPayment, receipts }) {
     const [filterStatus, setFilterStatus] = useState("All");
     const [search, setSearch] = useState("");
     const [expandedItems, setExpandedItems] = useState({});
@@ -360,6 +364,18 @@ function MaterialsReceivedList({ admin, isLoading, onAdd, onBack, onDelete, onEd
                         </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
+                        {isSuperAdmin && (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={onOpenConfig}
+                                className="border-amber-300 bg-amber-50/80 text-amber-900 hover:bg-amber-100 font-semibold shadow-2xs"
+                                title="Super Admin: Manual Unit Conversion Configuration"
+                            >
+                                <ShieldCheck className="mr-1.5 h-4 w-4 text-amber-700" />
+                                Manual Unit Conversion Configuration
+                            </Button>
+                        )}
                         {onBack && <Button type="button" variant="outline" onClick={onBack}><ArrowLeft className="mr-2 h-4 w-4" />Purchase Order List</Button>}
                         {admin && <Button onClick={onAdd} className="bg-gradient-primary shadow-elegant hover:opacity-90"><Plus className="mr-2 h-4 w-4" />Add Material Received</Button>}
                     </div>
@@ -605,12 +621,25 @@ function ReceiptViewDialog({ receipt, onClose }) {
     if (!receipt) return null;
     const invoiceTotal = Number(receipt.invoice_total || 0);
     const balance = invoiceTotal - Number(receipt.amount_paid || 0);
+    const hasMeter = receipt.lines?.some(l => l.manual_meter_quantity != null && l.manual_meter_quantity !== "");
 
     return (
         <Dialog open={!!receipt} onOpenChange={open => !open && onClose()}>
-            <DialogContent className="max-h-[85vh] max-w-4xl overflow-y-auto">
+            <DialogContent className="max-h-[88vh] max-w-4xl overflow-y-auto">
                 <DialogHeader>
-                    <DialogTitle>Material Received — {receipt.invoice_number}</DialogTitle>
+                    <DialogTitle className="flex items-center justify-between pr-6">
+                        <span>Material Received — {receipt.invoice_number}</span>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => printMaterialReceipt(receipt)}
+                                className="h-8 gap-1.5 text-xs font-semibold text-slate-700 hover:text-slate-950"
+                            >
+                                <Printer className="h-3.5 w-3.5" /> Print / Save PDF
+                            </Button>
+                        </div>
+                    </DialogTitle>
                     <DialogDescription>{receipt.order_number} · M/s. {receipt.vendor_name}</DialogDescription>
                 </DialogHeader>
                 <div className="space-y-5 text-sm">
@@ -625,25 +654,44 @@ function ReceiptViewDialog({ receipt, onClose }) {
                     {/* Lines table */}
                     <div className="overflow-x-auto rounded-lg border">
                         <table className="w-full min-w-[650px]">
-                            <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+                            <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500 font-semibold">
                                 <tr>
                                     <th className="p-3">Item</th>
                                     <th className="p-3 text-right">Ordered</th>
                                     <th className="p-3 text-right">Received</th>
-                                    <th className="p-3">U/M</th>
+                                    <th className="p-3 text-center">U/M</th>
+                                    {hasMeter && <th className="p-3 text-right font-bold text-cyan-800">Meter Qty</th>}
                                     <th className="p-3 text-right">Rate</th>
                                     <th className="p-3 text-right">Amount</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {(receipt.lines || []).map(line => (
-                                    <tr key={line.id} className="border-t">
-                                        <td className="p-3 font-medium">{line.item_description}</td>
-                                        <td className="p-3 text-right">{line.ordered_quantity}</td>
-                                        <td className="p-3 text-right">{line.received_quantity}</td>
-                                        <td className="p-3">{line.uom}</td>
-                                        <td className="p-3 text-right">{money(line.unit_rate)}</td>
-                                        <td className="p-3 text-right font-semibold">{money(line.amount)}</td>
+                                    <tr key={line.id} className="border-t hover:bg-slate-50/50">
+                                        <td className="p-3 font-medium text-slate-900">
+                                            <div>{line.item_description}</div>
+                                            {line.group_name && (
+                                                <span className="block text-[10px] text-slate-400 font-normal mt-0.5">
+                                                    Group: {line.group_name}
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td className="p-3 text-right text-slate-600">{line.ordered_quantity}</td>
+                                        <td className="p-3 text-right font-medium text-slate-900">{line.received_quantity}</td>
+                                        <td className="p-3 text-center font-medium text-slate-600">{line.uom}</td>
+                                        {hasMeter && (
+                                            <td className="p-3 text-right">
+                                                {line.manual_meter_quantity ? (
+                                                    <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-cyan-100 text-cyan-900 border border-cyan-300 shadow-2xs">
+                                                        {line.manual_meter_quantity} Meter
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-slate-300 font-semibold">—</span>
+                                                )}
+                                            </td>
+                                        )}
+                                        <td className="p-3 text-right text-slate-700">{money(line.unit_rate)}</td>
+                                        <td className="p-3 text-right font-semibold text-slate-900">{money(line.amount)}</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -761,6 +809,34 @@ function ReceiptViewDialog({ receipt, onClose }) {
 
 export default function StoreMaterialsReceived({ orders = [], admin = false, onBack }) {
     const client = useQueryClient();
+    const { user } = useAuth();
+    const isSuperAdmin = Boolean(user?.is_super_admin);
+    const [configModalOpen, setConfigModalOpen] = useState(false);
+    const [meterModalLineIdx, setMeterModalLineIdx] = useState(null);
+
+    const { data: conversionConfigData } = useQuery({
+        queryKey: ["unit-conversion-config"],
+        queryFn: fetchUnitConversionConfig,
+    });
+    const enabledGroups = useMemo(() => (conversionConfigData?.enabled_groups || []), [conversionConfigData]);
+
+    const isMeterEnabled = line => {
+        if (!line) return false;
+        if (line.manual_meter_enabled) return true;
+        const grp = (line.group_name || "").trim().toLowerCase();
+        if (grp && enabledGroups.includes(grp)) return true;
+        const desc = (line.item_description || "").toLowerCase();
+        return enabledGroups.some(eg => eg && (desc.startsWith(eg) || desc.includes(eg)));
+    };
+
+    const handleSaveMeterValue = (idx, value) => {
+        setLines(cur => cur.map((l, i) => i === idx ? {
+            ...l,
+            manual_meter_quantity: value,
+            is_meter_entry: Boolean(value != null && value !== "" && Number(value) > 0),
+        } : l));
+    };
+
     const [entryMode, setEntryMode]         = useState(false);
     const [editingReceipt, setEditingReceipt] = useState(null);
     const [existingBillUrl, setExistingBillUrl] = useState(null);
@@ -828,9 +904,13 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
             const remaining = Math.max(0, ordered - alreadyReceived);
             return {
                 item_description: line.item_description,
+                group_name: line.group_name,
+                manual_meter_enabled: line.manual_meter_enabled,
                 ordered_quantity: ordered,
                 received_quantity: 0,
                 remaining_quantity: remaining,
+                manual_meter_quantity: null,
+                is_meter_entry: false,
                 uom: line.uom || "Nos",
                 unit_rate: Number(line.unit_rate || 0)
             };
@@ -854,7 +934,14 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
                 bill_file_url: finalBillUrl, 
                 payment_due_date: calculatedDueDate || null,
                 remarks, 
-                lines: lines.map(l => ({ ...l, ordered_quantity: Number(l.ordered_quantity || 0), received_quantity: Number(l.received_quantity || 0), unit_rate: Number(l.unit_rate || 0) })) 
+                lines: lines.map(l => ({
+                    ...l,
+                    ordered_quantity: Number(l.ordered_quantity || 0),
+                    received_quantity: Number(l.received_quantity || 0),
+                    unit_rate: Number(l.unit_rate || 0),
+                    manual_meter_quantity: l.manual_meter_quantity != null && l.manual_meter_quantity !== "" ? Number(l.manual_meter_quantity) : null,
+                    is_meter_entry: Boolean(l.manual_meter_quantity != null && l.manual_meter_quantity !== "" && Number(l.manual_meter_quantity) > 0),
+                })) 
             };
             return editingReceipt ? updateStoreMaterialReceipt(editingReceipt.id, payload) : createStoreMaterialReceipt(payload);
         },
@@ -873,7 +960,17 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
     const openEdit = receipt => {
         setEditingReceipt(receipt); setExistingBillUrl(receipt.bill_file_url || null); setVendorName(receipt.vendor_name); setSelectedId(String(receipt.order_id));
         setInvoiceDate(receipt.invoice_date || today()); setInvoiceNumber(receipt.invoice_number || ""); setFreightCharge(String(receipt.freight_charge || 0)); setBill(null); setRemarks(receipt.remarks || "");
-        setLines((receipt.lines || []).map(l => ({ item_description: l.item_description, ordered_quantity: Number(l.ordered_quantity || 0), received_quantity: Number(l.received_quantity || 0), uom: l.uom || "Nos", unit_rate: Number(l.unit_rate || 0) })));
+        setLines((receipt.lines || []).map(l => ({
+            item_description: l.item_description,
+            group_name: l.group_name,
+            ordered_quantity: Number(l.ordered_quantity || 0),
+            received_quantity: Number(l.received_quantity || 0),
+            manual_meter_quantity: l.manual_meter_quantity != null ? l.manual_meter_quantity : null,
+            is_meter_entry: Boolean(l.is_meter_entry || (l.manual_meter_quantity != null && Number(l.manual_meter_quantity) > 0)),
+            uom: l.uom || "Nos",
+            unit_rate: Number(l.unit_rate || 0),
+            remaining_quantity: Number(l.ordered_quantity || 0),
+        })));
         setEntryMode(true);
     };
 
@@ -914,7 +1011,10 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
     if (!entryMode) return (
         <>
             <MaterialsReceivedList
-                admin={admin} isLoading={isLoading}
+                admin={admin}
+                isSuperAdmin={isSuperAdmin}
+                onOpenConfig={() => setConfigModalOpen(true)}
+                isLoading={isLoading}
                 onAdd={() => {
                     setEditingReceipt(null); setExistingBillUrl(null); setVendorName(""); setSelectedId("");
                     setInvoiceDate(today()); setInvoiceNumber(""); setBill(null); setFreightCharge("0"); setLines([]); setRemarks("");
@@ -944,6 +1044,7 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
                 isSaving={updatePayment.isPending}
                 onSave={data => updatePayment.mutate({ id: paymentReceipt.id, data })}
             />
+            <ManualUnitConversionDialog open={configModalOpen} onOpenChange={setConfigModalOpen} />
         </>
     );
 
@@ -956,7 +1057,21 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
                         <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">{editingReceipt ? "Edit Material Received" : "Add Material Received"}</h1>
                         <p className="mt-2 text-sm text-muted-foreground">{editingReceipt ? "Update supplier invoice, bill and received quantities." : "Record supplier invoice and received quantities against a Purchase Order."}</p>
                     </div>
-                    <Button type="button" variant="outline" onClick={() => setEntryMode(false)}><ArrowLeft className="mr-2 h-4 w-4" />Materials Received List</Button>
+                    <div className="flex flex-wrap gap-2">
+                        {isSuperAdmin && (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setConfigModalOpen(true)}
+                                className="border-amber-300 bg-amber-50/80 text-amber-900 hover:bg-amber-100 font-semibold shadow-2xs"
+                                title="Super Admin: Manual Unit Conversion Configuration"
+                            >
+                                <ShieldCheck className="mr-1.5 h-4 w-4 text-amber-700" />
+                                Manual Unit Conversion Configuration
+                            </Button>
+                        )}
+                        <Button type="button" variant="outline" onClick={() => setEntryMode(false)}><ArrowLeft className="mr-2 h-4 w-4" />Materials Received List</Button>
+                    </div>
                 </div>
 
                 {!admin && <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">You have view-only access. Only Store Admin can save materials received.</div>}
@@ -1098,44 +1213,80 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
                         <FileUp className="h-5 w-5 text-cyan-700" />
                     </div>
                     <div className="overflow-x-auto">
-                        <table className="w-full min-w-[850px] text-sm">
+                        <table className="w-full min-w-[950px] text-sm">
                             <thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
-                                <tr><th className="w-14 px-4 py-3 text-center">S.No.</th><th className="px-4 py-3">Item Description</th><th className="px-4 py-3 text-right">Ordered Qty</th><th className="px-4 py-3 text-right">Received Qty</th><th className="px-4 py-3">U/M</th><th className="px-4 py-3 text-right">Rate</th><th className="px-4 py-3 text-right">Amount</th></tr>
+                                <tr>
+                                    <th className="w-14 px-4 py-3 text-center">S.No.</th>
+                                    <th className="px-4 py-3">Item Description</th>
+                                    <th className="px-4 py-3 text-right">Ordered Qty</th>
+                                    <th className="px-4 py-3 text-right">Received Qty</th>
+                                    <th className="px-4 py-3 text-center">U/M</th>
+                                    <th className="px-4 py-3 text-right min-w-[140px]">Meter Qty</th>
+                                    <th className="px-4 py-3 text-right">Rate</th>
+                                    <th className="px-4 py-3 text-right">Amount</th>
+                                </tr>
                             </thead>
                             <tbody>
-                                {lines.length ? lines.map((line, idx) => (
-                                    <tr key={`${line.item_description}-${idx}`} className="border-t">
-                                        <td className="px-4 py-3 text-center text-muted-foreground">{idx + 1}</td>
-                                        <td className="px-4 py-3 font-medium">{line.item_description}</td>
-                                        <td className="px-4 py-3 text-right">{line.ordered_quantity}</td>
-                                        <td className="px-4 py-2">
-                                            {(() => {
-                                                const pending = line.remaining_quantity != null ? line.remaining_quantity : line.ordered_quantity;
-                                                return (
-                                                    <div className="flex flex-col gap-0.5">
-                                                        <span className="text-right text-xs font-semibold text-red-600">
-                                                            Pending: {Number(pending).toFixed(2)}
-                                                        </span>
+                                {lines.length ? lines.map((line, idx) => {
+                                    const meterActive = isMeterEnabled(line);
+                                    const pending = line.remaining_quantity != null ? line.remaining_quantity : line.ordered_quantity;
+                                    return (
+                                        <tr key={`${line.item_description}-${idx}`} className="border-t hover:bg-slate-50/50">
+                                            <td className="px-4 py-3 text-center text-muted-foreground">{idx + 1}</td>
+                                            <td className="px-4 py-3 font-medium">
+                                                <div>{line.item_description}</div>
+                                                {line.group_name && (
+                                                    <span className="block text-[10px] text-slate-400 font-normal mt-0.5">
+                                                        Group: {line.group_name}
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3 text-right text-slate-600">{line.ordered_quantity}</td>
+                                            <td className="px-4 py-2">
+                                                <div className="flex flex-col gap-0.5">
+                                                    <span className="text-right text-xs font-semibold text-red-600">
+                                                        Pending: {Number(pending).toFixed(2)}
+                                                    </span>
+                                                    <input
+                                                        disabled={!admin}
+                                                        type="number"
+                                                        min="0"
+                                                        step="0.01"
+                                                        max={pending}
+                                                        value={line.received_quantity}
+                                                        onFocus={e => e.target.select()}
+                                                        onChange={e => updateLine(idx, e.target.value)}
+                                                        className="h-9 w-full rounded border border-slate-200 px-2 text-right focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none"
+                                                    />
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3 text-center font-medium text-slate-700">{line.uom}</td>
+                                            <td className="px-4 py-2 text-right">
+                                                {meterActive ? (
+                                                    <div className="flex items-center justify-end gap-1.5">
                                                         <input
                                                             disabled={!admin}
                                                             type="number"
                                                             min="0"
                                                             step="0.01"
-                                                            max={pending}
-                                                            value={line.received_quantity}
+                                                            placeholder="0.00"
+                                                            value={line.manual_meter_quantity ?? ""}
                                                             onFocus={e => e.target.select()}
-                                                            onChange={e => updateLine(idx, e.target.value)}
-                                                            className="h-9 w-full rounded border border-slate-200 px-2 text-right focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none"
+                                                            onChange={e => handleSaveMeterValue(idx, e.target.value)}
+                                                            className="h-9 w-24 rounded border-2 border-cyan-400 bg-cyan-50/50 px-2 text-right font-bold text-cyan-950 outline-none focus:border-cyan-600 focus:bg-white focus:ring-2 focus:ring-cyan-200"
+                                                            title="Enter Meter Quantity"
                                                         />
+                                                        <span className="text-xs font-bold text-cyan-800 w-8 text-left">Mtr</span>
                                                     </div>
-                                                );
-                                            })()}
-                                        </td>
-                                        <td className="px-4 py-3">{line.uom}</td>
-                                        <td className="px-4 py-3 text-right">{money(line.unit_rate)}</td>
-                                        <td className="px-4 py-3 text-right font-semibold">{money(Number(line.received_quantity || 0) * Number(line.unit_rate || 0))}</td>
-                                    </tr>
-                                )) : <tr><td colSpan="7" className="px-4 py-14 text-center text-muted-foreground">Select a Purchase Order to load its item details.</td></tr>}
+                                                ) : (
+                                                    <span className="text-slate-300 font-semibold pr-3">—</span>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3 text-right">{money(line.unit_rate)}</td>
+                                            <td className="px-4 py-3 text-right font-semibold">{money(Number(line.received_quantity || 0) * Number(line.unit_rate || 0))}</td>
+                                        </tr>
+                                    );
+                                }) : <tr><td colSpan="8" className="px-4 py-14 text-center text-muted-foreground">Select a Purchase Order to load its item details.</td></tr>}
                             </tbody>
                         </table>
                     </div>
@@ -1157,6 +1308,14 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
                     )}
                 </div>
             </div>
+
+            <ManualUnitConversionDialog open={configModalOpen} onOpenChange={setConfigModalOpen} />
+            <ManualMeterEntryModal
+                open={meterModalLineIdx !== null}
+                onOpenChange={open => !open && setMeterModalLineIdx(null)}
+                line={meterModalLineIdx !== null ? lines[meterModalLineIdx] : null}
+                onSave={val => handleSaveMeterValue(meterModalLineIdx, val)}
+            />
         </main>
     );
 }

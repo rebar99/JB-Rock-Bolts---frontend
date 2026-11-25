@@ -129,7 +129,7 @@ function ResizableHeader({
 export default function HRAttendance() {
     const queryClient = useQueryClient();
     const { user } = useAuth();
-    const isSuperAdmin = Boolean(user?.is_super_admin || user?.email?.toLowerCase() === "deepikar412003@gmail.com");
+    const isSuperAdmin = Boolean(user?.is_super_admin);
 
     const today = new Date();
     const [selectedMonth, setSelectedMonth] = useState(today.getMonth() + 1);

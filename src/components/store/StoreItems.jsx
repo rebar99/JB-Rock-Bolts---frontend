@@ -22,7 +22,7 @@ const groupSummaryColumnWidths = {
     "Current Month Qty": "165px",
     "Total Qty": "130px",
     "Issue Qty": "130px",
-    "Available Qty": "140px",
+    "Available Qty": "165px",
     "Total Amount": "150px",
     "Overall Stock Status": "160px",
     "Actions": "140px",
@@ -36,7 +36,7 @@ const itemDetailsColumnWidths = {
     "Current Month Qty": "150px",
     "Total Qty": "120px",
     "Issue Qty": "120px",
-    "Available Qty": "130px",
+    "Available Qty": "155px",
     "Rate": "100px",
     "Amount": "130px",
     "Location": "120px",
@@ -59,7 +59,7 @@ function Field({ label, children, className = "" }) {
 
 function HistoryDialog({ item, onClose }) {
     const { data: history = [], isLoading } = useQuery({ queryKey: ["store-item-history", item?.id], queryFn: () => fetchStoreItemHistory(item.id), enabled: !!item });
-    return <Dialog open={!!item} onOpenChange={open => !open && onClose()}><DialogContent className="max-w-5xl"><DialogHeader><DialogTitle>{item?.name} — Stock history</DialogTitle><DialogDescription>All receipts and material issues are retained in this ledger.</DialogDescription></DialogHeader><div className="max-h-[60vh] overflow-auto rounded-lg border"><table className="w-full min-w-[760px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Date</th><th className="px-4 py-3">PO No.</th><th className="px-4 py-3">Type</th><th className="px-4 py-3 text-right">Qty</th><th className="px-4 py-3">Required For</th><th className="px-4 py-3">Issued To / Vendor</th><th className="px-4 py-3">Location</th><th className="px-4 py-3 text-right">Rate</th><th className="px-4 py-3 text-right">Amount</th></tr></thead><tbody>{isLoading ? <tr><td colSpan="9" className="p-8 text-center text-muted-foreground">Loading history…</td></tr> : history.length ? history.map(row => <tr key={row.id} className="border-t"><td className="px-4 py-3">{row.date ? new Date(`${row.date}T00:00:00`).toLocaleDateString("en-IN") : "—"}</td><td className="px-4 py-3 font-medium text-blue-700">{row.po_number || "—"}</td><td className="px-4 py-3"><span className={`rounded-full px-2 py-1 text-xs font-semibold ${row.type === "ISSUE" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>{row.type}</span></td><td className="px-4 py-3 text-right font-medium">{qty(row.quantity)}</td><td className="px-4 py-3">{row.required_for || "—"}</td><td className="px-4 py-3">{row.issued_to || row.vendor_name || "—"}</td><td className="px-4 py-3">{row.location || "—"}</td><td className="px-4 py-3 text-right">{money(row.rate)}</td><td className="px-4 py-3 text-right font-medium">{money(row.amount)}</td></tr>) : <tr><td colSpan="9" className="p-8 text-center text-muted-foreground">No movements recorded yet.</td></tr>}</tbody></table></div><DialogFooter><Button variant="outline" onClick={onClose}>Close</Button></DialogFooter></DialogContent></Dialog>;
+    return <Dialog open={!!item} onOpenChange={open => !open && onClose()}><DialogContent className="max-w-5xl"><DialogHeader><DialogTitle>{item?.name} — Stock history</DialogTitle><DialogDescription>All receipts and material issues are retained in this ledger.</DialogDescription></DialogHeader><div className="max-h-[60vh] overflow-auto rounded-lg border"><table className="w-full min-w-[760px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Date</th><th className="px-4 py-3">PO No.</th><th className="px-4 py-3">Type</th><th className="px-4 py-3 text-right">Qty</th><th className="px-4 py-3">Required For</th><th className="px-4 py-3">Issued To / Vendor</th><th className="px-4 py-3">Location</th><th className="px-4 py-3 text-right">Rate</th><th className="px-4 py-3 text-right">Amount</th></tr></thead><tbody>{isLoading ? <tr><td colSpan="9" className="p-8 text-center text-muted-foreground">Loading history…</td></tr> : history.length ? history.map(row => <tr key={row.id} className="border-t"><td className="px-4 py-3">{row.date ? new Date(`${row.date}T00:00:00`).toLocaleDateString("en-IN") : "—"}</td><td className="px-4 py-3 font-medium text-blue-700">{row.po_number || "—"}</td><td className="px-4 py-3"><span className={`rounded-full px-2 py-1 text-xs font-semibold ${row.type === "ISSUE" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>{row.type}</span></td><td className="px-4 py-3 text-right font-medium"><div>{qty(row.quantity)} {row.manual_meter_quantity ? "Meter" : ""}</div>{row.original_quantity != null && <span className="text-[10px] text-slate-500 font-normal block">PO: {qty(row.original_quantity)} {row.original_uom || "Kg"}</span>}</td><td className="px-4 py-3">{row.required_for || "—"}</td><td className="px-4 py-3">{row.issued_to || row.vendor_name || "—"}</td><td className="px-4 py-3">{row.location || "—"}</td><td className="px-4 py-3 text-right">{money(row.rate)}</td><td className="px-4 py-3 text-right font-medium">{money(row.amount)}</td></tr>) : <tr><td colSpan="9" className="p-8 text-center text-muted-foreground">No movements recorded yet.</td></tr>}</tbody></table></div><DialogFooter><Button variant="outline" onClick={onClose}>Close</Button></DialogFooter></DialogContent></Dialog>;
 }
 
 function StockItemsDialog({ item, onClose }) {
@@ -219,10 +219,7 @@ function AllIssueHistoryDialog({ open, onClose }) {
 export default function StoreItems({ inventory = [], admin = false, initialStockStatusOpen = false, loading = false, error = null, onRetry = null }) {
     const navigate = useNavigate();
     const { user } = useAuth();
-    const isSuperAdmin = Boolean(
-        user?.is_super_admin ||
-        (user?.email && (user.email.toLowerCase().includes("deepikar") || user.email.toLowerCase() === "admin@jbrockbolts.com"))
-    );
+    const isSuperAdmin = Boolean(user?.is_super_admin);
     const client = useQueryClient();
     const [stockStatusOpen, setStockStatusOpen] = useState(initialStockStatusOpen);
     const [allHistoryOpen, setAllHistoryOpen] = useState(false);
@@ -449,6 +446,7 @@ export default function StoreItems({ inventory = [], admin = false, initialStock
                     issuedQuantity: 0,
                     availableQuantity: 0,
                     totalAmount: 0,
+                    uomSet: new Set(),
                     hasOutOfStock: false,
                     hasLowStock: false,
                     allInStock: true,
@@ -472,6 +470,7 @@ export default function StoreItems({ inventory = [], admin = false, initialStock
             g.issuedQuantity += issQty;
             g.availableQuantity += availQty;
             g.totalAmount += amt;
+            if (item.uom) g.uomSet.add(item.uom);
 
             if (item.status === "Out of Stock" || availQty <= 0) {
                 g.hasOutOfStock = true;
@@ -483,8 +482,38 @@ export default function StoreItems({ inventory = [], admin = false, initialStock
         });
 
         const groups = [];
+        const normalizeUomKey = (u) => {
+            if (!u) return "";
+            const clean = String(u).trim().toLowerCase();
+            if (["mt", "meter", "meters", "mtr", "mtrs", "m"].includes(clean)) {
+                return "meter";
+            }
+            if (["nos", "no", "nos.", "number", "numbers", "pcs", "pc", "piece", "pieces"].includes(clean)) {
+                return "nos";
+            }
+            if (["kg", "kgs", "kilogram", "kilograms"].includes(clean)) {
+                return "kg";
+            }
+            if (["set", "sets"].includes(clean)) {
+                return "set";
+            }
+            return clean;
+        };
+
         map.forEach(g => {
             g.totalItems = g.items.length;
+            const normSet = new Set([...g.uomSet].map(normalizeUomKey).filter(Boolean));
+            if (normSet.size === 1) {
+                const normKey = [...normSet][0];
+                if (normKey === "meter") {
+                    const hasMt = [...g.uomSet].some(u => String(u).trim().toUpperCase() === "MT");
+                    g.uom = hasMt ? "MT" : ([...g.uomSet][0] || "Meter");
+                } else {
+                    g.uom = [...g.uomSet][0] || null;
+                }
+            } else {
+                g.uom = null;
+            }
             g.items.sort((a, b) => (a.stock_item || "").localeCompare(b.stock_item || ""));
 
             if (g.availableQuantity <= 0 || (g.hasOutOfStock && g.availableQuantity === 0)) {
@@ -556,7 +585,7 @@ export default function StoreItems({ inventory = [], admin = false, initialStock
                         <td className="px-3 py-4 text-center font-medium text-slate-700">{qty(group.currentMonthQuantity)}</td>
                         <td className="px-3 py-4 text-center font-bold text-slate-900">{qty(group.totalQuantity)}</td>
                         <td className="px-3 py-4 text-center text-amber-700 font-bold">{qty(group.issuedQuantity)}</td>
-                        <td className="px-3 py-4 text-center font-bold text-emerald-700">{qty(group.availableQuantity)}</td>
+                        <td className="px-3 py-4 text-center font-bold text-emerald-700">{qty(group.availableQuantity)}{group.uom && <span className="ml-1 text-xs font-normal text-emerald-600">{group.uom}</span>}</td>
                         <td className="px-3 py-4 text-center font-bold text-slate-900">{money(group.totalAmount)}</td>
                         <td className="px-3 py-4 text-center">
                             <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${group.status === "In Stock" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : group.status === "Low Stock" ? "bg-amber-50 text-amber-700 border border-amber-200" : "bg-rose-50 text-rose-700 border border-rose-200"}`}>{group.status}</span>
@@ -614,7 +643,7 @@ export default function StoreItems({ inventory = [], admin = false, initialStock
                                                         <td className="px-3 py-3 text-center text-slate-700">{qty(item.current_month_quantity)}</td>
                                                         <td className="px-3 py-3 text-center font-medium text-slate-900">{qty(item.total_quantity)}</td>
                                                         <td className="px-3 py-3 text-center text-amber-700 font-medium">{qty(item.issued_quantity)}</td>
-                                                        <td className="px-3 py-3 text-center font-semibold text-emerald-700">{qty(item.available_quantity)}</td>
+                                                        <td className="px-3 py-3 text-center font-semibold text-emerald-700">{qty(item.available_quantity)}{item.uom && <span className="ml-1 text-xs font-normal text-emerald-600">{item.uom}</span>}</td>
                                                         <td className="px-3 py-3 text-center">{money(Number(item.available_quantity || 0) <= 0 && Number(item.total_quantity || 0) <= 0 ? 0 : item.rate)}</td>
                                                         <td className="px-3 py-3 text-center font-medium">{money(item.remaining_stock_amount)}</td>
                                                         <td className="px-3 py-3 text-center text-slate-600">{item.location || "—"}</td>
@@ -647,7 +676,7 @@ export default function StoreItems({ inventory = [], admin = false, initialStock
                                                     <td className="px-3 py-2.5 text-center">{qty(group.currentMonthQuantity)}</td>
                                                     <td className="px-3 py-2.5 text-center font-bold">{qty(group.totalQuantity)}</td>
                                                     <td className="px-3 py-2.5 text-center text-amber-700 font-bold">{qty(group.issuedQuantity)}</td>
-                                                    <td className="px-3 py-2.5 text-center text-emerald-700 font-bold">{qty(group.availableQuantity)}</td>
+                                                    <td className="px-3 py-2.5 text-center text-emerald-700 font-bold">{qty(group.availableQuantity)}{group.uom && <span className="ml-1 text-xs font-normal text-emerald-600">{group.uom}</span>}</td>
                                                     <td className="px-3 py-2.5 text-center text-muted-foreground">—</td>
                                                     <td className="px-3 py-2.5 text-center font-bold">{money(group.totalAmount)}</td>
                                                     <td colSpan={3} className="px-3 py-2.5"></td>
@@ -813,7 +842,7 @@ export default function StoreItems({ inventory = [], admin = false, initialStock
                             </Field>
                         </div>
                     </section><section className="overflow-hidden rounded-xl border bg-card"><div className="border-b p-5"><h2 className="font-bold">Quantity Planning</h2><p className="mt-1 text-xs text-muted-foreground">Total Quantity is automatically calculated: Previous Qty (Opening) + Current Month Qty (Inward). Amount = Total Quantity × Rate.</p></div><div className="overflow-x-auto"><table className="w-full min-w-[900px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr>{["Previous Month Qty", "Current Month Qty", "Total Quantity", "Rate", "Amount"].map(x => <th key={x} className="px-4 py-3">{x}</th>)}</tr></thead><tbody><tr><td className="p-3"><input type="number" min="0" step="0.01" placeholder="0" value={form.previous_quantity} onChange={e => { const val = e.target.value; const prev = Number(val) || 0; const curr = Number(form.current_month_quantity) || 0; setForm({ ...form, previous_quantity: val, quantity: String(prev + curr) }); }} className="h-9 w-full rounded border px-2" /></td><td className="p-3"><input required type="number" min="0" step="0.01" placeholder="0" value={form.current_month_quantity} onChange={e => { const val = e.target.value; const curr = Number(val) || 0; const prev = Number(form.previous_quantity) || 0; setForm({ ...form, current_month_quantity: val, quantity: String(prev + curr) }); }} className="h-9 w-full rounded border px-2" /></td><td className="p-3"><input type="number" min="0.01" step="0.01" value={form.quantity} onChange={e => { const tot = Number(e.target.value) || 0; const prev = Number(form.previous_quantity) || 0; const curr = Math.max(0, tot - prev); setForm({ ...form, quantity: e.target.value, current_month_quantity: String(curr) }); }} className="h-9 w-full rounded border px-2 font-bold bg-slate-50" title="Auto-calculated from Previous + Current Month Qty" /></td><td className="p-3"><input required type="number" min="0" step="0.01" value={form.rate} onChange={e => setForm({ ...form, rate: e.target.value })} className="h-9 w-full rounded border px-2" /></td><td className="p-3 text-right font-bold">{money(Number(form.quantity || 0) * Number(form.rate || 0))}</td></tr></tbody></table></div></section><DialogFooter><Button type="button" variant="outline" onClick={() => setFormOpen(false)}>Cancel</Button>{admin && <Button type="submit" disabled={save.isPending}>{save.isPending ? "Saving…" : editing ? "Save Changes" : formMode === "stock" ? "Receive New Stock" : "Save Material"}</Button>}</DialogFooter></form></DialogContent></Dialog>
-        <Dialog open={!!issuing} onOpenChange={open => !open && setIssuing(null)}><DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>Issue Material</DialogTitle><DialogDescription>Material information is auto-filled. Only enter the issue transaction details.</DialogDescription></DialogHeader>{issuing && <form noValidate onSubmit={e => { e.preventDefault(); const requested = Number(issue.quantity); if (!requested || requested <= 0) return toast.error("Enter a valid issue quantity."); if (requested > Number(issuing.available_quantity)) return toast.error(`Insufficient stock. Only ${qty(issuing.available_quantity)} units are available.`); if (!issue.issued_to?.trim() && !issue.location?.trim()) return toast.error("Select department/person or enter location."); doIssue.mutate({ ...issue, quantity: requested }); }} className="space-y-5"><div className="grid gap-3 rounded-xl border bg-slate-50 p-4 text-sm sm:grid-cols-2 lg:grid-cols-3"><div><span className="text-xs text-muted-foreground">Groups Name</span><p className="font-semibold">{issuing.name}</p></div><div><span className="text-xs text-muted-foreground">Items Name / U/M</span><p>{issuing.stock_item || "—"} · {issuing.uom}</p></div><div><span className="text-xs text-muted-foreground">Available Quantity</span><p className="font-bold text-cyan-700">{qty(issuing.available_quantity)}</p></div><div><span className="text-xs text-muted-foreground">Rate / Amount</span><p>{money(issuing.rate)} / {money(Number(issuing.available_quantity) * Number(issuing.rate))}</p></div><div><span className="text-xs text-muted-foreground">Location</span><p>{issuing.location || "—"}</p></div></div><div className="grid gap-4 md:grid-cols-2"><Field label="Issue Quantity *"><input required autoFocus type="number" min="0.01" step="0.01" value={issue.quantity} onChange={e => setIssue({ ...issue, quantity: e.target.value })} className={input} /></Field><Field label="Required For"><input value={issue.required_for} onChange={e => setIssue({ ...issue, required_for: e.target.value })} className={input} /></Field><Field label="Issued To / Department / Person"><select value={issue.issued_to} onChange={e => setIssue({ ...issue, issued_to: e.target.value })} className={input}><option value="">Select department / person</option><option value="Production Department">Production Department</option><option value="Engineering Workshop">Engineering Workshop</option><option value="Electrical Engineering">Electrical Engineering</option><option value="Administration">Administration</option><option value="Construction / Building">Construction / Building</option></select></Field><Field label="Location"><input type="text" list="storeitems-dest-locations" placeholder="Enter destination location" value={issue.location || ""} onChange={e => setIssue({ ...issue, location: e.target.value })} className={input} /><datalist id="storeitems-dest-locations">{[...new Set(inventory.map(i => i.location).filter(Boolean))].map(loc => <option key={loc} value={loc} />)}</datalist></Field><Field label="Issue Date"><input type="date" value={issue.issue_date} onChange={e => setIssue({ ...issue, issue_date: e.target.value })} className={input} /></Field></div><Field label="Remarks / Purpose"><textarea value={issue.remarks} onChange={e => setIssue({ ...issue, remarks: e.target.value })} className="mt-1.5 min-h-20 w-full rounded-md border p-3 text-sm" /></Field><DialogFooter><Button type="button" variant="outline" onClick={() => setIssuing(null)}>Cancel</Button><Button type="submit" disabled={doIssue.isPending}>{doIssue.isPending ? "Issuing…" : "Save Issue"}</Button></DialogFooter></form>}</DialogContent></Dialog><HistoryDialog item={viewing} onClose={() => setViewing(null)} /><StockItemsDialog item={stockItemDetails} onClose={() => setStockItemDetails(null)} /><ItemMasterManageDialog open={manageItemsOpen} onOpenChange={setManageItemsOpen} type="STORE" /><UomManageDialog open={manageUomOpen} onOpenChange={setManageUomOpen} type="STORE" />
+        <Dialog open={!!issuing} onOpenChange={open => !open && setIssuing(null)}><DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>Issue Material</DialogTitle><DialogDescription>Material information is auto-filled. Only enter the issue transaction details.</DialogDescription></DialogHeader>{issuing && <form noValidate onSubmit={e => { e.preventDefault(); const requested = Number(issue.quantity); if (!requested || requested <= 0) return toast.error("Enter a valid issue quantity."); if (requested > Number(issuing.available_quantity)) return toast.error(`Insufficient stock. Only ${qty(issuing.available_quantity)} units are available.`); if (!issue.issued_to?.trim() && !issue.location?.trim()) return toast.error("Select department/person or enter location."); doIssue.mutate({ ...issue, quantity: requested }); }} className="space-y-5"><div className="grid gap-3 rounded-xl border bg-slate-50 p-4 text-sm sm:grid-cols-2 lg:grid-cols-3"><div><span className="text-xs text-muted-foreground">Groups Name</span><p className="font-semibold">{issuing.name}</p></div><div><span className="text-xs text-muted-foreground">Items Name / U/M</span><p>{issuing.stock_item || "—"} · {issuing.uom}</p></div><div><span className="text-xs text-muted-foreground">Available Quantity</span><p className="font-bold text-cyan-700">{qty(issuing.available_quantity)}</p></div><div><span className="text-xs text-muted-foreground">Rate / Amount</span><p>{money(issuing.rate)} / {money(Number(issuing.available_quantity) * Number(issuing.rate))}</p></div><div><span className="text-xs text-muted-foreground">Location</span><p>{issuing.location || "—"}</p></div></div><div className="grid gap-4 md:grid-cols-2"><Field label="Issue Quantity *"><input required autoFocus type="number" min="0.01" step="0.01" value={issue.quantity} onChange={e => setIssue({ ...issue, quantity: e.target.value })} className={input} /></Field><Field label="Required For"><input value={issue.required_for} onChange={e => setIssue({ ...issue, required_for: e.target.value })} className={input} /></Field><Field label="Issued To / Department / Person"><select value={issue.issued_to} onChange={e => setIssue({ ...issue, issued_to: e.target.value })} className={input}><option value="">Select department / person</option><option value="Production Department">Production Department</option><option value="Engineering Workshop">Engineering Workshop</option><option value="Electrical Engineering">Electrical Engineering</option><option value="Administration">Administration</option><option value="Construction / Building">Construction / Building</option><option value="Sites">Sites</option></select></Field><Field label="Location"><input type="text" list="storeitems-dest-locations" placeholder="Enter destination location" value={issue.location || ""} onChange={e => setIssue({ ...issue, location: e.target.value })} className={input} /><datalist id="storeitems-dest-locations">{[...new Set(inventory.map(i => i.location).filter(Boolean))].map(loc => <option key={loc} value={loc} />)}</datalist></Field><Field label="Issue Date"><input type="date" value={issue.issue_date} onChange={e => setIssue({ ...issue, issue_date: e.target.value })} className={input} /></Field></div><Field label="Remarks / Purpose"><textarea value={issue.remarks} onChange={e => setIssue({ ...issue, remarks: e.target.value })} className="mt-1.5 min-h-20 w-full rounded-md border p-3 text-sm" /></Field><DialogFooter><Button type="button" variant="outline" onClick={() => setIssuing(null)}>Cancel</Button><Button type="submit" disabled={doIssue.isPending}>{doIssue.isPending ? "Issuing…" : "Save Issue"}</Button></DialogFooter></form>}</DialogContent></Dialog><HistoryDialog item={viewing} onClose={() => setViewing(null)} /><StockItemsDialog item={stockItemDetails} onClose={() => setStockItemDetails(null)} /><ItemMasterManageDialog open={manageItemsOpen} onOpenChange={setManageItemsOpen} type="STORE" /><UomManageDialog open={manageUomOpen} onOpenChange={setManageUomOpen} type="STORE" />
         <StoreStockStatusDialog open={stockStatusOpen} onOpenChange={setStockStatusOpen} fallbackItems={inventory} /><AllIssueHistoryDialog open={allHistoryOpen} onClose={() => setAllHistoryOpen(false)} /></main>;
 }
 

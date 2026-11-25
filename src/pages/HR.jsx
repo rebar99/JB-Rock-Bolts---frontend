@@ -5,6 +5,7 @@ import HRDashboard from "@/components/hr/HRDashboard";
 import HREmployees from "@/components/hr/HREmployees";
 import HRAttendance from "@/components/hr/HRAttendance";
 import HRSalary from "@/components/hr/HRSalary";
+import SystemBackup from "@/pages/SystemBackup";
 import { Topbar } from "@/components/layout/Topbar";
 import ErrorBoundary from "@/components/common/ErrorBoundary";
 
@@ -25,6 +26,9 @@ export default function HR() {
     } else if (path === "salary") {
         title = "Salary Management";
         subtitle = "Payroll calculation, payment records & salary slips";
+    } else if (path === "system-backup") {
+        title = "HR Department Backup & Restore";
+        subtitle = "Export, merge or restore HR data safely";
     }
 
     return (
@@ -49,6 +53,7 @@ export default function HR() {
                             <Route path="employees" element={<HREmployees />} />
                             <Route path="attendance" element={<HRAttendance />} />
                             <Route path="salary" element={<HRSalary />} />
+                            <Route path="system-backup" element={<SystemBackup workspace="HR" />} />
                             <Route path="*" element={<Navigate to="" replace />} />
                         </Routes>
                     </ErrorBoundary>

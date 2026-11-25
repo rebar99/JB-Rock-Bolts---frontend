@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
     ArrowLeftRight,
     CalendarCheck,
+    Database,
     IndianRupee,
     LayoutDashboard,
     Menu,
@@ -68,6 +69,24 @@ function SidebarContent({ slug, navigate, isAdmin, onClose }) {
                         </button>
                     );
                 })}
+
+                {isAdmin && (
+                    <>
+                        <div className="px-3 pt-5 pb-2 text-[10px] uppercase tracking-widest text-sidebar-foreground/50">Admin</div>
+                        <button
+                            onClick={() => go("system-backup")}
+                            className={cn(
+                                "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-all",
+                                slug === "system-backup"
+                                    ? "border-l-2 border-cyan-400 bg-sidebar-accent text-white shadow-sm"
+                                    : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-white"
+                            )}
+                        >
+                            <Database className={cn("h-4 w-4 shrink-0", slug === "system-backup" ? "text-cyan-300" : "text-sidebar-foreground/70")} />
+                            <span>System Backup</span>
+                        </button>
+                    </>
+                )}
             </nav>
 
             {/* Switch Software & Footer */}

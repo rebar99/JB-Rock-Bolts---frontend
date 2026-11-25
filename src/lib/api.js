@@ -568,6 +568,8 @@ export const batchUpdateStockLimits = (items) => put("/api/store-purchase/stock-
 export const fetchStoreOrders = () => get("/api/store-purchase/purchase-orders");
 export const fetchStorePOSequenceConfig = () => get("/api/store-purchase/po-sequence-config");
 export const updateStorePOSequenceConfig = (body) => post("/api/store-purchase/po-sequence-config", body);
+export const fetchUnitConversionConfig = () => get("/api/store-purchase/unit-conversion-config");
+export const updateUnitConversionConfig = (body) => post("/api/store-purchase/unit-conversion-config", body);
 export const fetchLastPoPrice = (itemDescription, excludeOrderId = null) => {
     const params = new URLSearchParams({ item_description: itemDescription });
     if (excludeOrderId) params.append("exclude_order_id", excludeOrderId);

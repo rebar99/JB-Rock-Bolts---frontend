@@ -244,6 +244,7 @@ export default function StoreStockOperations({ inventory = [], admin = false }) 
                                     <option value="Electrical Engineering">Electrical Engineering</option>
                                     <option value="Administration">Administration</option>
                                     <option value="Construction / Building">Construction / Building</option>
+                                    <option value="Sites">Sites</option>
                                 </select>
                             </Field>
                             <Field label="Location">

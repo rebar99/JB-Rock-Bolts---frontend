@@ -62,7 +62,7 @@ export default function SalaryCalculationModal({ open, onClose, employee, month,
     const queryClient = useQueryClient();
     const { user } = useAuth();
     const printRef = useRef(null);
-    const isSuperAdmin = Boolean(user?.is_super_admin || user?.email?.toLowerCase() === "deepikar412003@gmail.com");
+    const isSuperAdmin = Boolean(user?.is_super_admin);
 
     // Editable overrides
     const [editing, setEditing] = useState(false);

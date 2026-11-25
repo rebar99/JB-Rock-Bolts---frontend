@@ -8,6 +8,18 @@ import { useMemo, useState, useCallback } from "react";
 function parseDateValue(v) {
     if (v == null || v === "" || v === "—") return null;
     const s = String(v).trim();
+    // DD MMM YYYY (e.g. 01 Oct 2026)
+    const dMmmY = s.match(/^(\d{1,2})[\s\-\/]([A-Za-z]{3,})[\s\-\/](\d{4})/);
+    if (dMmmY) {
+        const months = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+        const day = parseInt(dMmmY[1], 10);
+        const monStr = dMmmY[2].toLowerCase().slice(0, 3);
+        const month = months[monStr];
+        const year = parseInt(dMmmY[3], 10);
+        if (month !== undefined && !isNaN(day) && !isNaN(year)) {
+            return new Date(year, month, day);
+        }
+    }
     // DD-MM-YYYY  →  YYYY-MM-DD
     const dmyMatch = s.match(/^(\d{2})-(\d{2})-(\d{4})$/);
     if (dmyMatch) {

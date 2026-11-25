@@ -87,6 +87,7 @@ function SidebarContent({ slug, navigate, isAdmin, onClose }) {
                             <Trash2 className="h-4 w-4 shrink-0" />
                             <span>Recently Deleted</span>
                         </button>
+
                     </>
                 )}
             </nav>
@@ -145,7 +146,11 @@ export default function StoreSidebar() {
 
             {/* Desktop sidebar */}
             <aside className="sticky top-0 hidden h-screen w-64 shrink-0 lg:block">
-                <SidebarContent slug={slug} navigate={navigate} isAdmin={isAdmin} />
+                <SidebarContent
+                    slug={slug}
+                    navigate={navigate}
+                    isAdmin={isAdmin}
+                />
             </aside>
         </>
     );

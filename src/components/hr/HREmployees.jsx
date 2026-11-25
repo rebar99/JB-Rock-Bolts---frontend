@@ -11,6 +11,8 @@ import {
     Power,
     UploadCloud,
     Download,
+    FileDown,
+    Printer,
     FileText,
     CheckCircle2,
     XCircle,
@@ -64,7 +66,42 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { fmtDateTime } from "@/lib/format";
 import ColumnFilterDropdown from "@/components/ui/ColumnFilterDropdown";
+
+// ─── Date Parsing Helper: handles DD/MM/YYYY, YYYY-MM-DD, ISO, DD MMM YYYY ──
+const parseDateForSort = (val) => {
+    if (!val) return null;
+    const s = String(val).trim();
+    // ISO / YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+        const t = new Date(s).getTime();
+        return isNaN(t) ? null : t;
+    }
+    // DD/MM/YYYY or D/M/YYYY
+    const slashMatch = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (slashMatch) {
+        const [, d, m, y] = slashMatch;
+        const t = new Date(Number(y), Number(m) - 1, Number(d)).getTime();
+        return isNaN(t) ? null : t;
+    }
+    // DD-MM-YYYY
+    const dashMatch = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+    if (dashMatch) {
+        const [, d, m, y] = dashMatch;
+        const t = new Date(Number(y), Number(m) - 1, Number(d)).getTime();
+        return isNaN(t) ? null : t;
+    }
+    // DD MMM YYYY  (e.g. "04 Nov 2026")
+    const mmmMatch = s.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})$/);
+    if (mmmMatch) {
+        const t = new Date(`${mmmMatch[2]} ${mmmMatch[1]} ${mmmMatch[3]}`).getTime();
+        return isNaN(t) ? null : t;
+    }
+    // Fallback
+    const t = new Date(s).getTime();
+    return isNaN(t) ? null : t;
+};
 
 // ─── Excel-style Column Filter Display Value Helper ────────────────────────
 const getColDisplayValue = (emp, key) => {
@@ -114,6 +151,28 @@ const calculateExperience = (dojString) => {
     return `${remainingMonths} Month${remainingMonths > 1 ? "s" : ""}`;
 };
 
+const ActivityEntry = ({ label, by, at, color = "primary", remark }) => {
+    const borderCls =
+        color === "primary"
+            ? "border-primary/40"
+            : color === "warning"
+            ? "border-warning/40"
+            : color === "accent"
+            ? "border-accent/40"
+            : `border-${color}/40`;
+
+    return (
+        <div className={cn("flex items-start gap-3 text-xs border-l-2 pl-3", borderCls)}>
+            <div className="flex-1">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+                <div className="font-semibold text-foreground">{by || "—"}</div>
+                <div className="text-muted-foreground">{at ? fmtDateTime(at) : "—"}</div>
+                {remark && <div className="mt-1 text-muted-foreground italic border-l-2 border-muted pl-2">"{remark}"</div>}
+            </div>
+        </div>
+    );
+};
+
 export default function HREmployees() {
     const queryClient = useQueryClient();
 
@@ -129,9 +188,9 @@ export default function HREmployees() {
         experience: 110,
         salary: 130,
         status: 120,
-        actions: 130,
+        actions: 165,
     };
-    const { widths: colWidths, startResize } = useResizableColumns("colw:hr-employees-v2", HR_EMP_COL_DEFAULTS);
+    const { widths: colWidths, startResize } = useResizableColumns("colw:hr-employees-v3", HR_EMP_COL_DEFAULTS);
 
     // Filters and Search state
     const [searchTerm, setSearchTerm] = useState("");
@@ -152,6 +211,7 @@ export default function HREmployees() {
     // Dialog state
     const [formModalOpen, setFormModalOpen] = useState(false);
     const [viewModalOpen, setViewModalOpen] = useState(false);
+    const [downloadModalEmployee, setDownloadModalEmployee] = useState(null);
     const [editingEmployee, setEditingEmployee] = useState(null);
     const [viewingEmployee, setViewingEmployee] = useState(null);
 
@@ -278,7 +338,19 @@ export default function HREmployees() {
                     set.add(String(val).trim());
                 }
             });
-            map[k] = Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+            if (k === "joining") {
+                // Sort date strings chronologically by parsing them properly
+                map[k] = Array.from(set).sort((a, b) => {
+                    // Find the raw date_of_joining for each display value
+                    const empA = employees.find(e => getColDisplayValue(e, "joining") === a);
+                    const empB = employees.find(e => getColDisplayValue(e, "joining") === b);
+                    const tA = parseDateForSort(empA?.date_of_joining) ?? 0;
+                    const tB = parseDateForSort(empB?.date_of_joining) ?? 0;
+                    return tA - tB;
+                });
+            } else {
+                map[k] = Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+            }
         });
         return map;
     }, [employees]);
@@ -303,8 +375,8 @@ export default function HREmployees() {
                     const valB = Number(b.present_salary || 0);
                     return sortDir === "asc" ? valA - valB : valB - valA;
                 } else if (sortKey === "joining") {
-                    const valA = a.date_of_joining ? new Date(a.date_of_joining).getTime() : 0;
-                    const valB = b.date_of_joining ? new Date(b.date_of_joining).getTime() : 0;
+                    const valA = parseDateForSort(a.date_of_joining) ?? 0;
+                    const valB = parseDateForSort(b.date_of_joining) ?? 0;
                     return sortDir === "asc" ? valA - valB : valB - valA;
                 } else {
                     const valA = String(getColDisplayValue(a, sortKey) || "").toLowerCase();
@@ -424,6 +496,23 @@ export default function HREmployees() {
         }
     };
 
+    // Open Download Documents Modal
+    const handleOpenDownload = async (emp) => {
+        try {
+            const fullEmp = await fetchHREmployee(emp.id);
+            setDownloadModalEmployee(fullEmp);
+        } catch (err) {
+            toast.error(err.message || "Failed to load employee documents");
+        }
+    };
+
+    // Open Printable Employee Bio-Data / Profile Document
+    const openEmployeeDossierPDF = (empId) => {
+        const token = localStorage.getItem("token") || localStorage.getItem("auth_token") || "";
+        const url = resolveFileUrl(`/api/documents/employee/${empId}?token=${encodeURIComponent(token)}`);
+        window.open(url, "_blank");
+    };
+
     // Click on toggle power icon
     const handleToggleClick = (emp) => {
         if (emp.is_active) {
@@ -497,7 +586,7 @@ export default function HREmployees() {
         }
         const cleanMobile = formData.mobile.replace(/\D/g, "");
         if (cleanMobile.length !== 10) {
-            toast.error("Mobile Number exactly 10 digits hona chahiye");
+            toast.error("Mobile Number must be exactly 10 digits");
             return;
         }
 
@@ -870,6 +959,15 @@ export default function HREmployees() {
                                                     title="Edit Details"
                                                 >
                                                     <Edit className="h-3.5 w-3.5" />
+                                                </Button>
+                                                <Button
+                                                    size="icon"
+                                                    variant="ghost"
+                                                    onClick={() => handleOpenDownload(emp)}
+                                                    className="h-7 w-7 text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50"
+                                                    title="Download Documents & Profile"
+                                                >
+                                                    <Download className="h-3.5 w-3.5" />
                                                 </Button>
                                                 <Button
                                                     size="icon"
@@ -1618,10 +1716,77 @@ export default function HREmployees() {
                                     )}
                                 </div>
                             </div>
+
+                            {/* Activity Log */}
+                            <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+                                <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                                    <Clock className="h-4 w-4 text-accent" /> Activity Log
+                                </div>
+                                <ActivityEntry label="Created By" by={viewingEmployee.created_by} at={viewingEmployee.created_at} color="primary" />
+                                <ActivityEntry label="Last Updated By" by={viewingEmployee.updated_by} at={viewingEmployee.updated_at} color="warning" />
+                                <ActivityEntry label="Last Opened By" by={viewingEmployee.last_opened_by} at={viewingEmployee.last_opened_at} color="accent" />
+                            </div>
                         </div>
 
-                        <DialogFooter>
+                        <DialogFooter className="flex items-center justify-between sm:justify-between w-full">
+                            <Button
+                                variant="outline"
+                                className="border-emerald-600 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
+                                onClick={() => {
+                                    const emp = viewingEmployee;
+                                    setViewModalOpen(false);
+                                    handleOpenDownload(emp);
+                                }}
+                            >
+                                <Download className="h-4 w-4 mr-1.5" /> Download / Print Documents
+                            </Button>
                             <Button onClick={() => setViewModalOpen(false)}>Close</Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            )}
+
+            {/* DOWNLOAD EMPLOYEE DOCUMENTS & PROFILE DOSSIER MODAL */}
+            {downloadModalEmployee && (
+                <Dialog open={Boolean(downloadModalEmployee)} onOpenChange={() => setDownloadModalEmployee(null)}>
+                    <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2 text-base font-bold text-foreground">
+                                <Download className="h-5 w-5 text-emerald-600" />
+                                Download Employee Profile
+                            </DialogTitle>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                                <strong className="text-foreground">{downloadModalEmployee.name}</strong> ({downloadModalEmployee.employee_code}) • {downloadModalEmployee.designation || "Staff"}
+                            </p>
+                        </DialogHeader>
+
+                        <div className="space-y-4 pt-2">
+                            {/* Official Employee Bio-Data / Profile Form */}
+                            <div className="p-4 rounded-xl border-2 border-emerald-500/40 bg-emerald-50/40 dark:bg-emerald-950/20 space-y-3">
+                                <div>
+                                    <div className="flex items-center gap-1.5 font-bold text-emerald-800 dark:text-emerald-300 text-sm">
+                                        <FileText className="h-4 w-4" /> Employee Bio-Data & Profile Form (Official PDF)
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                                        Printable Employee Profile & Bio-Data Form with all attached KYC documents (Aadhaar, PAN, Bank Proof, Qualification) in one PDF document.
+                                    </p>
+                                </div>
+                                <Button
+                                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex items-center justify-center gap-2"
+                                    onClick={() => {
+                                        openEmployeeDossierPDF(downloadModalEmployee.id);
+                                        setDownloadModalEmployee(null);
+                                    }}
+                                >
+                                    <Printer className="h-4 w-4" /> Open / Print PDF
+                                </Button>
+                            </div>
+                        </div>
+
+                        <DialogFooter className="pt-2">
+                            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setDownloadModalEmployee(null)}>
+                                Close
+                            </Button>
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>

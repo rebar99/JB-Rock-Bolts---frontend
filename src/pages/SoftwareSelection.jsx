@@ -34,12 +34,7 @@ export default function SoftwareSelection() {
         return count > 1;
     })();
     const [checking, setChecking] = useState(!hasMultiWorkspaceCached);
-    const isSuperAdminUser = Boolean(
-        user?.is_super_admin ||
-        user?.email?.toLowerCase() === "deepikar412003@gmail.com" ||
-        user?.email?.toLowerCase() === "deepikarajput412003@gmail.com" ||
-        user?.email?.toLowerCase().includes("deepikar")
-    );
+    const isSuperAdminUser = Boolean(user?.is_super_admin);
     const available = isSuperAdminUser ? apps : apps.filter((app) => applicationRole(app.code) !== "none");
     const choose = (app) => { selectApplication(app.code); navigate(app.route); };
 

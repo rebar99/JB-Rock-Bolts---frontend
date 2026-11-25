@@ -1,5 +1,60 @@
 import { useEffect } from "react";
 
+function parseDateForSort(val) {
+    if (!val || val === "—") return null;
+    const s = String(val).trim();
+    // 1. "DD MMM YYYY" (e.g. "01 Oct 2026", "2 Oct 2026", "04 Nov 2026")
+    const dMmmY = s.match(/^(\d{1,2})[\s\-\/]([A-Za-z]{3,})[\s\-\/](\d{4})/);
+    if (dMmmY) {
+        const months = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+        const day = parseInt(dMmmY[1], 10);
+        const monStr = dMmmY[2].toLowerCase().slice(0, 3);
+        const month = months[monStr];
+        const year = parseInt(dMmmY[3], 10);
+        if (month !== undefined && !isNaN(day) && !isNaN(year)) {
+            return new Date(year, month, day).getTime();
+        }
+    }
+    // 2. "DD-MM-YYYY" or "DD/MM/YYYY"
+    const dmy = s.match(/^(\d{1,2})[\-\/](\d{1,2})[\-\/](\d{4})/);
+    if (dmy) {
+        const day = parseInt(dmy[1], 10);
+        const month = parseInt(dmy[2], 10) - 1;
+        const year = parseInt(dmy[3], 10);
+        return new Date(year, month, day).getTime();
+    }
+    // 3. "YYYY-MM-DD"
+    const ymd = s.match(/^(\d{4})[\-\/](\d{1,2})[\-\/](\d{1,2})/);
+    if (ymd) {
+        const year = parseInt(ymd[1], 10);
+        const month = parseInt(ymd[2], 10) - 1;
+        const day = parseInt(ymd[3], 10);
+        return new Date(year, month, day).getTime();
+    }
+    const timestamp = Date.parse(s);
+    return isNaN(timestamp) ? null : timestamp;
+}
+
+function compareCellValues(aStr, bStr, direction) {
+    const da = parseDateForSort(aStr);
+    const db = parseDateForSort(bStr);
+    if (da !== null && db !== null) {
+        return direction === "asc" ? da - db : db - da;
+    }
+    if (da !== null) return direction === "asc" ? -1 : 1;
+    if (db !== null) return direction === "asc" ? 1 : -1;
+
+    const cleanA = aStr.replace(/[₹$,\s]/g, "");
+    const cleanB = bStr.replace(/[₹$,\s]/g, "");
+    const na = Number(cleanA);
+    const nb = Number(cleanB);
+    if (Number.isFinite(na) && Number.isFinite(nb) && /\d/.test(aStr) && /\d/.test(bStr)) {
+        return direction === "asc" ? na - nb : nb - na;
+    }
+
+    return aStr.localeCompare(bStr, undefined, { numeric: true }) * (direction === "asc" ? 1 : -1);
+}
+
 // Applies the same Excel-style table controls across Store screens. It keeps
 // page data and existing action buttons intact while adding S.No., column
 // resizing, and per-column sort/filter menus to the table DOM.
@@ -56,7 +111,7 @@ export default function StoreTableEnhancer() {
                     const renumber = () => [...body.rows].filter(row => row.style.display !== "none").forEach((row, index) => { if (row.cells[1]) row.cells[1].textContent = String(index + 1); });
                     const showNativeMenu = (th, column, anchor) => {
                         closeMenus();
-                        const unique = [...new Set([...body.rows].map(row => cellValue(row.cells[column])))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+                        const unique = [...new Set([...body.rows].map(row => cellValue(row.cells[column])))].sort((a, b) => compareCellValues(a, b, "asc"));
                         const menu = document.createElement("div");
                         menu.className = "store-filter-menu";
                         // The page-level click handler closes only clicks
@@ -82,7 +137,7 @@ export default function StoreTableEnhancer() {
                             });
                         };
                         const sortRows = direction => {
-                            [...body.rows].sort((left, right) => cellValue(left.cells[column]).localeCompare(cellValue(right.cells[column]), undefined, { numeric: true }) * (direction === "asc" ? 1 : -1)).forEach(row => body.appendChild(row));
+                            [...body.rows].sort((left, right) => compareCellValues(cellValue(left.cells[column]), cellValue(right.cells[column]), direction)).forEach(row => body.appendChild(row));
                             renumber(); closeMenus();
                         };
                         draw("");
@@ -213,9 +268,9 @@ export default function StoreTableEnhancer() {
                 const trigger = document.createElement("button"); trigger.type = "button"; trigger.className = "store-filter-trigger"; trigger.textContent = "↕"; trigger.title = "Sort & Filter"; th.appendChild(trigger);
                 const resize = document.createElement("span"); resize.className = "store-resize-handle"; resize.title = "Drag to resize column"; th.appendChild(resize);
                 const menu = document.createElement("div"); menu.className = "store-filter-menu"; menu.style.display = "none"; menu.addEventListener("click", event => event.stopPropagation()); document.body.appendChild(menu); menus.add(menu);
-                const values = () => [...new Set([...body.rows].map(row => row.cells[column]?.textContent.trim() || "—"))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+                const values = () => [...new Set([...body.rows].map(row => row.cells[column]?.textContent.trim() || "—"))].sort((a, b) => compareCellValues(a, b, "asc"));
                 const apply = () => { const checked = new Set([...menu.querySelectorAll("input[data-value]:checked")].map(x => x.dataset.value)); [...body.rows].forEach(row => { row.style.display = !checked.size || checked.has(row.cells[column]?.textContent.trim() || "—") ? "" : "none"; }); renumber(); };
-                const sort = direction => { const rows = [...body.rows]; rows.sort((a, b) => { const left = a.cells[column]?.textContent.trim() || ""; const right = b.cells[column]?.textContent.trim() || ""; const numberLeft = Number(left.replace(/[^0-9.-]/g, "")); const numberRight = Number(right.replace(/[^0-9.-]/g, "")); const result = Number.isFinite(numberLeft) && Number.isFinite(numberRight) && /\d/.test(left) && /\d/.test(right) ? numberLeft - numberRight : left.localeCompare(right, undefined, { numeric: true }); return direction === "asc" ? result : -result; }); rows.forEach(row => body.appendChild(row)); renumber(); };
+                const sort = direction => { const rows = [...body.rows]; rows.sort((a, b) => compareCellValues(a.cells[column]?.textContent.trim() || "", b.cells[column]?.textContent.trim() || "", direction)); rows.forEach(row => body.appendChild(row)); renumber(); };
                 const showMenu = () => { closeMenus(); const rect = trigger.getBoundingClientRect(); const unique = values(); menu.innerHTML = `<button data-sort="asc">↟&nbsp; Sort A to Z</button><button data-sort="desc">↡&nbsp; Sort Z to A</button><div class="store-filter-divider"></div><button data-clear class="store-filter-clear">⌫&nbsp; Clear Filter from "${th.textContent.trim().replace("↕", "").trim()}"</button><div class="store-filter-divider"></div><div class="store-filter-search"><span>⌕</span><input data-search placeholder="Search..." /></div><div data-options></div><div class="store-filter-actions"><button data-cancel>Cancel</button><button data-apply>OK</button></div>`; const options = menu.querySelector("[data-options]"); let selected = new Set(unique); const draw = term => { const visible = unique.filter(v => v.toLowerCase().includes(term.toLowerCase())); options.innerHTML = ""; const all = document.createElement("label"); all.className = "store-filter-select-all"; all.innerHTML = `<input type="checkbox" data-select-all ${visible.length && visible.every(value => selected.has(value)) ? "checked" : ""} /> <span>(Select All)</span>`; options.appendChild(all); all.querySelector("input").onchange = event => { visible.forEach(value => event.target.checked ? selected.add(value) : selected.delete(value)); draw(term); }; visible.forEach(value => { const label = document.createElement("label"); label.innerHTML = `<input type="checkbox" data-value="${value.replaceAll('"', '&quot;')}" ${selected.has(value) ? "checked" : ""} /> <span>${value}</span>`; label.querySelector("input").onchange = event => { event.target.checked ? selected.add(value) : selected.delete(value); }; options.appendChild(label); }); }; draw(""); menu.querySelector("[data-search]").addEventListener("input", e => draw(e.target.value)); menu.querySelector("[data-sort=asc]").onclick = () => { sort("asc"); closeMenus(); }; menu.querySelector("[data-sort=desc]").onclick = () => { sort("desc"); closeMenus(); }; menu.querySelector("[data-clear]").onclick = () => { [...body.rows].forEach(row => { row.style.display = ""; }); renumber(); closeMenus(); }; menu.querySelector("[data-cancel]").onclick = closeMenus; menu.querySelector("[data-apply]").onclick = () => { const checked = new Set(selected); [...body.rows].forEach(row => { row.style.display = checked.size === unique.length || checked.has(row.cells[column]?.textContent.trim() || "—") ? "" : "none"; }); renumber(); closeMenus(); }; menu.style.left = `${Math.min(rect.left, window.innerWidth - 270)}px`; menu.style.top = `${rect.bottom + 4}px`; menu.style.display = "block"; };
                 trigger.addEventListener("click", event => { event.stopPropagation(); showMenu(); });
                 resize.addEventListener("mousedown", event => { event.preventDefault(); const startX = event.clientX; const width = th.getBoundingClientRect().width; const move = e => { const next = Math.max(minimumWidth, width + e.clientX - startX); const col = ensureColumnGrid().children[column]; if (col) col.style.width = `${next}px`; th.style.width = `${next}px`; th.style.minWidth = `${next}px`; syncTableWidth(); }; const up = () => { document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up); syncTableWidth(); }; document.addEventListener("mousemove", move); document.addEventListener("mouseup", up); });
