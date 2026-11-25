@@ -811,6 +811,7 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
                                                 items={vendorFilteredItems}
                                                 disabled={!admin}
                                                 placeholder="Select item from master"
+                                                onlySize={true}
                                             />
                                         </td>
                                         <td className="px-4 py-2">

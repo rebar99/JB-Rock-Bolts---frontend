@@ -36,13 +36,33 @@ export const compareSizes = (aSizeStr, bSizeStr) => {
     return (aSizeStr || "").localeCompare(bSizeStr || "", undefined, { numeric: true, sensitivity: 'base' });
 };
 
-export const ItemCombobox = ({ value, onChange, items = [], placeholder = "Select item...", disabled, popoverClassName }) => {
+export const ItemCombobox = ({ value, onChange, items = [], placeholder = "Select item...", disabled, popoverClassName, onlySize = false }) => {
     const [open, setOpen] = useState(false);
     const [activeItem, setActiveItem] = useState(null); // item object while picking its size
 
     useEffect(() => {
         if (!open) setActiveItem(null);
     }, [open]);
+
+    // In Marketing mode (!onlySize), if value is just a lone size (e.g. "16 mm")
+    // from a previously saved record, resolve the proper full name (e.g. "JB 19 REBAR COUPLERS 16 mm")
+    const displayValue = (() => {
+        if (!value) return "";
+        if (onlySize) return value;
+        if (items && items.length > 0) {
+            const startsWithItemName = items.some(item => value === item.name || value.startsWith(`${item.name} `));
+            if (startsWithItemName) {
+                return value;
+            }
+            const matchedItem = items.find(item =>
+                (item.sizes || []).some(s => (s.size || "").trim().toLowerCase() === value.trim().toLowerCase())
+            );
+            if (matchedItem) {
+                return `${matchedItem.name} ${value}`;
+            }
+        }
+        return value;
+    })();
 
     const selectItem = (item) => {
         const sizes = item.sizes || [];
@@ -56,8 +76,14 @@ export const ItemCombobox = ({ value, onChange, items = [], placeholder = "Selec
 
     const selectSize = (sizeArg) => {
         const sizeObj = typeof sizeArg === "object" ? sizeArg : (activeItem?.sizes || []).find(x => x.size === sizeArg) || { size: sizeArg };
-        // Save only the size as item_description (e.g. "V Belt B 29"), not the group name prefix
-        onChange(sizeObj.size, activeItem, sizeObj);
+        if (onlySize) {
+            // Save only the size as item_description (e.g. "V Belt B 29"), not the group name prefix (Store mode)
+            onChange(sizeObj.size, activeItem, sizeObj);
+        } else {
+            // Marketing mode: Join item name and size (e.g. "JB 19 REBAR COUPLERS 16 mm")
+            const fullName = activeItem ? `${activeItem.name} ${sizeObj.size}`.trim() : sizeObj.size;
+            onChange(fullName, activeItem, sizeObj);
+        }
         setOpen(false);
     };
 
@@ -72,8 +98,8 @@ export const ItemCombobox = ({ value, onChange, items = [], placeholder = "Selec
                     disabled={disabled}
                     className={cn("w-full justify-between font-normal", disabled && "bg-muted text-muted-foreground opacity-100 cursor-not-allowed")}
                 >
-                    <span className={cn("truncate text-left", !value && "text-muted-foreground")}>
-                        {value || placeholder}
+                    <span className={cn("truncate text-left", !displayValue && "text-muted-foreground")}>
+                        {displayValue || placeholder}
                     </span>
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
@@ -85,20 +111,24 @@ export const ItemCombobox = ({ value, onChange, items = [], placeholder = "Selec
                         <CommandList>
                             <CommandEmpty>No item found.</CommandEmpty>
                             <CommandGroup>
-                                {items.map((item) => (
-                                    <CommandItem
-                                        key={item.id ?? item.name}
-                                        value={item.name}
-                                        onSelect={() => selectItem(item)}
-                                    >
-                                        <Check className={cn("mr-2 h-4 w-4", value === item.name ? "opacity-100" : "opacity-0")} />
-                                        <span className="truncate flex-1">{item.name}</span>
+                                {items.map((item) => {
+                                    const isSelected = value === item.name ||
+                                        (value && (value.startsWith(`${item.name} `) || (displayValue && displayValue.startsWith(`${item.name} `))));
+                                    return (
+                                        <CommandItem
+                                            key={item.id ?? item.name}
+                                            value={item.name}
+                                            onSelect={() => selectItem(item)}
+                                        >
+                                            <Check className={cn("mr-2 h-4 w-4", isSelected ? "opacity-100" : "opacity-0")} />
+                                            <span className="truncate flex-1">{item.name}</span>
 
-                                        {(item.sizes || []).length > 0 && (
-                                            <span className="text-[10px] text-muted-foreground ml-2 shrink-0">{item.sizes.length} sizes</span>
-                                        )}
-                                    </CommandItem>
-                                ))}
+                                            {(item.sizes || []).length > 0 && (
+                                                <span className="text-[10px] text-muted-foreground ml-2 shrink-0">{item.sizes.length} sizes</span>
+                                            )}
+                                        </CommandItem>
+                                    );
+                                })}
                             </CommandGroup>
                         </CommandList>
                     </Command>
@@ -114,17 +144,22 @@ export const ItemCombobox = ({ value, onChange, items = [], placeholder = "Selec
                         <CommandList>
                             <CommandEmpty>No size found.</CommandEmpty>
                             <CommandGroup>
-                                {[...activeItem.sizes].sort((a, b) => compareSizes(a.size, b.size)).map((s) => (
-                                    <CommandItem
-                                        key={s.id}
-                                        value={s.size}
-                                        onSelect={() => selectSize(s)}
-                                    >
-                                        <Check className={cn("mr-2 h-4 w-4", value === s.size || value === `${activeItem.name} ${s.size}` ? "opacity-100" : "opacity-0")} />
-                                        <span className="truncate flex-1">{s.size}</span>
-
-                                    </CommandItem>
-                                ))}
+                                {[...activeItem.sizes].sort((a, b) => compareSizes(a.size, b.size)).map((s) => {
+                                    const isSelected = value === s.size ||
+                                        value === `${activeItem.name} ${s.size}` ||
+                                        value?.trim() === `${activeItem.name} ${s.size}`.trim() ||
+                                        displayValue === `${activeItem.name} ${s.size}`;
+                                    return (
+                                        <CommandItem
+                                            key={s.id}
+                                            value={s.size}
+                                            onSelect={() => selectSize(s)}
+                                        >
+                                            <Check className={cn("mr-2 h-4 w-4", isSelected ? "opacity-100" : "opacity-0")} />
+                                            <span className="truncate flex-1">{s.size}</span>
+                                        </CommandItem>
+                                    );
+                                })}
                             </CommandGroup>
                         </CommandList>
                     </Command>
