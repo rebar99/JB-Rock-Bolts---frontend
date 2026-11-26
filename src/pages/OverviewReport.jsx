@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useNavigationType } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,8 @@ import {
 
 const POLL_INTERVAL_MS = 45_000;
 const RELEVANT_ENTITY_TYPES = new Set(["PurchaseOrder", "Sale"]);
+const SUMMARY_CATEGORY = "__SUMMARY__";
+const roundQty = (val) => Math.round((Number(val) + Number.EPSILON) * 1000) / 1000;
 
 const StatCard = ({ icon: Icon, label, value, subtext, accent, onClick }) => (
     <Card 
@@ -44,12 +46,24 @@ const fmtQty = (val) => {
 
 const OverviewReport = () => {
     const navigate = useNavigate();
+    const navigationType = useNavigationType();
     const qc = useQueryClient();
     const { user, activeApplication } = useAuth();
     const workspace = activeApplication === "store_purchase" ? "Store" : "Marketing";
 
-    // Left sidebar selection
-    const [selectedCategory, setSelectedCategory] = useState(() => sessionStorage.getItem('or_selectedCategory') || null);
+    // Left sidebar selection: open consolidated Summary by default whenever entering Overview,
+    // restoring the prior category only when returning via browser Back from a PO detail link.
+    const [selectedCategory, setSelectedCategory] = useState(() => {
+        const isReturningFromPO = navigationType === "POP" && sessionStorage.getItem("or_returning_from_po") === "1";
+        if (isReturningFromPO) {
+            return sessionStorage.getItem("or_selectedCategory") || SUMMARY_CATEGORY;
+        }
+        return SUMMARY_CATEGORY;
+    });
+
+    useEffect(() => {
+        sessionStorage.removeItem("or_returning_from_po");
+    }, []);
 
     const { data: itemMasterList = [] } = useQuery({
         queryKey: ["item-master", "PO"],
@@ -117,6 +131,23 @@ const OverviewReport = () => {
         refetchOnWindowFocus: true,
     });
 
+    const {
+        data: summaryReportData,
+        isLoading: isSummaryLoading,
+        refetch: refetchSummary,
+        isFetching: isSummaryFetching,
+    } = useQuery({
+        queryKey: ["productPendingReport", "all", "all", "all", "Pending"],
+        queryFn: () => fetchProductPendingReport({
+            product: "all",
+            client: "all",
+            project: "all",
+            po_status: "Pending",
+        }),
+        refetchInterval: POLL_INTERVAL_MS,
+        refetchOnWindowFocus: true,
+    });
+
     // SSE activity listener to trigger automatic refetch on PO or Sale changes
     useEffect(() => {
         const es = openLogStream((log) => {
@@ -149,11 +180,11 @@ const OverviewReport = () => {
         setExpandedClients(new Set());
     };
 
-    const handleExport = async () => {
+    const handleExport = async (overrideParams = null) => {
         setExporting(true);
         const tid = toast.loading("Generating Excel report...");
         try {
-            await exportProductPendingReport({
+            await exportProductPendingReport(overrideParams || {
                 product: appliedProduct,
                 client: appliedClient,
                 project: appliedProject,
@@ -222,12 +253,12 @@ const OverviewReport = () => {
     const products = data?.products ?? [];
 
     const filteredProducts = useMemo(() => {
-        if (!selectedCategory) return [];
+        if (!selectedCategory || selectedCategory === SUMMARY_CATEGORY) return [];
         return products.filter(p => p.category === selectedCategory);
     }, [products, selectedCategory]);
 
     const activeSummary = useMemo(() => {
-        if (!selectedCategory) return null;
+        if (!selectedCategory || selectedCategory === SUMMARY_CATEGORY) return null;
         
         const totOrdered = filteredProducts.reduce((sum, p) => sum + p.total_ordered_qty, 0);
         const totDispatched = filteredProducts.reduce((sum, p) => sum + p.total_dispatched_qty, 0);
@@ -250,8 +281,58 @@ const OverviewReport = () => {
         };
     }, [filteredProducts, selectedCategory]);
 
-    const displayProducts = selectedCategory ? filteredProducts : [];
-    const displaySummary = selectedCategory ? activeSummary : summary;
+    const isSummaryView = selectedCategory === SUMMARY_CATEGORY;
+    const displayProducts = selectedCategory && !isSummaryView ? filteredProducts : [];
+    const displaySummary = selectedCategory && !isSummaryView ? activeSummary : summary;
+
+    const categorySummaryRows = useMemo(() => {
+        const totalsByCategory = new Map();
+        (summaryReportData?.products ?? []).forEach((p) => {
+            const cat = p.category || "Uncategorized";
+            const existing = totalsByCategory.get(cat) || { pendingQty: 0, pendingValue: 0 };
+            existing.pendingQty = roundQty(existing.pendingQty + (Number(p.pending_qty) || 0));
+            existing.pendingValue = round2(existing.pendingValue + (Number(p.pending_value) || 0));
+            totalsByCategory.set(cat, existing);
+        });
+
+        const seen = new Set();
+        const rows = itemMasterList.map((item) => {
+            seen.add(item.name);
+            const stats = totalsByCategory.get(item.name) || { pendingQty: 0, pendingValue: 0 };
+            return {
+                category: item.name,
+                pendingQty: stats.pendingQty,
+                pendingValue: round2(stats.pendingValue),
+            };
+        });
+
+        totalsByCategory.forEach((stats, cat) => {
+            if (!seen.has(cat) && (stats.pendingQty > 0 || stats.pendingValue > 0)) {
+                rows.push({
+                    category: cat,
+                    pendingQty: stats.pendingQty,
+                    pendingValue: round2(stats.pendingValue),
+                });
+            }
+        });
+
+        return rows;
+    }, [itemMasterList, summaryReportData]);
+
+    const categoryGrandTotal = useMemo(() => {
+        return categorySummaryRows.reduce(
+            (acc, row) => ({
+                pendingQty: roundQty(acc.pendingQty + row.pendingQty),
+                pendingValue: round2(acc.pendingValue + row.pendingValue),
+            }),
+            { pendingQty: 0, pendingValue: 0 }
+        );
+    }, [categorySummaryRows]);
+
+    const activePendingCategoriesCount = useMemo(
+        () => categorySummaryRows.filter((r) => r.pendingQty > 0 || r.pendingValue > 0).length,
+        [categorySummaryRows]
+    );
 
 
     const activeProductNames = useMemo(() => {
@@ -291,10 +372,11 @@ const OverviewReport = () => {
     }, { ordered: 0, dispatched: 0, pending: 0, deliveredValue: 0, value: 0 });
 
     const globalTotals = useMemo(() => {
-        const pList = products || [];
+        // Always use summaryReportData (po_status=Pending) so sidebar matches the Summary table Grand Total
+        const pList = summaryReportData?.products || [];
         const ordered = pList.reduce((sum, p) => sum + (Number(p.total_ordered_qty) || 0), 0);
         const dispatched = pList.reduce((sum, p) => sum + (Number(p.total_dispatched_qty) || 0), 0);
-        const pending = ordered - dispatched;
+        const pending = pList.reduce((sum, p) => sum + (Number(p.pending_qty) || 0), 0);
         
         let value = pList.reduce((sum, p) => sum + (Number(p.pending_value) || 0), 0);
         let totalWithGst = value * 1.18;
@@ -308,7 +390,7 @@ const OverviewReport = () => {
         }
         
         return { ordered, dispatched, pending, value, gstAmount, totalWithGst };
-    }, [products, pendingPOsData]);
+    }, [summaryReportData, pendingPOsData]);
 
     return (
         <div className="flex flex-col md:flex-row gap-6 items-start h-[calc(100vh-6rem)]">
@@ -319,6 +401,24 @@ const OverviewReport = () => {
                     ITEM CATEGORIES
                 </div>
                 <div className="overflow-y-auto flex-1 p-2 space-y-1">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setSelectedCategory(SUMMARY_CATEGORY);
+                            setExpandedProducts(new Set());
+                            setExpandedClients(new Set());
+                        }}
+                        className={`w-full text-left px-3 py-2.5 rounded-md text-sm font-semibold flex items-center justify-between transition-colors ${isSummaryView ? "bg-[#8B0000] text-white" : "text-slate-700 hover:bg-slate-100"}`}
+                    >
+                        <span className="truncate pr-2 flex items-center gap-2">
+                            <ClipboardList className="h-4 w-4 shrink-0" />
+                            Summary
+                        </span>
+                        <span className={`text-[10px] whitespace-nowrap ${isSummaryView ? "text-red-200" : "text-slate-400"}`}>
+                            {categorySummaryRows.length} categories
+                        </span>
+                    </button>
+                    <div className="h-px bg-slate-100 my-1" />
                     {itemMasterList.map((item) => {
                         const isSelected = selectedCategory === item.name;
                         return (
@@ -387,6 +487,139 @@ const OverviewReport = () => {
                         <h3 className="text-xl font-bold text-slate-700 mb-2">Select an Item Category</h3>
                         <p className="text-sm">Please select an item from the left navigation to view its product-wise pending details.</p>
                     </Card>
+                ) : isSummaryView ? (
+                    <div className="space-y-6">
+                        {/* Header / Export Row */}
+                        <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-xl border border-border shadow-sm">
+                            <div>
+                                <h3 className="text-xl font-bold text-slate-800">Item Category Summary</h3>
+                                <p className="text-xs text-muted-foreground">Consolidated pending quantity and pending value across all item categories (without GST).</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                        refetchSummary();
+                                        refetch();
+                                    }}
+                                    disabled={isSummaryFetching}
+                                    className="h-9"
+                                >
+                                    <RefreshCw className={`h-3.5 w-3.5 mr-2 ${isSummaryFetching ? "animate-spin" : ""}`} /> Refresh
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleExport({ product: "all", client: "all", project: "all", po_status: "Pending" })}
+                                    disabled={exporting}
+                                    className="h-9 border-green-500 text-green-700 hover:bg-green-50 hover:text-green-800"
+                                >
+                                    <Download className="h-3.5 w-3.5 mr-2" /> Export
+                                </Button>
+                            </div>
+                        </div>
+
+                        {/* Summary Stat Cards */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <StatCard
+                                icon={Boxes}
+                                label="Total Categories"
+                                value={String(categorySummaryRows.length)}
+                                subtext={`${activePendingCategoriesCount} With Pending Orders`}
+                                accent="bg-purple-500/10 text-purple-600"
+                            />
+                            <StatCard
+                                icon={Package}
+                                label="Total Pending Qty"
+                                value={fmtQty(categoryGrandTotal.pendingQty)}
+                                subtext="Across All Categories"
+                                accent="bg-blue-500/10 text-blue-600"
+                            />
+                            <StatCard
+                                icon={IndianRupee}
+                                label="Total Pending Value (without GST)"
+                                value={inr(categoryGrandTotal.pendingValue)}
+                                subtext="In INR"
+                                accent="bg-green-500/10 text-green-600"
+                            />
+                        </div>
+
+                        {/* Consolidated Summary Table */}
+                        <Card className="shadow-card overflow-hidden bg-white border-border/60">
+                            <div className="bg-[#0B1E3F] text-white px-4 py-3 font-bold flex items-center gap-2">
+                                <ClipboardList className="h-5 w-5" />
+                                ITEM CATEGORY SUMMARY
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead className="bg-slate-50/70 border-b border-border text-slate-600 font-semibold uppercase text-xs">
+                                        <tr>
+                                            <th className="py-3 px-4 text-left w-16">S.No.</th>
+                                            <th className="py-3 px-4 text-left">Item Category</th>
+                                            <th className="py-3 px-4 text-right text-orange-600">Pending Qty</th>
+                                            <th className="py-3 px-4 text-right text-green-600">Pending Value</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {isSummaryLoading && (
+                                            <tr>
+                                                <td colSpan={4} className="px-5 py-12 text-center text-muted-foreground">
+                                                    Loading item category summary...
+                                                </td>
+                                            </tr>
+                                        )}
+                                        {!isSummaryLoading && categorySummaryRows.length === 0 && (
+                                            <tr>
+                                                <td colSpan={4} className="px-5 py-12 text-center text-muted-foreground">
+                                                    No item categories found.
+                                                </td>
+                                            </tr>
+                                        )}
+                                        {!isSummaryLoading && categorySummaryRows.map((row, idx) => (
+                                            <tr
+                                                key={row.category}
+                                                className="border-b border-border transition-colors hover:bg-slate-50/70"
+                                            >
+                                                <td className="py-3.5 px-4 text-slate-400 font-medium">{idx + 1}</td>
+                                                <td
+                                                    className="py-3.5 px-4 font-semibold text-slate-800 cursor-pointer hover:text-[#8B0000] hover:underline"
+                                                    onClick={() => {
+                                                        setSelectedCategory(row.category);
+                                                        setExpandedProducts(new Set());
+                                                        setExpandedClients(new Set());
+                                                    }}
+                                                >
+                                                    {row.category}
+                                                </td>
+                                                <td className={`py-3.5 px-4 text-right font-bold ${row.pendingQty > 0 ? "text-orange-600" : "text-slate-400"}`}>
+                                                    {fmtQty(row.pendingQty)}
+                                                </td>
+                                                <td className={`py-3.5 px-4 text-right font-bold ${row.pendingValue > 0 ? "text-green-600" : "text-slate-400"}`}>
+                                                    {inr(row.pendingValue)}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    {!isSummaryLoading && categorySummaryRows.length > 0 && (
+                                        <tfoot>
+                                            <tr className="bg-blue-50/80 font-bold border-t-2 border-slate-300 text-slate-900">
+                                                <td className="py-3.5 px-4 font-extrabold text-slate-900" colSpan={2}>
+                                                    Grand Total
+                                                </td>
+                                                <td className="py-3.5 px-4 text-right font-extrabold text-orange-600">
+                                                    {fmtQty(categoryGrandTotal.pendingQty)}
+                                                </td>
+                                                <td className="py-3.5 px-4 text-right font-extrabold text-green-600">
+                                                    {inr(categoryGrandTotal.pendingValue)}
+                                                </td>
+                                            </tr>
+                                        </tfoot>
+                                    )}
+                                </table>
+                            </div>
+                        </Card>
+                    </div>
                 ) : (
                     <div className="space-y-6">
             {/* Header / Export Row */}
@@ -408,7 +641,7 @@ const OverviewReport = () => {
                     <Button
                         variant="outline"
                         size="sm"
-                        onClick={handleExport}
+                        onClick={() => handleExport()}
                         disabled={exporting}
                         className="h-9 border-green-500 text-green-700 hover:bg-green-50 hover:text-green-800"
                     >
@@ -631,7 +864,10 @@ const OverviewReport = () => {
                                                                                                             <tr key={poIdx} className="border-b border-slate-100 hover:bg-slate-50/30">
                                                                                                                 <td
                                                                                                                     className="py-2 px-2 font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
-                                                                                                                    onClick={() => navigate(`/purchase-orders?search=${encodeURIComponent(po.po_number)}`, { state: { fromOverview: true } })}
+                                                                                                                    onClick={() => {
+                                                                                                                        sessionStorage.setItem("or_returning_from_po", "1");
+                                                                                                                        navigate(`/purchase-orders?search=${encodeURIComponent(po.po_number)}`, { state: { fromOverview: true } });
+                                                                                                                    }}
                                                                                                                 >
                                                                                                                     {po.po_number}
                                                                                                                 </td>

@@ -30,6 +30,7 @@ import HR from "./pages/HR";
 import ApplicationAccessManagement from "./pages/ApplicationAccessManagement";
 import POApprovalSettings from "./pages/POApprovalSettings";
 import POSignatureConfig from "./pages/POSignatureConfig";
+import DataVerificationSettings from "./pages/DataVerificationSettings";
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -121,6 +122,7 @@ const App = () => (
                             <Route path="/admin/application-access" element={<SuperAdminRoute><ApplicationAccessManagement /></SuperAdminRoute>} />
                             <Route path="/admin/po-approval-settings" element={<SuperAdminRoute><POApprovalSettings /></SuperAdminRoute>} />
                             <Route path="/admin/po-signature-config" element={<SuperAdminRoute><POSignatureConfig /></SuperAdminRoute>} />
+                            <Route path="/admin/data-verification-settings" element={<SuperAdminRoute><AppLayout><DataVerificationSettings /></AppLayout></SuperAdminRoute>} />
                             <Route path="/store-purchase/*" element={<StorePurchaseRoute><StorePurchase /></StorePurchaseRoute>} />
                             <Route path="/accounts/*" element={<AccountsRoute><Accounts /></AccountsRoute>} />
                             <Route path="/hr/*" element={<HRRoute><ErrorBoundary><HR /></ErrorBoundary></HRRoute>} />

@@ -2,16 +2,17 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { StatusBadge } from "@/components/StatusBadge";
 import { inr, fmtDate } from "@/lib/format";
-import { fetchDashboardStats, fetchDashboardCharts, fetchRecentSales, fetchDashboardClients, fetchMonthlyProductSales } from "@/lib/api";
+import { fetchDashboardStats, fetchDashboardCharts, fetchRecentSales, fetchDashboardClients, fetchMonthlyProductSales, fetchSale, fetchWorkOrderSale, resolveFileUrl } from "@/lib/api";
 import {
     Line, LineChart, CartesianGrid, Cell, LabelList, Legend,
     Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
-import { ArrowUpRight, IndianRupee, Package, Users, Search, FileText, CheckCircle2, Clock } from "lucide-react";
+import { ArrowUpRight, IndianRupee, Package, Users, Search, FileText, CheckCircle2, Clock, Receipt, ExternalLink, Eye } from "lucide-react";
 
 import { useNavigate } from "react-router-dom";
 
@@ -99,6 +100,28 @@ const Dashboard = () => {
         queryFn: () => fetchDashboardCharts(undefined, selectedMonth !== "all" ? Number(selectedMonth) : undefined, includeGst) 
     });
     const { data: recent = [] } = useQuery({ queryKey: ["recent-sales", includeGst], queryFn: () => fetchRecentSales(100, includeGst) });
+    const [selectedRecentSale, setSelectedRecentSale] = useState(null);
+    const [saleDetails, setSaleDetails] = useState(null);
+    const [loadingDetails, setLoadingDetails] = useState(false);
+
+    const handleViewSale = async (r) => {
+        setSelectedRecentSale(r);
+        setSaleDetails(null);
+        setLoadingDetails(true);
+        try {
+            let details = null;
+            if (r.sale_type === "WO") {
+                details = await fetchWorkOrderSale(r.id);
+            } else {
+                details = await fetchSale(r.id);
+            }
+            setSaleDetails(details);
+        } catch (e) {
+            console.error("Failed to fetch sale details:", e);
+        } finally {
+            setLoadingDetails(false);
+        }
+    };
     // Grouped-bar Monthly Sales data — real Sale Invoice records only (no
     // dummy data), all 12 months always present, revenue broken down per
     // Product Type (derived server-side from each SaleItem's item name).
@@ -380,19 +403,30 @@ const Dashboard = () => {
                         </thead>
                         <tbody>
                             {recent.map((r, index) => (
-                                <tr key={r.id || index} className="border-t border-border hover:bg-muted/30 transition-colors">
-                                    <td className="px-5 py-3 text-muted-foreground font-medium">{index + 1}</td>
+                                <tr
+                                    key={r.id || index}
+                                    className="border-t border-border hover:bg-muted/40 transition-colors cursor-pointer group"
+                                    onClick={() => handleViewSale(r)}
+                                    title="Click to view full Bill & Sale details"
+                                >
+                                    <td className="px-5 py-3 text-muted-foreground font-medium group-hover:text-primary transition-colors">{index + 1}</td>
                                     <td className="px-5 py-3 text-muted-foreground whitespace-nowrap">{r.date ? fmtDate(r.date) : "—"}</td>
                                     <td className="px-5 py-3 font-medium text-foreground">
-                                        <div className="max-w-[200px] truncate" title={r.client_name}>{r.client_name}</div>
+                                        <div className="max-w-[200px] truncate group-hover:text-primary transition-colors font-semibold" title={r.client_name}>{r.client_name}</div>
                                     </td>
                                     <td className="px-5 py-3 text-muted-foreground">
                                         <div className="max-w-[350px] truncate" title={r.product}>{r.product}</div>
                                     </td>
-                                    <td className="px-5 py-3 whitespace-nowrap"><span className={`rounded-full px-2 py-1 text-xs font-semibold ${r.sale_type === "WO" ? "bg-violet-100 text-violet-700" : "bg-blue-100 text-blue-700"}`}>{r.sale_type || "PO"}</span></td>
-                                    <td className="px-5 py-3 text-muted-foreground whitespace-nowrap">{r.po_number || "—"}</td>
-                                    <td className="px-5 py-3 text-muted-foreground whitespace-nowrap">{r.invoice_number || "—"}</td>
-                                    <td className="px-5 py-3 text-right font-semibold whitespace-nowrap">{inr(r.price)}</td>
+                                    <td className="px-5 py-3 whitespace-nowrap">
+                                        <span className={`rounded-full px-2 py-1 text-xs font-semibold ${r.sale_type === "WO" ? "bg-violet-100 text-violet-700" : "bg-blue-100 text-blue-700"}`}>
+                                            {r.sale_type || "PO"}
+                                        </span>
+                                    </td>
+                                    <td className="px-5 py-3 text-muted-foreground whitespace-nowrap font-mono text-xs">{r.po_number || "—"}</td>
+                                    <td className="px-5 py-3 text-foreground whitespace-nowrap font-mono text-xs font-semibold group-hover:text-primary group-hover:underline">
+                                        {r.invoice_number || "—"}
+                                    </td>
+                                    <td className="px-5 py-3 text-right font-semibold whitespace-nowrap text-foreground">{inr(r.price)}</td>
                                     <td className="px-5 py-3"><StatusBadge status={r.delivery_status} /></td>
                                 </tr>
                             ))}
@@ -403,6 +437,276 @@ const Dashboard = () => {
                     </table>
                 </div>
             </Card>
+
+            {/* Recent Sale / Bill Details Dialog */}
+            <Dialog open={!!selectedRecentSale} onOpenChange={(open) => !open && setSelectedRecentSale(null)}>
+                <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+                    <DialogHeader>
+                        <div className="flex items-center justify-between gap-2 pr-6">
+                            <DialogTitle className="text-lg font-bold flex items-center gap-2">
+                                <Receipt className="h-5 w-5 text-primary" />
+                                <span>Sale & Bill Details</span>
+                                {selectedRecentSale?.invoice_number && (
+                                    <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded text-foreground font-semibold">
+                                        {selectedRecentSale.invoice_number}
+                                    </span>
+                                )}
+                            </DialogTitle>
+                            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+                                selectedRecentSale?.sale_type === "WO" 
+                                    ? "bg-violet-100 text-violet-700 border border-violet-200" 
+                                    : "bg-blue-100 text-blue-700 border border-blue-200"
+                            }`}>
+                                {selectedRecentSale?.sale_type === "WO" ? "Work Order Sale" : "PO Sale"}
+                            </span>
+                        </div>
+                    </DialogHeader>
+
+                    {selectedRecentSale && (
+                        <div className="space-y-4 pt-2">
+                            {/* Summary Header Cards */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-muted/40 p-3.5 rounded-lg border border-border/60 text-xs">
+                                <div>
+                                    <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Client</span>
+                                    <span className="font-semibold text-foreground text-xs line-clamp-2 mt-0.5" title={selectedRecentSale.client_name}>
+                                        {selectedRecentSale.client_name}
+                                    </span>
+                                </div>
+                                <div>
+                                    <span className="text-muted-foreground block text-[10px] uppercase font-semibold">{selectedRecentSale.sale_type === "WO" ? "WO Number" : "PO Number"}</span>
+                                    <span className="font-semibold text-foreground font-mono text-xs mt-0.5 block">
+                                        {selectedRecentSale.po_number || "—"}
+                                    </span>
+                                </div>
+                                <div>
+                                    <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Invoice Date</span>
+                                    <span className="font-medium text-foreground text-xs mt-0.5 block">
+                                        {selectedRecentSale.date ? fmtDate(selectedRecentSale.date) : "—"}
+                                    </span>
+                                </div>
+                                <div>
+                                    <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Total Amount</span>
+                                    <span className="font-bold text-primary text-sm mt-0.5 block">
+                                        {inr(saleDetails?.grand_total ?? selectedRecentSale.price)}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Additional details grid */}
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs bg-card p-3 rounded-lg border border-border/60">
+                                <div>
+                                    <span className="text-muted-foreground block text-[10px] uppercase font-medium">Payment Status</span>
+                                    <span className="font-semibold mt-0.5 inline-block text-foreground">
+                                        {saleDetails?.payment_status || selectedRecentSale.payment_status}
+                                    </span>
+                                </div>
+                                <div>
+                                    <span className="text-muted-foreground block text-[10px] uppercase font-medium">Delivery Status</span>
+                                    <div className="mt-0.5">
+                                        <StatusBadge status={saleDetails?.delivery_status || selectedRecentSale.delivery_status} />
+                                    </div>
+                                </div>
+                                {saleDetails?.e_way_bill_no && (
+                                    <div>
+                                        <span className="text-muted-foreground block text-[10px] uppercase font-medium">e-Way Bill No.</span>
+                                        <span className="font-mono font-medium text-foreground mt-0.5 block">
+                                            {saleDetails.e_way_bill_no}
+                                        </span>
+                                    </div>
+                                )}
+                                {saleDetails?.dispatched_through && (
+                                    <div>
+                                        <span className="text-muted-foreground block text-[10px] uppercase font-medium">Dispatched Through</span>
+                                        <span className="font-medium text-foreground mt-0.5 block">
+                                            {saleDetails.dispatched_through}
+                                        </span>
+                                    </div>
+                                )}
+                                {saleDetails?.dispatch_from && (
+                                    <div className="col-span-2 sm:col-span-3">
+                                        <span className="text-muted-foreground block text-[10px] uppercase font-medium">Dispatch From</span>
+                                        <span className="font-medium text-foreground mt-0.5 block">
+                                            {saleDetails.dispatch_from}
+                                        </span>
+                                    </div>
+                                )}
+                                {saleDetails?.ship_to && (
+                                    <div className="col-span-2 sm:col-span-3">
+                                        <span className="text-muted-foreground block text-[10px] uppercase font-medium">Ship To</span>
+                                        <span className="font-medium text-foreground mt-0.5 block">
+                                            {saleDetails.ship_to}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Items Breakdown */}
+                            <div className="rounded-lg border border-border overflow-hidden space-y-0">
+                                <div className="bg-muted/60 px-3.5 py-2 border-b border-border flex items-center justify-between">
+                                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Product & Items Breakdown</span>
+                                    {loadingDetails && <span className="text-xs text-muted-foreground animate-pulse">Loading items...</span>}
+                                </div>
+                                
+                                {loadingDetails ? (
+                                    <div className="p-6 text-center text-xs text-muted-foreground">Loading bill details...</div>
+                                ) : saleDetails?.items && saleDetails.items.length > 0 ? (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-xs text-left">
+                                            <thead className="bg-muted/40 text-muted-foreground font-medium border-b border-border">
+                                                <tr>
+                                                    <th className="p-2.5">Item</th>
+                                                    <th className="p-2.5 text-center">Qty</th>
+                                                    <th className="p-2.5 text-right">Rate</th>
+                                                    <th className="p-2.5 text-right">GST</th>
+                                                    <th className="p-2.5 text-right">Total</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {saleDetails.items.map((it, idx) => (
+                                                    <tr key={idx} className="border-b border-border/40 hover:bg-muted/10">
+                                                        <td className="p-2.5 font-medium">{it.item}</td>
+                                                        <td className="p-2.5 text-center">{it.quantity} {it.uom}</td>
+                                                        <td className="p-2.5 text-right">{inr(it.unit_price)}</td>
+                                                        <td className="p-2.5 text-right">{inr(it.gst_amount)} ({it.gst_rate}%)</td>
+                                                        <td className="p-2.5 text-right font-semibold">{inr(it.total_amount)}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                            <tfoot className="bg-muted/30 font-medium">
+                                                {saleDetails.subtotal != null && (
+                                                    <tr>
+                                                        <td colSpan="4" className="p-2 text-right text-muted-foreground">Subtotal:</td>
+                                                        <td className="p-2 text-right font-medium">{inr(saleDetails.subtotal)}</td>
+                                                    </tr>
+                                                )}
+                                                {saleDetails.gst_amount != null && (
+                                                    <tr>
+                                                        <td colSpan="4" className="p-2 text-right text-muted-foreground">GST Amount:</td>
+                                                        <td className="p-2 text-right font-medium">{inr(saleDetails.gst_amount)}</td>
+                                                    </tr>
+                                                )}
+                                                {Number(saleDetails.freight || 0) > 0 && (
+                                                    <tr>
+                                                        <td colSpan="4" className="p-2 text-right text-muted-foreground">Freight ({saleDetails.freight_gst_type || "Without GST"}):</td>
+                                                        <td className="p-2 text-right font-medium">{inr(saleDetails.freight)}</td>
+                                                    </tr>
+                                                )}
+                                                <tr className="bg-primary/5 text-primary font-bold text-sm border-t border-border">
+                                                    <td colSpan="4" className="p-2.5 text-right">Grand Total:</td>
+                                                    <td className="p-2.5 text-right">{inr(saleDetails.grand_total)}</td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                ) : (
+                                    <div className="p-4 text-xs text-foreground bg-card">
+                                        <span className="font-semibold text-muted-foreground mr-1">Product:</span>
+                                        {selectedRecentSale.product}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Documents Section */}
+                            {(saleDetails?.invoice_urls?.length > 0 || saleDetails?.e_way_bill_urls?.length > 0 || saleDetails?.delivery_challan_urls?.length > 0) && (
+                                <div className="space-y-2 pt-2 border-t border-border">
+                                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Attached Documents</p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        {saleDetails.invoice_urls?.map((url, i) => (
+                                            <a
+                                                key={`inv-${i}`}
+                                                href={resolveFileUrl(url)}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="flex items-center justify-between p-2 rounded-lg border border-border bg-muted/20 hover:bg-muted/50 text-xs transition-colors"
+                                            >
+                                                <div className="flex items-center gap-2 truncate">
+                                                    <FileText className="h-4 w-4 text-red-500 shrink-0" />
+                                                    <span className="truncate font-medium">{url.split("/").pop()}</span>
+                                                </div>
+                                                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground shrink-0 ml-1" />
+                                            </a>
+                                        ))}
+                                        {saleDetails.e_way_bill_urls?.map((url, i) => (
+                                            <a
+                                                key={`eway-${i}`}
+                                                href={resolveFileUrl(url)}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="flex items-center justify-between p-2 rounded-lg border border-border bg-muted/20 hover:bg-muted/50 text-xs transition-colors"
+                                            >
+                                                <div className="flex items-center gap-2 truncate">
+                                                    <FileText className="h-4 w-4 text-blue-500 shrink-0" />
+                                                    <span className="truncate font-medium">e-Way Bill: {url.split("/").pop()}</span>
+                                                </div>
+                                                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground shrink-0 ml-1" />
+                                            </a>
+                                        ))}
+                                        {saleDetails.delivery_challan_urls?.map((url, i) => (
+                                            <a
+                                                key={`dc-${i}`}
+                                                href={resolveFileUrl(url)}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="flex items-center justify-between p-2 rounded-lg border border-border bg-muted/20 hover:bg-muted/50 text-xs transition-colors"
+                                            >
+                                                <div className="flex items-center gap-2 truncate">
+                                                    <FileText className="h-4 w-4 text-green-500 shrink-0" />
+                                                    <span className="truncate font-medium">Challan: {url.split("/").pop()}</span>
+                                                </div>
+                                                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground shrink-0 ml-1" />
+                                            </a>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Dispatches History */}
+                            {saleDetails?.dispatches && saleDetails.dispatches.length > 0 && (
+                                <div className="space-y-2 pt-2 border-t border-border">
+                                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                        Dispatch History ({saleDetails.dispatches.length})
+                                    </p>
+                                    <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                                        {saleDetails.dispatches.map((d, i) => (
+                                            <div key={i} className="flex items-center justify-between p-2 rounded bg-muted/30 text-xs border border-border/50">
+                                                <div>
+                                                    <span className="font-semibold text-foreground mr-2">Dispatch #{i + 1}</span>
+                                                    <span className="text-muted-foreground">{d.dispatched_at ? fmtDate(d.dispatched_at) : "—"}</span>
+                                                    {d.invoice_number && <span className="ml-2 font-mono text-[11px] bg-muted px-1.5 py-0.5 rounded">{d.invoice_number}</span>}
+                                                </div>
+                                                <div className="font-semibold text-foreground">
+                                                    {d.quantity} {d.uom || "Nos"} ({inr(d.amount)})
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    <DialogFooter className="mt-4 flex items-center justify-between gap-2 border-t border-border pt-3">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-xs"
+                            onClick={() => {
+                                if (selectedRecentSale?.sale_type === "WO") {
+                                    navigate("/work-order-sales");
+                                } else {
+                                    navigate("/sales-invoice");
+                                }
+                            }}
+                        >
+                            <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+                            Open in {selectedRecentSale?.sale_type === "WO" ? "Work Order Sales" : "Sales Module"}
+                        </Button>
+                        <Button variant="default" size="sm" className="text-xs" onClick={() => setSelectedRecentSale(null)}>
+                            Close
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 };

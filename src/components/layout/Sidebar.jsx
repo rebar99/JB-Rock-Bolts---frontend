@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, FileBarChart2, FileText, ShoppingCart, UserCheck, ClipboardList, Building2, Database, Trash2, Receipt } from "lucide-react";
+import { LayoutDashboard, FileBarChart2, FileText, ShoppingCart, UserCheck, ClipboardList, Building2, Database, Trash2, Receipt, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 
@@ -118,6 +118,24 @@ export const Sidebar = ({ open, onClose }) => {
                             <Trash2 className="h-4 w-4 shrink-0" size={18} />
                             <span>Recently Deleted</span>
                         </NavLink>
+                        {user?.is_super_admin && (
+                            <NavLink
+                                to="/admin/data-verification-settings"
+                                onClick={onClose}
+                                className={({ isActive }) =>
+                                    cn(
+                                        "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+                                        "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                                        isActive
+                                            ? "bg-sidebar-accent text-sidebar-accent-foreground border-l-2 border-sidebar-primary shadow-sm"
+                                            : "text-sidebar-foreground/80"
+                                    )
+                                }
+                            >
+                                <ShieldCheck className="h-4 w-4 shrink-0" size={18} />
+                                <span>Data Verification</span>
+                            </NavLink>
+                        )}
                     </>
                 )}
             </nav>

@@ -1,7 +1,7 @@
-import { Fragment, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Boxes, CircleDollarSign, Eye, Filter, History, Package, Pencil, Plus, Search, Send, ShieldCheck, ShoppingCart, Trash2, Warehouse, Building2, Settings, ChevronDown, ChevronRight, ChevronUp } from "lucide-react";
+import { Boxes, CircleDollarSign, Eye, Filter, History, Package, Pencil, Plus, Search, Send, ShieldCheck, ShoppingCart, Trash2, Warehouse, Building2, Settings, ChevronDown, ChevronRight, ChevronUp, ExternalLink, ReceiptText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { createStoreItem, deleteStoreItem, fetchStoreItemHistory, issueStoreItem, updateStoreItem, fetchStoreVendors, fetchItemMasterList, fetchUomOptions, fetchAllStoreTransactions } from "@/lib/api";
@@ -70,6 +70,146 @@ function StockItemsDialog({ item, onClose }) {
         amount: item?.stock_items?.length <= 1 ? (item.remaining_stock_amount ?? r.amount) : r.amount,
     }));
     return <Dialog open={!!item} onOpenChange={open => !open && onClose()}><DialogContent className="max-w-5xl"><DialogHeader><DialogTitle>{item?.name} — Items Name</DialogTitle><DialogDescription>All items names under this material master. A material can have multiple items names.</DialogDescription></DialogHeader><div className="max-h-[60vh] overflow-auto rounded-lg border"><table className="w-full min-w-[820px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">S.No.</th><th className="px-4 py-3">Items Name</th><th className="px-4 py-3">Vendor</th><th className="px-4 py-3">U/M</th><th className="px-4 py-3">Location</th><th className="px-4 py-3 text-right">Received</th><th className="px-4 py-3 text-right">Issued</th><th className="px-4 py-3 text-right">Available</th><th className="px-4 py-3 text-right">Rate</th><th className="px-4 py-3 text-right">Amount</th></tr></thead><tbody>{rows.map((stock, index) => <tr key={stock.id} className="border-t"><td className="px-4 py-3 text-center text-muted-foreground">{index + 1}</td><td className="px-4 py-3 font-semibold">{stock.name}</td><td className="px-4 py-3">{stock.vendor_name || "—"}</td><td className="px-4 py-3">{stock.uom || "Nos"}</td><td className="px-4 py-3">{stock.location || "—"}</td><td className="px-4 py-3 text-right">{qty(stock.total_received_quantity)}</td><td className="px-4 py-3 text-right">{qty(stock.issued_quantity)}</td><td className="px-4 py-3 text-right font-semibold text-emerald-700">{qty(stock.available_quantity)}</td><td className="px-4 py-3 text-right">{money(stock.rate)}</td><td className="px-4 py-3 text-right font-semibold">{money(stock.amount)}</td></tr>)}</tbody></table></div><DialogFooter><Button variant="outline" onClick={onClose}>Close</Button></DialogFooter></DialogContent></Dialog>;
+}
+
+function VendorPODialog({ data, onClose, onNavigate }) {
+    if (!data) return null;
+    const { item, groupName } = data;
+    const { data: history = [], isLoading } = useQuery({
+        queryKey: ["store-item-history", item?.id],
+        queryFn: () => fetchStoreItemHistory(item.id),
+        enabled: !!item?.id,
+    });
+
+    const poList = useMemo(() => {
+        const list = [];
+        const seen = new Set();
+
+        // 1. From item.po_references returned by backend
+        (item?.po_references || []).forEach(p => {
+            const num = p.po_number || p.reference_no;
+            if (num && !seen.has(num)) {
+                seen.add(num);
+                list.push({
+                    po_number: num,
+                    vendor_name: p.vendor_name || item?.vendor_name,
+                    date: p.date,
+                    quantity: p.quantity,
+                    rate: p.rate,
+                });
+            }
+        });
+
+        // 2. From real-time item history transactions
+        (history || []).forEach(h => {
+            const num = h.po_number || h.reference_no;
+            if (num && !seen.has(num)) {
+                seen.add(num);
+                list.push({
+                    po_number: num,
+                    vendor_name: h.vendor_name || h.issued_to || item?.vendor_name,
+                    date: h.date,
+                    quantity: h.quantity,
+                    rate: h.rate,
+                });
+            }
+        });
+
+        // 3. Fallback from item.reference_no
+        if (item?.reference_no && !seen.has(item.reference_no)) {
+            seen.add(item.reference_no);
+            list.push({
+                po_number: item.reference_no,
+                vendor_name: item.vendor_name,
+                date: item.receipt_date,
+                quantity: item.quantity,
+                rate: item.rate,
+            });
+        }
+
+        return list;
+    }, [history, item]);
+
+    return (
+        <Dialog open={!!data} onOpenChange={open => !open && onClose()}>
+            <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-6">
+                <DialogHeader className="pb-3 border-b">
+                    <DialogTitle className="flex items-center gap-2 text-lg font-bold">
+                        <ReceiptText className="h-5 w-5 text-cyan-600" />
+                        Purchase Orders — {item?.stock_item || item?.name}
+                    </DialogTitle>
+                    <DialogDescription className="text-xs text-muted-foreground mt-1">
+                        Vendor: <strong className="text-slate-800">{item?.vendor_name || "—"}</strong>
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div className="py-3 flex-1 overflow-y-auto">
+                    {isLoading && poList.length === 0 ? (
+                        <div className="p-8 text-center text-sm text-muted-foreground">Loading purchase orders…</div>
+                    ) : poList.length === 0 ? (
+                        <div className="p-8 text-center text-sm text-muted-foreground italic">
+                            No PO numbers recorded for this item/vendor.
+                        </div>
+                    ) : (
+                        <div className="overflow-x-auto rounded-lg border border-slate-200">
+                            <table className="w-full text-sm">
+                                <thead className="bg-slate-50 text-xs font-semibold uppercase text-slate-600 border-b">
+                                    <tr>
+                                        <th className="px-3 py-2.5 text-center w-12">#</th>
+                                        <th className="px-3 py-2.5 text-left">PO Number</th>
+                                        <th className="px-3 py-2.5 text-left">Received Date</th>
+                                        <th className="px-3 py-2.5 text-right">Qty</th>
+                                        <th className="px-3 py-2.5 text-right">Rate</th>
+                                        <th className="px-3 py-2.5 text-center">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {poList.map((po, idx) => (
+                                        <tr key={po.po_number || idx} className="hover:bg-slate-50/80 transition-colors">
+                                            <td className="px-3 py-2.5 text-center text-xs text-muted-foreground">{idx + 1}</td>
+                                            <td className="px-3 py-2.5 font-bold text-cyan-800">
+                                                {po.po_number}
+                                            </td>
+                                            <td className="px-3 py-2.5 text-xs text-slate-600">
+                                                {po.date ? new Date(po.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
+                                            </td>
+                                            <td className="px-3 py-2.5 text-right font-medium text-xs">
+                                                {qty(po.quantity)} {item?.uom || ""}
+                                            </td>
+                                            <td className="px-3 py-2.5 text-right text-xs">
+                                                {po.rate ? money(po.rate) : "—"}
+                                            </td>
+                                            <td className="px-3 py-2.5 text-center">
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    onClick={() => {
+                                                        onClose();
+                                                        onNavigate(po.po_number, groupName);
+                                                    }}
+                                                    className="h-7 px-2.5 gap-1 bg-cyan-700 hover:bg-cyan-800 text-white text-xs font-medium cursor-pointer"
+                                                    title="View this bill in Materials Received"
+                                                >
+                                                    <span>View Bill</span>
+                                                    <ExternalLink className="h-3 w-3" />
+                                                </Button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+
+                <DialogFooter className="pt-2 border-t flex justify-end">
+                    <Button variant="outline" size="sm" onClick={onClose}>
+                        Close
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
 }
 
 
@@ -218,11 +358,14 @@ function AllIssueHistoryDialog({ open, onClose }) {
 
 export default function StoreItems({ inventory = [], admin = false, initialStockStatusOpen = false, loading = false, error = null, onRetry = null }) {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const targetGroup = searchParams.get("group");
     const { user } = useAuth();
     const isSuperAdmin = Boolean(user?.is_super_admin);
     const client = useQueryClient();
     const [stockStatusOpen, setStockStatusOpen] = useState(initialStockStatusOpen);
     const [allHistoryOpen, setAllHistoryOpen] = useState(false);
+    const [vendorPOsModal, setVendorPOsModal] = useState(null);
     const [search, setSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState("all");
     const [groupFilter, setGroupFilter] = useState("");
@@ -409,7 +552,7 @@ export default function StoreItems({ inventory = [], admin = false, initialStock
     };
 
     const filtered = useMemo(() => (normalizedInventory || []).filter(item => {
-        const matchSearch = `${item.name || ""} ${item.stock_item || ""} ${item.vendor_name || ""} ${item.location || ""}`.toLowerCase().includes(search.toLowerCase());
+        const matchSearch = `${item.name || ""} ${item.stock_item || ""} ${item.vendor_name || ""} ${item.location || ""} ${item.reference_no || ""}`.toLowerCase().includes(search.toLowerCase());
         const matchStatus =
             statusFilter === "all" ||
             (statusFilter === "in_stock" && item.status === "In Stock") ||
@@ -529,6 +672,23 @@ export default function StoreItems({ inventory = [], admin = false, initialStock
         return groups.sort((a, b) => a.groupName.localeCompare(b.groupName));
     }, [filtered]);
 
+    // Auto-expand all matching groups when search is active (vendor name / PO reference / item)
+    useEffect(() => {
+        if (search.trim()) {
+            setExpandedGroups(new Set(groupedInventory.map(g => g.groupName)));
+        } else if (targetGroup) {
+            setExpandedGroups(prev => new Set([...prev, targetGroup]));
+            setTimeout(() => {
+                const el = document.getElementById(`group-${encodeURIComponent(targetGroup)}`);
+                if (el) {
+                    el.scrollIntoView({ behavior: "smooth", block: "center" });
+                }
+            }, 250);
+        } else {
+            setExpandedGroups(new Set());
+        }
+    }, [search, targetGroup, groupedInventory.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
     const isAllExpanded = groupedInventory.length > 0 && expandedGroups.size === groupedInventory.length;
 
     const refresh = () => {
@@ -564,13 +724,17 @@ export default function StoreItems({ inventory = [], admin = false, initialStock
     };
     return <main className="min-h-[calc(100vh-4rem)] w-full bg-white px-4 py-7 sm:px-6 lg:px-8"><div className="w-full"><div className="relative text-center"><h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">Inventory & Material Stock</h1><p className="mt-2 text-sm text-muted-foreground">Maintain material receipts, available stock, rate history and issues in one place.</p><div className="mt-6 flex flex-wrap justify-end gap-2"><Button variant="outline" onClick={() => setAllHistoryOpen(true)} className="border-cyan-300 bg-cyan-50/70 text-cyan-800 hover:bg-cyan-100 hover:text-cyan-900 shadow-sm font-semibold"><History className="mr-2 h-4 w-4 text-cyan-600" />All Issue History</Button>{isSuperAdmin && <Button variant="outline" onClick={() => setStockStatusOpen(true)} className="border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100 hover:text-violet-800"><ShieldCheck className="mr-2 h-4 w-4 text-violet-600" />Manage Stock Status</Button>}{admin && <Button onClick={openCreate} className="bg-gradient-primary shadow-elegant hover:opacity-90"><Plus className="mr-2 h-4 w-4" />Add Inventory</Button>}</div></div>
         <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><StatCard label="Total Groups" value={`${qty(totals.groups)} (${qty(totals.items)} Items)`} icon={Boxes} color="bg-primary/10 text-primary" /><StatCard label="Available Stock" value={qty(totals.available)} icon={Warehouse} color="bg-cyan-50 text-cyan-700" /><StatCard label="Issued Quantity" value={qty(totals.issued)} icon={Send} color="bg-amber-50 text-amber-700" /><StatCard label="Remaining Stock Value" value={money(totals.value)} icon={CircleDollarSign} color="bg-emerald-50 text-emerald-700" /></div>
-        <section className="mt-5 rounded-xl border bg-white p-4 shadow-card"><div className="flex flex-wrap items-center gap-3"><div className="relative flex-1 min-w-[220px]"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search group, items name, vendor or location..." className="h-10 w-full rounded-lg border bg-slate-50 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-primary/20" /></div><div className="flex flex-wrap items-center gap-2"><Filter className="h-4 w-4 text-muted-foreground" /><select value={groupFilter} onChange={e => setGroupFilter(e.target.value)} className="h-10 rounded-lg border bg-slate-50 px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"><option value="">All Groups</option>{groupOptions.map(g => <option key={g} value={g}>{g}</option>)}</select><select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="h-10 rounded-lg border bg-slate-50 px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"><option value="all">All Status</option><option value="in_stock">In Stock</option><option value="low_stock">Low Stock</option><option value="out_of_stock">Out of Stock</option></select><Button type="button" variant="outline" size="sm" onClick={isAllExpanded ? collapseAll : expandAll} className="h-10 text-xs border-slate-200 text-slate-700 hover:bg-slate-100">{isAllExpanded ? (<><ChevronUp className="mr-1.5 h-3.5 w-3.5" />Collapse All Groups</>) : (<><ChevronDown className="mr-1.5 h-3.5 w-3.5" />Expand All Groups</>)}</Button></div></div></section>
+        <section className="mt-5 rounded-xl border bg-white p-4 shadow-card"><div className="flex flex-wrap items-center gap-3"><div className="relative flex-1 min-w-[220px]"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search group, items name, vendor, PO reference or location..." className="h-10 w-full rounded-lg border bg-slate-50 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-primary/20" /></div><div className="flex flex-wrap items-center gap-2"><Filter className="h-4 w-4 text-muted-foreground" /><select value={groupFilter} onChange={e => setGroupFilter(e.target.value)} className="h-10 rounded-lg border bg-slate-50 px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"><option value="">All Groups</option>{groupOptions.map(g => <option key={g} value={g}>{g}</option>)}</select><select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="h-10 rounded-lg border bg-slate-50 px-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"><option value="all">All Status</option><option value="in_stock">In Stock</option><option value="low_stock">Low Stock</option><option value="out_of_stock">Out of Stock</option></select><Button type="button" variant="outline" size="sm" onClick={isAllExpanded ? collapseAll : expandAll} className="h-10 text-xs border-slate-200 text-slate-700 hover:bg-slate-100">{isAllExpanded ? (<><ChevronUp className="mr-1.5 h-3.5 w-3.5" />Collapse All Groups</>) : (<><ChevronDown className="mr-1.5 h-3.5 w-3.5" />Expand All Groups</>)}</Button></div></div></section>
         <section className="mt-5 overflow-hidden rounded-xl border bg-white shadow-card"><div className="overflow-x-auto"><table key="inventory-grouped-table-v1" data-store-grouped="true" className="w-full min-w-[1600px] table-fixed text-sm store-inventory-grouped-table"><thead className="bg-slate-50 text-left text-xs font-bold uppercase tracking-wider text-slate-500"><tr>{["S.No.", "Group Name", "Total Items", "Previous Qty", "Current Month Qty", "Total Qty", "Issue Qty", "Available Qty", "Total Amount", "Overall Stock Status", "Actions"].map(h => <th key={h} style={{ width: groupSummaryColumnWidths[h], minWidth: groupSummaryColumnWidths[h] }} className={`border-b px-3 py-3 ${h === "S.No." || ["Total Items", "Previous Qty", "Current Month Qty", "Total Qty", "Issue Qty", "Available Qty", "Total Amount", "Overall Stock Status", "Actions"].includes(h) ? "whitespace-nowrap text-center" : ""}`}>{h}</th>)}</tr></thead><tbody>{groupedInventory.length ? groupedInventory.map((group, groupIndex) => {
             const isExpanded = expandedGroups.has(group.groupName);
             return (
                 <Fragment key={group.groupName}>
                     {/* Main Group Summary Row */}
-                    <tr onClick={() => toggleGroup(group.groupName)} className={`border-b transition-colors cursor-pointer select-none ${isExpanded ? "bg-cyan-50/40 hover:bg-cyan-50/60" : "hover:bg-slate-50"}`}>
+                    <tr
+                        id={`group-${encodeURIComponent(group.groupName)}`}
+                        onClick={() => toggleGroup(group.groupName)}
+                        className={`border-b transition-colors cursor-pointer select-none ${isExpanded ? "bg-cyan-50/40 hover:bg-cyan-50/60" : "hover:bg-slate-50"}`}
+                    >
                         <td className="px-3 py-4 text-center font-medium text-muted-foreground">{groupIndex + 1}</td>
                         <td className="px-3 py-4">
                             <div className="flex items-center gap-2">
@@ -635,8 +799,35 @@ export default function StoreItems({ inventory = [], admin = false, initialStock
                                                         <td className="px-3 py-3 text-center text-muted-foreground text-xs">{itemIdx + 1}</td>
                                                         <td className="px-3 py-3 font-medium text-slate-900">{item.stock_item || "—"}</td>
                                                         <td className="px-3 py-3">
-                                                            <span className="font-medium">{Number(item.available_quantity || 0) <= 0 && Number(item.total_quantity || 0) <= 0 ? "—" : (item.vendor_name || "—")}</span>
-                                                            {item.reference_no && <p className="text-[11px] text-muted-foreground mt-0.5">Ref: {item.reference_no}</p>}
+                                                            {item.vendor_name ? (
+                                                                <div>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setVendorPOsModal({ item, groupName: group.groupName });
+                                                                        }}
+                                                                        className="font-medium text-slate-900 hover:text-cyan-700 hover:underline cursor-pointer text-left block transition-colors"
+                                                                        title="Click vendor name to view all Purchase Orders"
+                                                                    >
+                                                                        {item.vendor_name}
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setVendorPOsModal({ item, groupName: group.groupName });
+                                                                        }}
+                                                                        className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-semibold text-cyan-700 hover:text-cyan-900 hover:underline cursor-pointer"
+                                                                        title="Click to view all PO numbers for this vendor"
+                                                                    >
+                                                                        <span>View All POs</span>
+                                                                        <ExternalLink className="h-2.5 w-2.5 opacity-70" />
+                                                                    </button>
+                                                                </div>
+                                                            ) : (
+                                                                <span className="text-muted-foreground">—</span>
+                                                            )}
                                                         </td>
                                                         <td className="px-3 py-3 text-center text-slate-600">{item.uom || "Nos"}</td>
                                                         <td className="px-3 py-3 text-center text-slate-700">{qty(item.previous_quantity)}</td>
@@ -843,6 +1034,14 @@ export default function StoreItems({ inventory = [], admin = false, initialStock
                         </div>
                     </section><section className="overflow-hidden rounded-xl border bg-card"><div className="border-b p-5"><h2 className="font-bold">Quantity Planning</h2><p className="mt-1 text-xs text-muted-foreground">Total Quantity is automatically calculated: Previous Qty (Opening) + Current Month Qty (Inward). Amount = Total Quantity × Rate.</p></div><div className="overflow-x-auto"><table className="w-full min-w-[900px] text-sm"><thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"><tr>{["Previous Month Qty", "Current Month Qty", "Total Quantity", "Rate", "Amount"].map(x => <th key={x} className="px-4 py-3">{x}</th>)}</tr></thead><tbody><tr><td className="p-3"><input type="number" min="0" step="0.01" placeholder="0" value={form.previous_quantity} onChange={e => { const val = e.target.value; const prev = Number(val) || 0; const curr = Number(form.current_month_quantity) || 0; setForm({ ...form, previous_quantity: val, quantity: String(prev + curr) }); }} className="h-9 w-full rounded border px-2" /></td><td className="p-3"><input required type="number" min="0" step="0.01" placeholder="0" value={form.current_month_quantity} onChange={e => { const val = e.target.value; const curr = Number(val) || 0; const prev = Number(form.previous_quantity) || 0; setForm({ ...form, current_month_quantity: val, quantity: String(prev + curr) }); }} className="h-9 w-full rounded border px-2" /></td><td className="p-3"><input type="number" min="0.01" step="0.01" value={form.quantity} onChange={e => { const tot = Number(e.target.value) || 0; const prev = Number(form.previous_quantity) || 0; const curr = Math.max(0, tot - prev); setForm({ ...form, quantity: e.target.value, current_month_quantity: String(curr) }); }} className="h-9 w-full rounded border px-2 font-bold bg-slate-50" title="Auto-calculated from Previous + Current Month Qty" /></td><td className="p-3"><input required type="number" min="0" step="0.01" value={form.rate} onChange={e => setForm({ ...form, rate: e.target.value })} className="h-9 w-full rounded border px-2" /></td><td className="p-3 text-right font-bold">{money(Number(form.quantity || 0) * Number(form.rate || 0))}</td></tr></tbody></table></div></section><DialogFooter><Button type="button" variant="outline" onClick={() => setFormOpen(false)}>Cancel</Button>{admin && <Button type="submit" disabled={save.isPending}>{save.isPending ? "Saving…" : editing ? "Save Changes" : formMode === "stock" ? "Receive New Stock" : "Save Material"}</Button>}</DialogFooter></form></DialogContent></Dialog>
         <Dialog open={!!issuing} onOpenChange={open => !open && setIssuing(null)}><DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>Issue Material</DialogTitle><DialogDescription>Material information is auto-filled. Only enter the issue transaction details.</DialogDescription></DialogHeader>{issuing && <form noValidate onSubmit={e => { e.preventDefault(); const requested = Number(issue.quantity); if (!requested || requested <= 0) return toast.error("Enter a valid issue quantity."); if (requested > Number(issuing.available_quantity)) return toast.error(`Insufficient stock. Only ${qty(issuing.available_quantity)} units are available.`); if (!issue.issued_to?.trim() && !issue.location?.trim()) return toast.error("Select department/person or enter location."); doIssue.mutate({ ...issue, quantity: requested }); }} className="space-y-5"><div className="grid gap-3 rounded-xl border bg-slate-50 p-4 text-sm sm:grid-cols-2 lg:grid-cols-3"><div><span className="text-xs text-muted-foreground">Groups Name</span><p className="font-semibold">{issuing.name}</p></div><div><span className="text-xs text-muted-foreground">Items Name / U/M</span><p>{issuing.stock_item || "—"} · {issuing.uom}</p></div><div><span className="text-xs text-muted-foreground">Available Quantity</span><p className="font-bold text-cyan-700">{qty(issuing.available_quantity)}</p></div><div><span className="text-xs text-muted-foreground">Rate / Amount</span><p>{money(issuing.rate)} / {money(Number(issuing.available_quantity) * Number(issuing.rate))}</p></div><div><span className="text-xs text-muted-foreground">Location</span><p>{issuing.location || "—"}</p></div></div><div className="grid gap-4 md:grid-cols-2"><Field label="Issue Quantity *"><input required autoFocus type="number" min="0.01" step="0.01" value={issue.quantity} onChange={e => setIssue({ ...issue, quantity: e.target.value })} className={input} /></Field><Field label="Required For"><input value={issue.required_for} onChange={e => setIssue({ ...issue, required_for: e.target.value })} className={input} /></Field><Field label="Issued To / Department / Person"><select value={issue.issued_to} onChange={e => setIssue({ ...issue, issued_to: e.target.value })} className={input}><option value="">Select department / person</option><option value="Production Department">Production Department</option><option value="Engineering Workshop">Engineering Workshop</option><option value="Electrical Engineering">Electrical Engineering</option><option value="Administration">Administration</option><option value="Construction / Building">Construction / Building</option><option value="Sites">Sites</option></select></Field><Field label="Location"><input type="text" list="storeitems-dest-locations" placeholder="Enter destination location" value={issue.location || ""} onChange={e => setIssue({ ...issue, location: e.target.value })} className={input} /><datalist id="storeitems-dest-locations">{[...new Set(inventory.map(i => i.location).filter(Boolean))].map(loc => <option key={loc} value={loc} />)}</datalist></Field><Field label="Issue Date"><input type="date" value={issue.issue_date} onChange={e => setIssue({ ...issue, issue_date: e.target.value })} className={input} /></Field></div><Field label="Remarks / Purpose"><textarea value={issue.remarks} onChange={e => setIssue({ ...issue, remarks: e.target.value })} className="mt-1.5 min-h-20 w-full rounded-md border p-3 text-sm" /></Field><DialogFooter><Button type="button" variant="outline" onClick={() => setIssuing(null)}>Cancel</Button><Button type="submit" disabled={doIssue.isPending}>{doIssue.isPending ? "Issuing…" : "Save Issue"}</Button></DialogFooter></form>}</DialogContent></Dialog><HistoryDialog item={viewing} onClose={() => setViewing(null)} /><StockItemsDialog item={stockItemDetails} onClose={() => setStockItemDetails(null)} /><ItemMasterManageDialog open={manageItemsOpen} onOpenChange={setManageItemsOpen} type="STORE" /><UomManageDialog open={manageUomOpen} onOpenChange={setManageUomOpen} type="STORE" />
-        <StoreStockStatusDialog open={stockStatusOpen} onOpenChange={setStockStatusOpen} fallbackItems={inventory} /><AllIssueHistoryDialog open={allHistoryOpen} onClose={() => setAllHistoryOpen(false)} /></main>;
+        <StoreStockStatusDialog open={stockStatusOpen} onOpenChange={setStockStatusOpen} fallbackItems={inventory} /><AllIssueHistoryDialog open={allHistoryOpen} onClose={() => setAllHistoryOpen(false)} />
+        <VendorPODialog
+            data={vendorPOsModal}
+            onClose={() => setVendorPOsModal(null)}
+            onNavigate={(poNum, grpName) => {
+                navigate(`/store-purchase/materials-received?search=${encodeURIComponent(poNum)}&from=inventory&group=${encodeURIComponent(grpName)}`);
+            }}
+        />
+    </main>;
 }
 

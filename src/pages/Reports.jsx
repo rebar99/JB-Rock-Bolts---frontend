@@ -24,6 +24,7 @@ import { FilterableHeader } from "@/components/FilterableHeader";
 import { StickyScrollArea } from "@/components/StickyScrollArea";
 import WorkOrderReport from "@/pages/WorkOrderReport";
 import OverviewReport from "@/pages/OverviewReport";
+import DataVerificationBadge from "@/components/DataVerificationBadge";
 
 // Guards footer quantity totals against floating-point drift from repeated
 // addition (e.g. 0.1 + 0.2 producing 0.30000000000000004).
@@ -317,6 +318,9 @@ const Reports = () => {
                 <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight text-foreground">Reports & Analytics</h2>
                 <p className="text-sm text-muted-foreground">Analyze your sales performance and order fulfillment.</p>
             </div>
+
+            {/* ── Data Verification Status Banner ─────────────────────────────── */}
+            <DataVerificationBadge />
 
             {/* ── Report section selector ─────────────────────────────────────── */}
             <Tabs value={reportSection} onValueChange={setReportSection} className="w-full">

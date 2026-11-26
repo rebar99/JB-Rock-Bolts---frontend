@@ -844,3 +844,15 @@ export const uploadHRSalaryProof = async (salId, file) => {
     }
     return res.json();
 };
+
+
+// ---------------------------------------------------------------------------
+// Data Verification System – Marketing Reports
+// ---------------------------------------------------------------------------
+export const fetchDataVerificationStatus = () => get("/api/data-verification/status");
+export const verifyData = (notes = "") => post("/api/data-verification/verify", { notes });
+export const fetchDataVerificationHistory = () => get("/api/data-verification/history");
+export const fetchDataVerificationPermissions = () => get("/api/data-verification/permissions");
+export const fetchDataVerificationEligibleUsers = () => get("/api/data-verification/eligible-users");
+export const grantDataVerificationPermission = (user_id) => post("/api/data-verification/permissions", { user_id });
+export const revokeDataVerificationPermission = (user_id) => del(`/api/data-verification/permissions/${user_id}`);

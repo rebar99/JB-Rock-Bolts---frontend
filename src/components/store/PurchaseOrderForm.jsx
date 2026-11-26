@@ -8,8 +8,7 @@ import { UomManageDialog } from "@/components/UomManageDialog";
 import { createStoreOrder, fetchItemMasterList, fetchUomOptions, updateStoreOrder, fetchStoreVendors, fetchStoreInventory, fetchStoreOrders, fetchStorePOSequenceConfig } from "@/lib/api";
 import { toast } from "sonner";
 import jbEngineeringLogo from "@/assets/jb-engineering-logo.jpg";
-import { getItemOnlyName } from "@/components/store/StorePurchaseOrders";
-import { amountInWords } from "@/components/store/PurchaseOrderSheet";
+import { getItemOnlyName, amountInWords } from "@/components/store/PurchaseOrderSheet";
 import { useAuth } from "@/context/AuthContext";
 import StorePOSequenceDialog from "@/components/store/StorePOSequenceDialog";
 
@@ -628,7 +627,7 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
         <div className="po-print-sheet hidden">
             <div className="po-print-company"><img src={jbEngineeringLogo} alt="JB Engineering" /><div><h1>RE-Bar Couplers India Private Limited</h1><p>VPO Palkwaha, Tehsil Haroli, District Una, Himachal Pradesh - 177220</p><p>HO: 10 A&amp;B, Block 23, Industrial Area, Nangal Jarialan, Distt. Una, Himachal Pradesh - 177212</p><p>Cell No. +91 9888603791 · seema@jbengineeringcorporation.com</p><p>www.jbengineeringcorporation.com · GST No. 02AAFCR5621L1ZG</p></div></div>
             <div className="po-print-title"><span>Vendor Code: {form.vendor_code || "—"}</span><strong>PURCHASE ORDER</strong></div>
-            <div className="po-print-meta"><div><p><b>M/S:</b> {form.supplier || "—"}</p><p className="preline">{form.vendor_address || "Vendor address not provided"}</p><p><b>Kind Att:</b> {form.vendor_contact || "—"}</p><p><b>GST No.:</b> {form.vendor_gst || "—"}</p></div><div><p><b>PO No:</b> {form.order_number}</p><p><b>Dated:</b> {form.po_date ? new Date(`${form.po_date}T00:00:00`).toLocaleDateString("en-IN") : "—"}</p><p><b>Reference:</b> {form.reference || "—"}</p><p><b>Status:</b> {form.status}</p></div></div>
+            <div className="po-print-meta"><div><p><b>Vendor:</b> {form.supplier || "—"}</p><p className="preline">{form.vendor_address || "Vendor address not provided"}</p><p><b>Kind Att:</b> {form.vendor_contact || "—"}</p><p><b>GST No.:</b> {form.vendor_gst || "—"}</p></div><div><p><b>PO No:</b> {form.order_number}</p><p><b>Dated:</b> {form.po_date ? new Date(`${form.po_date}T00:00:00`).toLocaleDateString("en-IN") : "—"}</p><p><b>Reference:</b> {form.reference || "—"}</p><p><b>Status:</b> {form.status}</p></div></div>
             <p className="po-print-intro">Please supply the following goods subject to the terms and conditions mentioned herein.</p>
             <table className="po-print-table"><thead><tr><th>Sr. No.</th><th>Item Description</th><th>Quantity</th><th>UoM</th><th>Unit Rate (INR)</th><th>Amount (INR)</th></tr></thead><tbody>{form.items.map((line, index) => <tr key={index}><td>{index + 1}</td><td>{getItemOnlyName(line.item_description, itemMasterList) || "—"}</td><td>{formatNumber(line.quantity)}</td><td>{line.uom || "—"}</td><td>{money(Number(line.unit_rate) || 0)}</td><td>{money((Number(line.quantity) || 0) * (Number(line.unit_rate) || 0))}</td></tr>)}</tbody></table>
             <div className="po-print-totals"><p><span>Total</span><b>{money(totals.subtotal)}</b></p><p><span>IGST ({form.gst_rate}%)</span><b>{money(totals.gstAmount)}</b></p>{totals.freightCharges > 0 && <p><span>Freight Charges</span><b>{money(totals.freightCharges)}</b></p>}{totals.freightCharges > 0 && <p><span>GST on Freight ({form.freight_gst_type === "Without GST" ? "Without GST" : `${form.gst_rate}%`})</span><b>{money(totals.freightGst)}</b></p>}<p><span>Rounded off</span><b>{money(Number(form.round_off) || 0)}</b></p><p className="grand"><span>Total Amount Including Taxes</span><b>{money(totals.grandTotal)}</b></p></div>
@@ -673,25 +672,22 @@ export default function PurchaseOrderForm({ orders = [], admin = false, onBack, 
                     </Field>
 
                     <Field label="Vendor Name *">
-                        <div className="mt-1.5 flex gap-2">
-                            <div className="grid h-10 w-20 shrink-0 place-items-center rounded-md border border-slate-200 bg-slate-50 px-2 text-sm font-medium text-slate-700">M/s.</div>
-                            <input
-                                required
-                                disabled={!admin}
-                                list="store-vendor-suggestions"
-                                value={form.supplier}
-                                onChange={e => handleSelectVendor(e.target.value)}
-                                className="h-10 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
-                                placeholder="Enter or select vendor name"
-                            />
-                            <datalist id="store-vendor-suggestions">
-                                {selectableVendors.map(v => (
-                                    <option key={v.id} value={v.vendor_name}>
-                                        {v.person_name ? `${v.person_name} · ` : ""}{v.vendor_gst || ""}
-                                    </option>
-                                ))}
-                            </datalist>
-                        </div>
+                        <input
+                            required
+                            disabled={!admin}
+                            list="store-vendor-suggestions"
+                            value={form.supplier}
+                            onChange={e => handleSelectVendor(e.target.value)}
+                            className={inputClass}
+                            placeholder="Enter or select vendor name"
+                        />
+                        <datalist id="store-vendor-suggestions">
+                            {selectableVendors.map(v => (
+                                <option key={v.id} value={v.vendor_name}>
+                                    {v.person_name ? `${v.person_name} · ` : ""}{v.vendor_gst || ""}
+                                </option>
+                            ))}
+                        </datalist>
                     </Field>
 
                     <Field

@@ -101,7 +101,7 @@ export function printMaterialReceipt(receipt) {
         </section>
         <section class="meta">
             <div>
-                <p><b>Vendor Name:</b> M/s. ${escapeHtml(receipt.vendor_name || "—")}</p>
+                <p><b>Vendor Name:</b> ${escapeHtml(receipt.vendor_name || "—")}</p>
                 <p><b>Reference:</b> ${escapeHtml(receipt.reference || "—")}</p>
                 <p><b>PO Payment Terms:</b> ${escapeHtml(receipt.payment_terms || "Not specified")}</p>
             </div>
@@ -241,7 +241,7 @@ export default function MaterialReceiptSheet({ receipt }) {
             {/* Vendor & Receipt Metadata */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-b border-[#9aacca] px-4 py-3 text-xs leading-relaxed">
                 <div>
-                    <p><b>Vendor Name:</b> M/s. {receipt.vendor_name || "—"}</p>
+                    <p><b>Vendor Name:</b> {receipt.vendor_name || "—"}</p>
                     <p><b>Reference:</b> {receipt.reference || "—"}</p>
                     <p><b>PO Payment Terms:</b> {receipt.payment_terms || "Not specified"}</p>
                 </div>

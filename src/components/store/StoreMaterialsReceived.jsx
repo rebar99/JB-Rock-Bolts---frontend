@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Eye, FileText, FileUp, PackageCheck, Pencil, Plus, Save, Trash2, Upload, CreditCard, X, Calendar, AlertCircle, Clock, CheckCircle2, ChevronDown, ChevronUp, Search, Ruler, ShieldCheck, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -273,9 +274,26 @@ function Metric({ label, value }) {
 }
 
 function MaterialsReceivedList({ admin, isSuperAdmin, onOpenConfig, isLoading, onAdd, onBack, onDelete, onEdit, onDeleteBill, onView, onPayment, receipts }) {
+    const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
+    const urlQuery = searchParams.get("search") || searchParams.get("po") || searchParams.get("ref") || "";
+    const fromInventory = searchParams.get("from") === "inventory";
+    const fromGroup = searchParams.get("group") || "";
+    const backToInventoryUrl = fromGroup
+        ? `/store-purchase/items?group=${encodeURIComponent(fromGroup)}`
+        : "/store-purchase/items";
     const [filterStatus, setFilterStatus] = useState("All");
-    const [search, setSearch] = useState("");
+    const [search, setSearch] = useState(urlQuery);
     const [expandedItems, setExpandedItems] = useState({});
+    const [sortOrder, setSortOrder] = useState("newest"); // "newest" | "oldest"
+
+    // Sync search if URL parameter changes
+    useEffect(() => {
+        const q = searchParams.get("search") || searchParams.get("po") || searchParams.get("ref") || "";
+        if (q) {
+            setSearch(q);
+        }
+    }, [searchParams]);
 
     const counts = useMemo(() => {
         const c = { All: receipts.length, Overdue: 0, "Due Today": 0, Upcoming: 0, "Partially Paid": 0, Paid: 0 };
@@ -298,30 +316,50 @@ function MaterialsReceivedList({ admin, isSuperAdmin, onOpenConfig, isLoading, o
         }
 
         const q = search.trim().toLowerCase();
-        if (!q) return list;
+        if (q) {
+            list = list.filter(r => {
+                const vendor = (r.vendor_name || r.supplier || "").toLowerCase();
+                const po = (r.order_number || "").toLowerCase();
+                const inv = (r.invoice_number || "").toLowerCase();
+                const code = (r.vendor_code || "").toLowerCase();
+                const ref = (r.reference || "").toLowerCase();
+                const remarks = (r.remarks || "").toLowerCase();
+                const items = (r.lines || []).map(l => l.item_description || "").join(" ").toLowerCase();
+                const date = (r.invoice_date || "").toLowerCase();
+                const createdBy = (r.created_by || "").toLowerCase();
 
-        return list.filter(r => {
-            const vendor = (r.vendor_name || r.supplier || "").toLowerCase();
-            const po = (r.order_number || "").toLowerCase();
-            const inv = (r.invoice_number || "").toLowerCase();
-            const code = (r.vendor_code || "").toLowerCase();
-            const ref = (r.reference || "").toLowerCase();
-            const remarks = (r.remarks || "").toLowerCase();
-            const items = (r.lines || []).map(l => l.item_description || "").join(" ").toLowerCase();
-            const date = (r.invoice_date || "").toLowerCase();
-            const createdBy = (r.created_by || "").toLowerCase();
+                return vendor.includes(q) ||
+                    po.includes(q) ||
+                    inv.includes(q) ||
+                    code.includes(q) ||
+                    ref.includes(q) ||
+                    remarks.includes(q) ||
+                    items.includes(q) ||
+                    date.includes(q) ||
+                    createdBy.includes(q);
+            });
+        }
 
-            return vendor.includes(q) ||
-                po.includes(q) ||
-                inv.includes(q) ||
-                code.includes(q) ||
-                ref.includes(q) ||
-                remarks.includes(q) ||
-                items.includes(q) ||
-                date.includes(q) ||
-                createdBy.includes(q);
+        // Sort by invoice_date (actual received date), then id as tiebreaker
+        list = [...list].sort((a, b) => {
+            const da = new Date(a.invoice_date || a.created_at || 0).getTime();
+            const db_ = new Date(b.invoice_date || b.created_at || 0).getTime();
+            if (da !== db_) return sortOrder === "oldest" ? da - db_ : db_ - da;
+            // Same date → keep by id order
+            return sortOrder === "oldest" ? (a.id - b.id) : (b.id - a.id);
         });
-    }, [receipts, filterStatus, search]);
+
+        return list;
+    }, [receipts, filterStatus, search, sortOrder]);
+
+    // Auto-expand receipt item details when a specific receipt/PO is searched
+    useEffect(() => {
+        if (search.trim() && filteredReceipts.length > 0 && filteredReceipts.length <= 3) {
+            const exp = {};
+            filteredReceipts.forEach(r => { exp[r.id] = true; });
+            setExpandedItems(prev => ({ ...prev, ...exp }));
+        }
+    }, [search, filteredReceipts]);
 
     return (
         <main className="min-h-[calc(100vh-4rem)] w-full bg-slate-50 px-4 py-7 sm:px-6 lg:px-8">
@@ -376,10 +414,28 @@ function MaterialsReceivedList({ admin, isSuperAdmin, onOpenConfig, isLoading, o
                                 Manual Unit Conversion Configuration
                             </Button>
                         )}
-                        {onBack && <Button type="button" variant="outline" onClick={onBack}><ArrowLeft className="mr-2 h-4 w-4" />Purchase Order List</Button>}
+                        {onBack && !fromInventory && (
+                            <Button type="button" variant="outline" onClick={onBack}>
+                                <ArrowLeft className="mr-2 h-4 w-4" />Purchase Order List
+                            </Button>
+                        )}
                         {admin && <Button onClick={onAdd} className="bg-gradient-primary shadow-elegant hover:opacity-90"><Plus className="mr-2 h-4 w-4" />Add Material Received</Button>}
                     </div>
                 </div>
+
+                {/* Back to Inventory / Group button above search bar (in Red) */}
+                {fromInventory && (
+                    <div className="mt-5">
+                        <Button
+                            type="button"
+                            onClick={() => navigate(backToInventoryUrl)}
+                            className="h-9 gap-2 bg-[#8B0000] hover:bg-[#6b0000] text-white font-semibold text-xs rounded-lg shadow-sm transition-colors cursor-pointer"
+                        >
+                            <ArrowLeft className="h-4 w-4" />
+                            Back to {fromGroup ? `${fromGroup}` : "Inventory"}
+                        </Button>
+                    </div>
+                )}
 
                 {/* Search Bar */}
                 <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
@@ -389,13 +445,21 @@ function MaterialsReceivedList({ admin, isSuperAdmin, onOpenConfig, isLoading, o
                             type="text"
                             placeholder="Search vendor, invoice, PO number, item description..."
                             value={search}
-                            onChange={(e) => setSearch(e.target.value)}
+                            onChange={(e) => {
+                                setSearch(e.target.value);
+                                if (!e.target.value) {
+                                    setSearchParams({});
+                                }
+                            }}
                             className="h-10 pl-9 pr-9 text-sm bg-white border-slate-200 rounded-lg shadow-sm focus-visible:ring-cyan-500"
                         />
                         {search && (
                             <button
                                 type="button"
-                                onClick={() => setSearch("")}
+                                onClick={() => {
+                                    setSearch("");
+                                    setSearchParams({});
+                                }}
                                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
                                 title="Clear search"
                             >
@@ -403,6 +467,28 @@ function MaterialsReceivedList({ admin, isSuperAdmin, onOpenConfig, isLoading, o
                             </button>
                         )}
                     </div>
+
+                    {/* Sort By Date */}
+                    <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs text-slate-500 font-medium whitespace-nowrap">Sort by:</span>
+                        <div className="flex rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden text-xs font-semibold">
+                            <button
+                                type="button"
+                                onClick={() => setSortOrder("newest")}
+                                className={`px-3 py-2 transition ${sortOrder === "newest" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`}
+                            >
+                                ↓ Newest First
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setSortOrder("oldest")}
+                                className={`px-3 py-2 border-l border-slate-200 transition ${sortOrder === "oldest" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`}
+                            >
+                                ↑ Oldest First
+                            </button>
+                        </div>
+                    </div>
+
                     {search && (
                         <p className="text-xs text-slate-500">
                             Showing <strong className="text-slate-800">{filteredReceipts.length}</strong> of {receipts.length} receipts
@@ -416,6 +502,13 @@ function MaterialsReceivedList({ admin, isSuperAdmin, onOpenConfig, isLoading, o
                         <div className="rounded-xl border bg-white p-12 text-center text-muted-foreground">Loading records…</div>
                     ) : filteredReceipts.length ? filteredReceipts.map((receipt, index) => {
                         const totalQty = (receipt.lines || []).reduce((sum, line) => sum + Number(line.received_quantity || 0), 0);
+                        // Build qty+UOM display: if all lines same UOM → "4 Nos", else per-line "2 Nos, 3 Kg"
+                        const uoms = [...new Set((receipt.lines || []).map(l => l.uom || "").filter(Boolean))];
+                        const qtyDisplay = uoms.length === 1
+                            ? `${totalQty.toLocaleString("en-IN")} ${uoms[0]}`
+                            : uoms.length === 0
+                                ? totalQty.toLocaleString("en-IN")
+                                : (receipt.lines || []).map(l => `${Number(l.received_quantity || 0).toLocaleString("en-IN")}${l.uom ? " " + l.uom : ""}`).join(", ");
                         const totalAmount = (receipt.lines || []).reduce((sum, line) => sum + Number(line.amount || 0), 0);
                         const freightCharge = Number(receipt.freight_charge || 0);
                         const gstAmount = Number(receipt.gst_amount || 0);
@@ -433,7 +526,7 @@ function MaterialsReceivedList({ admin, isSuperAdmin, onOpenConfig, isLoading, o
                                         <span className="mt-1 grid h-5 w-5 shrink-0 place-items-center rounded-full border border-primary text-[11px] font-bold text-primary">{index + 1}</span>
                                         <div className="min-w-0">
                                             <div className="flex flex-wrap items-center gap-2">
-                                                <h2 className="font-bold text-slate-950">{receipt.order_number} — M/s. {receipt.vendor_name}</h2>
+                                                <h2 className="font-bold text-slate-950">{receipt.order_number} — {receipt.vendor_name}</h2>
                                                 <span className="rounded bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">Invoice: {receipt.invoice_number}</span>
                                                 <span className="text-xs text-muted-foreground flex items-center gap-1">
                                                     <Calendar className="h-3 w-3" /> Received: {fmtDate(receipt.invoice_date)}
@@ -528,7 +621,7 @@ function MaterialsReceivedList({ admin, isSuperAdmin, onOpenConfig, isLoading, o
                                 <div className="grid gap-5 pt-4 sm:grid-cols-2 xl:grid-cols-7">
                                     <Metric label="Vendor Code" value={receipt.vendor_code || "—"} />
                                     <Metric label="Reference" value={receipt.reference || "—"} />
-                                    <Metric label="Received Quantity" value={totalQty.toLocaleString("en-IN")} />
+                                    <Metric label="Received Quantity" value={qtyDisplay} />
                                     <Metric label="Freight Charge" value={money(freightCharge)} />
                                     <Metric label={`GST (${Number(receipt.gst_rate || 0)}%)`} value={money(gstAmount)} />
                                     <Metric label="Invoice Total" value={money(invoiceTotal)} />
@@ -640,7 +733,7 @@ function ReceiptViewDialog({ receipt, onClose }) {
                             </Button>
                         </div>
                     </DialogTitle>
-                    <DialogDescription>{receipt.order_number} · M/s. {receipt.vendor_name}</DialogDescription>
+                    <DialogDescription>{receipt.order_number} · {receipt.vendor_name}</DialogDescription>
                 </DialogHeader>
                 <div className="space-y-5 text-sm">
                     {/* Basic info */}
@@ -1082,7 +1175,7 @@ export default function StoreMaterialsReceived({ orders = [], admin = false, onB
                         <div><h2 className="font-bold">Vendor & PO Details</h2><p className="text-xs text-muted-foreground">First select vendor, then select a PO number to auto-fill the remaining details.</p></div>
                     </div>
                     <div className="mt-5 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                        <Field label="Vendor Name / M/S. *"><select required disabled={!admin} value={vendorName} onChange={e => chooseVendor(e.target.value)} className={input}><option value="">Select vendor</option>{vendors.map(v => <option key={v} value={v}>{v}</option>)}</select></Field>
+                        <Field label="Vendor Name *"><select required disabled={!admin} value={vendorName} onChange={e => chooseVendor(e.target.value)} className={input}><option value="">Select vendor</option>{vendors.map(v => <option key={v} value={v}>{v}</option>)}</select></Field>
                         <Field label="Purchase Order Number *"><select required disabled={!admin || !vendorName} value={selectedId} onChange={e => chooseOrder(e.target.value)} className={input}><option value="">{vendorName ? "Select PO number" : "First select vendor"}</option>{vendorOrders.map(o => <option key={o.id} value={o.id}>{o.order_number}</option>)}</select></Field>
                         <Field label="Reference"><input readOnly value={selected?.reference || ""} placeholder="Auto-filled from PO" className={`${input} bg-slate-50`} /></Field>
                         <Field label="Vendor Code"><input readOnly value={selected?.vendor_code || ""} placeholder="Auto-filled from PO" className={`${input} bg-slate-50`} /></Field>

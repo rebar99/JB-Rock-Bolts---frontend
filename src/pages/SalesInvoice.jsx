@@ -259,6 +259,50 @@ const SalesInvoice = () => {
     const [markDeliveredTarget, setMarkDeliveredTarget] = useState(null);
     const [deliveryChallanUrl, setDeliveryChallanUrl] = useState("");
 
+    // Dynamic E-Way Bill requirement logic (Mandatory for invoice amount >= ₹50,000)
+    const addGrandTotal = useMemo(() => {
+        const subtotal = dispatchItems.reduce((acc, i) => acc + (Number(i.subtotal) || 0), 0);
+        let gst_amount = dispatchItems.reduce((acc, i) => acc + (Number(i.gst_amount) || 0), 0);
+        if (manualTotalGstRate !== "") {
+            gst_amount = Math.round(subtotal * (Number(manualTotalGstRate) / 100));
+        }
+        const freight = Number(manualFreight) || 0;
+        let applicableFreightGstRate = 18;
+        if (manualTotalGstRate !== "") {
+            applicableFreightGstRate = Number(manualTotalGstRate) || 18;
+        } else if (dispatchItems.length > 0) {
+            const itemWithGst = dispatchItems.find(it => (Number(it.gst_rate) || 0) > 0);
+            applicableFreightGstRate = itemWithGst ? Number(itemWithGst.gst_rate) : 18;
+        }
+        const isFreightWithGst = (manualFreightGstType || "Without GST") === "With GST";
+        const freightGst = isFreightWithGst ? Math.round(freight * (applicableFreightGstRate / 100)) : 0;
+        return subtotal + gst_amount + freightGst + freight;
+    }, [dispatchItems, manualFreight, manualFreightGstType, manualTotalGstRate]);
+
+    const isAddEWayRequired = addGrandTotal >= 50000;
+
+    const dispatchGrandTotal = useMemo(() => {
+        if (dispatchTarget) {
+            const allItems = [...(dispatchTarget.items || []), ...dispatchItems];
+            const subtotal = allItems.reduce((acc, i) => acc + (Number(i.subtotal) || 0), 0);
+            let gst_amount = allItems.reduce((acc, i) => acc + (Number(i.gst_amount) || 0), 0);
+            if (manualTotalGstRate !== "") {
+                gst_amount = Math.round(subtotal * (Number(manualTotalGstRate) / 100));
+            }
+            const freight = Number(dispatchTarget.freight) || 0;
+            return subtotal + gst_amount + freight;
+        } else {
+            const subtotal = dispatchItems.reduce((acc, i) => acc + (Number(i.subtotal) || 0), 0);
+            let gst_amount = dispatchItems.reduce((acc, i) => acc + (Number(i.gst_amount) || 0), 0);
+            if (manualTotalGstRate !== "") {
+                gst_amount = Math.round(subtotal * (Number(manualTotalGstRate) / 100));
+            }
+            return subtotal + gst_amount;
+        }
+    }, [dispatchTarget, dispatchItems, manualTotalGstRate]);
+
+    const isDispatchEWayRequired = dispatchGrandTotal >= 50000;
+
     // Export / Import
     const [salesImportOpen, setSalesImportOpen] = useState(false);
     const [salesImportFile, setSalesImportFile] = useState(null);
@@ -737,6 +781,12 @@ const SalesInvoice = () => {
             return;
         }
 
+        const invNum = buildInvoiceStr(manualInvoiceNumber, invoiceSuffix, "Jbengg-");
+        if (!manualInvoiceNumber || !manualInvoiceNumber.trim() || !invNum) {
+            toast.error("Invoice Number is mandatory. Please enter Invoice Number.");
+            return;
+        }
+
         const subtotal = dispatchItems.reduce((acc, item) => acc + item.subtotal, 0);
         let gst_amount = dispatchItems.reduce((acc, item) => acc + item.gst_amount, 0);
 
@@ -757,6 +807,15 @@ const SalesInvoice = () => {
         const total_gst = gst_amount + freightGst;
         const grand_total = subtotal + total_gst + freight;
 
+        // Mandatory E-Way Bill Validation for invoice value ₹50,000 or above
+        if (grand_total >= 50000) {
+            const hasEWay = (eWayBillNo && eWayBillNo.trim()) || (eWayBillUrl && eWayBillUrl.trim());
+            if (!hasEWay) {
+                toast.error("E-Way Bill is mandatory for invoice amount ₹50,000 or above. Please enter E-Way Bill No. or upload E-Way Bill document.");
+                return;
+            }
+        }
+
         try {
             await createMutation.mutateAsync({
                 po_id: poData.id,
@@ -772,14 +831,14 @@ const SalesInvoice = () => {
                 payment_status: paymentStatus,
                 payment_note: paymentNote || null,
                 invoice_url: invoiceUrl || null,
-                e_way_bill_url: eWayBillUrl || null,
+                e_way_bill_url: grand_total >= 50000 ? (eWayBillUrl || null) : null,
                 invoice_number: buildInvoiceStr(manualInvoiceNumber, invoiceSuffix, "Jbengg-") || null,
                 invoice_date: invoiceDate || null,
                 dispatch_from: dispatchFrom || null,
                 ship_to: shipTo || null,
                 bill_to: billTo || null,
                 dispatched_through: dispatchedThrough || null,
-                e_way_bill_no: eWayBillNo || null,
+                e_way_bill_no: grand_total >= 50000 ? (eWayBillNo || null) : null,
                 buyers_order_no: buyersOrderNo || null,
                 payment_terms: paymentTerms || null,
                 hsn_code: hsnCode || null,
@@ -841,6 +900,15 @@ const SalesInvoice = () => {
 
             const freight = Number(freshSale.freight) || 0;
             const grand_total = subtotal + gst_amount + freight;
+
+            // Mandatory E-Way Bill Validation for invoice value ₹50,000 or above
+            if (grand_total >= 50000) {
+                const hasEWay = (eWayBillNo && eWayBillNo.trim()) || (combinedEWayUrl && combinedEWayUrl.trim()) || (freshSale.e_way_bill_no && freshSale.e_way_bill_no.trim());
+                if (!hasEWay) {
+                    toast.error("E-Way Bill is mandatory for invoice amount ₹50,000 or above. Please enter E-Way Bill No. or upload E-Way Bill document.");
+                    return;
+                }
+            }
 
             // Newly uploaded files from this dispatch session are appended
             // onto whatever was already on the sale — a "Dispatch More"
@@ -933,6 +1001,21 @@ const SalesInvoice = () => {
 
             const grand_total = subtotal + gst_amount;
 
+            const invNum = buildInvoiceStr(manualInvoiceNumber, invoiceSuffix, "Jbengg-");
+            if (!manualInvoiceNumber || !manualInvoiceNumber.trim() || !invNum) {
+                toast.error("Invoice Number is mandatory. Please enter Invoice Number.");
+                return;
+            }
+
+            // Mandatory E-Way Bill Validation for invoice value ₹50,000 or above
+            if (grand_total >= 50000) {
+                const hasEWay = (eWayBillNo && eWayBillNo.trim()) || (eWayBillUrl && eWayBillUrl.trim());
+                if (!hasEWay) {
+                    toast.error("E-Way Bill is mandatory for invoice amount ₹50,000 or above. Please enter E-Way Bill No. or upload E-Way Bill document.");
+                    return;
+                }
+            }
+
             try {
                 await createMutation.mutateAsync({
                     po_id: poData.id,
@@ -947,13 +1030,13 @@ const SalesInvoice = () => {
                     payment_status: "Pending",
                     payment_note: null,
                     invoice_url: invoiceUrl || null,
-                    e_way_bill_url: eWayBillUrl || null,
+                    e_way_bill_url: grand_total >= 50000 ? (eWayBillUrl || null) : null,
                     invoice_number: buildInvoiceStr(manualInvoiceNumber, invoiceSuffix, "Jbengg-") || null,
                     dispatch_from: dispatchFrom || null,
                     ship_to: poData.location || null,
                     bill_to: null,
                     dispatched_through: null,
-                    e_way_bill_no: eWayBillNo || null,
+                    e_way_bill_no: grand_total >= 50000 ? (eWayBillNo || null) : null,
                     buyers_order_no: null,
                     payment_terms: poData.payment_terms || null,
                     hsn_code: null,
@@ -999,6 +1082,7 @@ const SalesInvoice = () => {
     const [editSubtotal, setEditSubtotal] = useState(0);
     const [editGstAmount, setEditGstAmount] = useState(0);
     const [editGrandTotal, setEditGrandTotal] = useState(0);
+    const isEditEWayRequired = editGrandTotal >= 50000;
 
     const openEditSale = (sale) => {
         setEditingSale(sale);
@@ -1096,6 +1180,22 @@ const SalesInvoice = () => {
 
     const handleUpdateSale = async () => {
         if (!editingSale) return;
+
+        const invNum = buildInvoiceStr(editInvoiceNumber, editInvoiceSuffix, "Jbengg-");
+        if (!editInvoiceNumber || !editInvoiceNumber.trim() || !invNum) {
+            toast.error("Invoice Number is mandatory. Please enter Invoice Number.");
+            return;
+        }
+
+        // Mandatory E-Way Bill Validation for invoice value ₹50,000 or above
+        if (editGrandTotal >= 50000) {
+            const hasEWay = (editEWayBillNo && editEWayBillNo.trim()) || (editEWayBillUrl && editEWayBillUrl.trim());
+            if (!hasEWay) {
+                toast.error("E-Way Bill is mandatory for invoice amount ₹50,000 or above. Please enter E-Way Bill No. or upload E-Way Bill document.");
+                return;
+            }
+        }
+
         try {
             await updateMutation.mutateAsync({
                 id: Number(editingSale.id),
@@ -1138,7 +1238,7 @@ const SalesInvoice = () => {
                     invoice_number: buildInvoiceStr(editInvoiceNumber, editInvoiceSuffix, "Jbengg-") || null,
                     invoice_date: editInvoiceDate || null,
                     dispatched_through: editDispatchedThrough || null,
-                    e_way_bill_no: editEWayBillNo || null,
+                    e_way_bill_no: editGrandTotal >= 50000 ? (editEWayBillNo || null) : null,
                     buyers_order_no: editBuyersOrderNo || null,
                     dispatch_from: editDispatchFrom || null,
                     ship_to: editShipTo || null,
@@ -1146,7 +1246,7 @@ const SalesInvoice = () => {
                     payment_terms: editPaymentTerms || null,
                     payment_note: editPaymentNote || null,
                     invoice_url: editInvoiceUrl || null,
-                    e_way_bill_url: editEWayBillUrl || null,
+                    e_way_bill_url: editGrandTotal >= 50000 ? (editEWayBillUrl || null) : null,
                     payment_status: editPaymentStatus,
                     hsn_code: editHsnCode || null,
                     updated_by: getCurrentUser(),
@@ -1437,7 +1537,7 @@ const SalesInvoice = () => {
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
                                     <div className="space-y-1">
-                                        <Label>Invoice Number (Manual)</Label>
+                                        <Label>Invoice Number (Manual) <span className="text-red-600">*</span></Label>
                                         <InvoiceInput value={manualInvoiceNumber} onChange={setManualInvoiceNumber} prefix="Jbengg-" suffix={invoiceSuffix} setSuffix={setInvoiceSuffix} isAdmin={isAdmin} storageKey="salesInvoiceSuffix" />
                                     </div>
                                     <div className="space-y-1">
@@ -1459,34 +1559,46 @@ const SalesInvoice = () => {
                                     </div>
                                 </div>
 
-                                {/* 2. e-Way Bill Details */}
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border">
-                                    <div className="space-y-1">
-                                        <Label>e-Way Bill No.</Label>
-                                        <Input
-                                            placeholder="Enter e-Way bill number"
-                                            value={eWayBillNo}
-                                            onChange={(e) => setEWayBillNo(e.target.value)}
-                                        />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <Label>Upload e-Way Bill Document(s) {eWayBillUrl && <span className="ml-1 text-primary">({eWayBillUrl.split(";").filter(Boolean).length})</span>}</Label>
-                                        <div className="space-y-2">
-                                            <Input type="file" multiple className="hidden" id="eway-file-upload" onChange={handleEWayBillUpload} accept=".pdf,.jpg,.jpeg,.png" />
-                                            <Button type="button" variant="outline" className="w-full border-slate-900 text-slate-900 hover:bg-slate-50" onClick={() => document.getElementById("eway-file-upload").click()}>
-                                                <Receipt className={`h-4 w-4 mr-2 ${eWayBillUrl ? "text-green-500" : "text-red-500"}`} />
-                                                {eWayBillUrl ? `${eWayBillUrl.split(";").length} File(s) Uploaded` : "Upload e-Way Bill(s)"}
-                                            </Button>
-                                            {eWayBillUrl && (
-                                                <div className="grid grid-cols-1 gap-2 mt-2">
-                                                    {eWayBillUrl.split(";").map((url, i) => (
-                                                        <FileItem key={i} url={url} onRemove={() => handleRemoveFile("eway", url)} />
-                                                    ))}
-                                                </div>
-                                            )}
+                                {/* 2. e-Way Bill Details (Visible & Mandatory ONLY if invoice total >= ₹50,000) */}
+                                {isAddEWayRequired && (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border">
+                                        <div className="space-y-1">
+                                            <div className="flex items-center justify-between">
+                                                <Label className="text-foreground font-semibold">e-Way Bill No. <span className="text-red-600">*</span></Label>
+                                                <span className="text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">
+                                                    Mandatory (≥ ₹50,000)
+                                                </span>
+                                            </div>
+                                            <Input
+                                                placeholder="Enter e-Way bill number"
+                                                value={eWayBillNo}
+                                                onChange={(e) => setEWayBillNo(e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <div className="flex items-center justify-between">
+                                                <Label className="text-foreground font-semibold">
+                                                    Upload e-Way Bill Document(s) <span className="text-red-600">*</span>
+                                                    {eWayBillUrl && <span className="ml-1 text-primary">({eWayBillUrl.split(";").filter(Boolean).length})</span>}
+                                                </Label>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Input type="file" multiple className="hidden" id="eway-file-upload" onChange={handleEWayBillUpload} accept=".pdf,.jpg,.jpeg,.png" />
+                                                <Button type="button" variant="outline" className="w-full border-slate-900 text-slate-900 hover:bg-slate-50" onClick={() => document.getElementById("eway-file-upload").click()}>
+                                                    <Receipt className={`h-4 w-4 mr-2 ${eWayBillUrl ? "text-green-500" : "text-amber-500"}`} />
+                                                    {eWayBillUrl ? `${eWayBillUrl.split(";").length} File(s) Uploaded` : "Upload e-Way Bill(s)"}
+                                                </Button>
+                                                {eWayBillUrl && (
+                                                    <div className="grid grid-cols-1 gap-2 mt-2">
+                                                        {eWayBillUrl.split(";").map((url, i) => (
+                                                            <FileItem key={i} url={url} onRemove={() => handleRemoveFile("eway", url)} />
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
+                                )}
 
                                 {/* 4. Dispatched Through */}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border">
@@ -1866,7 +1978,7 @@ const SalesInvoice = () => {
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
                                 <div className="space-y-1">
-                                    <Label>Invoice Number</Label>
+                                    <Label>Invoice Number <span className="text-red-600">*</span></Label>
                                     <InvoiceInput value={editInvoiceNumber} onChange={setEditInvoiceNumber} prefix="Jbengg-" suffix={editInvoiceSuffix} setSuffix={setEditInvoiceSuffix} isAdmin={isAdmin} storageKey="salesInvoiceSuffix" />
                                 </div>
                                 <div className="space-y-1">
@@ -1888,30 +2000,42 @@ const SalesInvoice = () => {
                                 </div>
                             </div>
 
-                            {/* 2. e-Way Bill Details */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border">
-                                <div className="space-y-1">
-                                    <Label>e-Way Bill No.</Label>
-                                    <Input value={editEWayBillNo} onChange={(e) => setEditEWayBillNo(e.target.value)} />
-                                </div>
-                                <div className="space-y-1">
-                                    <Label>Upload Updated e-Way Bill Document(s) {editEWayBillUrl && <span className="ml-1 text-primary">({editEWayBillUrl.split(";").filter(Boolean).length})</span>}</Label>
-                                    <div className="space-y-2">
-                                        <Input type="file" multiple className="hidden" id="edit-eway-file-upload" onChange={handleEditEWayBillUpload} accept=".pdf,.jpg,.jpeg,.png" />
-                                        <Button type="button" variant="outline" className="w-full border-slate-900 text-slate-900 hover:bg-slate-50" onClick={() => document.getElementById("edit-eway-file-upload").click()}>
-                                            <Receipt className={`h-4 w-4 mr-2 ${editEWayBillUrl ? "text-green-500" : "text-red-500"}`} />
-                                            {editEWayBillUrl ? `${editEWayBillUrl.split(";").length} File(s) Uploaded` : "Upload e-Way Bill(s)"}
-                                        </Button>
-                                        {editEWayBillUrl && (
-                                            <div className="grid grid-cols-1 gap-2 mt-2">
-                                                {editEWayBillUrl.split(";").map((url, i) => (
-                                                    <FileItem key={i} url={url} onRemove={() => handleRemoveFile("edit-eway", url)} />
-                                                ))}
-                                            </div>
-                                        )}
+                            {/* 2. e-Way Bill Details (Visible & Mandatory ONLY if invoice total >= ₹50,000) */}
+                            {isEditEWayRequired && (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border">
+                                    <div className="space-y-1">
+                                        <div className="flex items-center justify-between">
+                                            <Label className="text-foreground font-semibold">e-Way Bill No. <span className="text-red-600">*</span></Label>
+                                            <span className="text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">
+                                                Mandatory (≥ ₹50,000)
+                                            </span>
+                                        </div>
+                                        <Input value={editEWayBillNo} onChange={(e) => setEditEWayBillNo(e.target.value)} />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <div className="flex items-center justify-between">
+                                            <Label className="text-foreground font-semibold">
+                                                Upload Updated e-Way Bill Document(s) <span className="text-red-600">*</span>
+                                                {editEWayBillUrl && <span className="ml-1 text-primary">({editEWayBillUrl.split(";").filter(Boolean).length})</span>}
+                                            </Label>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Input type="file" multiple className="hidden" id="edit-eway-file-upload" onChange={handleEditEWayBillUpload} accept=".pdf,.jpg,.jpeg,.png" />
+                                            <Button type="button" variant="outline" className="w-full border-slate-900 text-slate-900 hover:bg-slate-50" onClick={() => document.getElementById("edit-eway-file-upload").click()}>
+                                                <Receipt className={`h-4 w-4 mr-2 ${editEWayBillUrl ? "text-green-500" : "text-amber-500"}`} />
+                                                {editEWayBillUrl ? `${editEWayBillUrl.split(";").length} File(s) Uploaded` : "Upload e-Way Bill(s)"}
+                                            </Button>
+                                            {editEWayBillUrl && (
+                                                <div className="grid grid-cols-1 gap-2 mt-2">
+                                                    {editEWayBillUrl.split(";").map((url, i) => (
+                                                        <FileItem key={i} url={url} onRemove={() => handleRemoveFile("edit-eway", url)} />
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
-                                </div>
+                            )}
 
                             {/* 4. Dispatched Through */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border">
@@ -2027,15 +2151,22 @@ const SalesInvoice = () => {
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-1">
-                                        <Label>Invoice No.</Label>
+                                        <Label>Invoice No. <span className="text-red-600">*</span></Label>
                                         <InvoiceInput value={manualInvoiceNumber} onChange={setManualInvoiceNumber} prefix="Jbengg-" suffix={invoiceSuffix} setSuffix={setInvoiceSuffix} isAdmin={isAdmin} storageKey="salesInvoiceSuffix" />
                                     </div>
-                                    <div className="space-y-1">
-                                        <Label>e-Way Bill No.</Label>
-                                        <Input placeholder="Enter e-Way bill number" value={eWayBillNo} onChange={e => setEWayBillNo(e.target.value)} />
-                                    </div>
+                                    {isDispatchEWayRequired && (
+                                        <div className="space-y-1">
+                                            <div className="flex items-center justify-between">
+                                                <Label className="text-foreground font-semibold">e-Way Bill No. <span className="text-red-600">*</span></Label>
+                                                <span className="text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">
+                                                    Mandatory (≥ ₹50,000)
+                                                </span>
+                                            </div>
+                                            <Input placeholder="Enter e-Way bill number" value={eWayBillNo} onChange={e => setEWayBillNo(e.target.value)} />
+                                        </div>
+                                    )}
                                 </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className={`grid grid-cols-1 ${isDispatchEWayRequired ? "sm:grid-cols-2" : ""} gap-4`}>
                                     <div className="space-y-1">
                                         <Label>Upload Invoice Document(s) {invoiceUrl && <span className="ml-1 text-primary">({invoiceUrl.split(";").filter(Boolean).length})</span>}</Label>
                                         <div className="space-y-2">
@@ -2053,23 +2184,30 @@ const SalesInvoice = () => {
                                             )}
                                         </div>
                                     </div>
-                                    <div className="space-y-1">
-                                        <Label>Upload e-Way Bill Document(s) {eWayBillUrl && <span className="ml-1 text-primary">({eWayBillUrl.split(";").filter(Boolean).length})</span>}</Label>
-                                        <div className="space-y-2">
-                                            <Input type="file" multiple className="hidden" id="dispatch-eway-file-upload" onChange={handleEWayBillUpload} accept=".pdf,.jpg,.jpeg,.png" />
-                                            <Button type="button" variant="outline" className="w-full border-slate-900 text-slate-900 hover:bg-slate-50" onClick={() => document.getElementById("dispatch-eway-file-upload").click()}>
-                                                <Receipt className={`h-4 w-4 mr-2 ${eWayBillUrl ? "text-green-500" : "text-red-500"}`} />
-                                                {eWayBillUrl ? `${eWayBillUrl.split(";").length} File(s) Uploaded` : "Upload e-Way Bill(s)"}
-                                            </Button>
-                                            {eWayBillUrl && (
-                                                <div className="grid grid-cols-1 gap-2 mt-2">
-                                                    {eWayBillUrl.split(";").map((url, i) => (
-                                                        <FileItem key={i} url={url} onRemove={() => handleRemoveFile("eway", url)} />
-                                                    ))}
-                                                </div>
-                                            )}
+                                    {isDispatchEWayRequired && (
+                                        <div className="space-y-1">
+                                            <div className="flex items-center justify-between">
+                                                <Label className="text-foreground font-semibold">
+                                                    Upload e-Way Bill Document(s) <span className="text-red-600">*</span>
+                                                    {eWayBillUrl && <span className="ml-1 text-primary">({eWayBillUrl.split(";").filter(Boolean).length})</span>}
+                                                </Label>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Input type="file" multiple className="hidden" id="dispatch-eway-file-upload" onChange={handleEWayBillUpload} accept=".pdf,.jpg,.jpeg,.png" />
+                                                <Button type="button" variant="outline" className="w-full border-slate-900 text-slate-900 hover:bg-slate-50" onClick={() => document.getElementById("dispatch-eway-file-upload").click()}>
+                                                    <Receipt className={`h-4 w-4 mr-2 ${eWayBillUrl ? "text-green-500" : "text-amber-500"}`} />
+                                                    {eWayBillUrl ? `${eWayBillUrl.split(";").length} File(s) Uploaded` : "Upload e-Way Bill(s)"}
+                                                </Button>
+                                                {eWayBillUrl && (
+                                                    <div className="grid grid-cols-1 gap-2 mt-2">
+                                                        {eWayBillUrl.split(";").map((url, i) => (
+                                                            <FileItem key={i} url={url} onRemove={() => handleRemoveFile("eway", url)} />
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
-                                    </div>
+                                    )}
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                                     <div className="space-y-1">
@@ -2430,16 +2568,18 @@ const SalesInvoice = () => {
                                             }}
                                         />
 
-                                        <FilePopover
-                                            urls={sale.e_way_bill_url}
-                                            icon={Receipt}
-                                            label="e-Way Bill"
-                                            saleId={sale.id}
-                                            onUploadClick={() => {
-                                                setUploadingSaleId(sale.id);
-                                                document.getElementById("direct-eway-upload").click();
-                                            }}
-                                        />
+                                        {((Number(sale.grand_total) || 0) >= 50000 || sale.e_way_bill_url) && (
+                                            <FilePopover
+                                                urls={sale.e_way_bill_url}
+                                                icon={Receipt}
+                                                label="e-Way Bill"
+                                                saleId={sale.id}
+                                                onUploadClick={(Number(sale.grand_total) || 0) >= 50000 ? () => {
+                                                    setUploadingSaleId(sale.id);
+                                                    document.getElementById("direct-eway-upload").click();
+                                                } : undefined}
+                                            />
+                                        )}
 
                                         <FilePopover
                                             urls={sale.delivery_challan_url}
@@ -2535,22 +2675,24 @@ const SalesInvoice = () => {
                                     <Button size="xs" variant="outline" className="border-slate-900 text-slate-900 hover:bg-slate-50" onClick={() => downloadInvoiceDocument(sale.id)}>
                                         <Download className="h-3 w-3 mr-1" /> Download Invoice
                                     </Button>
-                                    <Button
-                                        size="xs"
-                                        variant="outline"
-                                        onClick={() => {
-                                            if (sale.e_way_bill_url) {
-                                                window.open(resolveFileUrl(sale.e_way_bill_url), "_blank");
-                                            } else {
-                                                setUploadingSaleId(sale.id);
-                                                document.getElementById("direct-eway-upload").click();
-                                            }
-                                        }}
-                                        className="border-slate-900 text-slate-900 hover:bg-slate-50"
-                                    >
-                                        <Receipt className="h-3 w-3 mr-1" />
-                                        {sale.e_way_bill_url ? "View e-Way Bill" : "Upload e-Way Bill"}
-                                    </Button>
+                                    {((Number(sale.grand_total) || 0) >= 50000 || sale.e_way_bill_url) && (
+                                        <Button
+                                            size="xs"
+                                            variant="outline"
+                                            onClick={() => {
+                                                if (sale.e_way_bill_url) {
+                                                    window.open(resolveFileUrl(sale.e_way_bill_url), "_blank");
+                                                } else if ((Number(sale.grand_total) || 0) >= 50000) {
+                                                    setUploadingSaleId(sale.id);
+                                                    document.getElementById("direct-eway-upload").click();
+                                                }
+                                            }}
+                                            className="border-slate-900 text-slate-900 hover:bg-slate-50"
+                                        >
+                                            <Receipt className="h-3 w-3 mr-1" />
+                                            {sale.e_way_bill_url ? "View e-Way Bill" : "Upload e-Way Bill"}
+                                        </Button>
+                                    )}
                                     {(() => {
                                         // 1. Helper to verify if a sale has a valid challan document
                                         const hasValidChallan = (url) => {
@@ -2715,6 +2857,12 @@ const SalesInvoice = () => {
                 onChange={async (e) => {
                     const file = e.target.files[0];
                     if (!file || !uploadingSaleId) return;
+                    const target = sales.find(s => s.id === uploadingSaleId);
+                    if (target && (Number(target.grand_total) || 0) < 50000) {
+                        toast.error("E-Way Bill is not applicable for invoice amount below ₹50,000.");
+                        setUploadingSaleId(null);
+                        return;
+                    }
                     const tid = toast.loading("Uploading e-way bill...");
                     try {
                         const data = await uploadInvoiceFile(file);

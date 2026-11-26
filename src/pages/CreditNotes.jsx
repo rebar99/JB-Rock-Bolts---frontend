@@ -244,6 +244,10 @@ function CreditNoteForm({ saleType, editing, suggestedCN, onClose }) {
             qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
             qc.invalidateQueries({ queryKey: ["report"] });
             qc.invalidateQueries({ queryKey: ["workOrderSalesReport"] });
+            qc.invalidateQueries({ queryKey: ["sales"] });
+            qc.invalidateQueries({ queryKey: ["work-order-sales"] });
+            qc.invalidateQueries({ queryKey: ["all-sales-for-cn"] });
+            qc.invalidateQueries({ queryKey: ["all-wo-sales-for-cn"] });
             toast.success(editing ? "Credit Note updated" : `Credit Note ${cn.cn_number} created`);
             onClose();
         },
@@ -762,8 +766,13 @@ function CNTabPanel({ saleType }) {
                             </thead>
                             <tbody>
                                 {sortedRows.map(cn => (
-                                    <tr key={cn.id} className="border-t border-border hover:bg-muted/20 transition-colors">
-                                        <td style={{ width: widths.cn_number }} className="px-4 py-3 truncate text-center font-mono text-xs font-semibold text-primary">{cn.cn_number}</td>
+                                    <tr
+                                        key={cn.id}
+                                        className="border-t border-border hover:bg-muted/30 transition-colors cursor-pointer group"
+                                        onClick={() => setViewCN(cn)}
+                                        title="Click to view Credit Note details"
+                                    >
+                                        <td style={{ width: widths.cn_number }} className="px-4 py-3 truncate text-center font-mono text-xs font-semibold text-primary group-hover:underline">{cn.cn_number}</td>
                                         <td style={{ width: widths.cn_date }} className="px-4 py-3 truncate text-center text-muted-foreground text-xs">{fmtDate(cn.cn_date)}</td>
                                         <td style={{ width: widths.invoice_number }} className="px-4 py-3 truncate text-center font-mono text-xs">{cn.invoice_number || "—"}</td>
                                         <td style={{ width: widths.client_name }} className="px-4 py-3 truncate text-center text-xs" title={cn.client_name}>{cn.client_name}</td>
@@ -773,7 +782,7 @@ function CNTabPanel({ saleType }) {
                                         <td style={{ width: widths.status }} className="px-4 py-3 truncate text-center">
                                             <span className={`text-xs border px-2 py-0.5 rounded-full font-medium ${STATUS_BADGE[cn.status] || "bg-muted"}`}>{cn.status}</span>
                                         </td>
-                                        <td style={{ width: widths.actions }} className="px-4 py-3">
+                                        <td style={{ width: widths.actions }} className="px-4 py-3 cursor-default" onClick={(e) => e.stopPropagation()}>
                                             <div className="flex items-center justify-center gap-1">
                                                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setViewCN(cn)} title="View"><Eye className="h-3.5 w-3.5" /></Button>
                                                 <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => printCreditNote(cn)} title="Print"><Printer className="h-3.5 w-3.5" /></Button>

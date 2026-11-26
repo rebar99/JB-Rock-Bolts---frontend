@@ -684,6 +684,12 @@ const WorkOrderSales = () => {
         if (!woData) { toast.error("Select a Work Order first"); return; }
         if (dispatchItems.length === 0) { toast.error("Add at least one item"); return; }
 
+        const invNum = buildInvoiceStr(manualInvoiceNumber, invoiceSuffix, "JbenggJW-");
+        if (!manualInvoiceNumber || !manualInvoiceNumber.trim() || !invNum) {
+            toast.error("Invoice Number is mandatory. Please enter Invoice Number.");
+            return;
+        }
+
         const subtotal = dispatchItems.reduce((acc, item) => acc + item.subtotal, 0);
         let gst_amount = dispatchItems.reduce((acc, item) => acc + item.gst_amount, 0);
 
@@ -845,6 +851,12 @@ const WorkOrderSales = () => {
             }
         } else {
             // CREATE NEW SALE
+            const invNum = buildInvoiceStr(manualInvoiceNumber, invoiceSuffix, "JbenggJW-");
+            if (!manualInvoiceNumber || !manualInvoiceNumber.trim() || !invNum) {
+                toast.error("Invoice Number is mandatory. Please enter Invoice Number.");
+                return;
+            }
+
             const subtotal = dispatchItems.reduce((acc, item) => acc + item.subtotal, 0);
             const calculatedGstAmt = dispatchItems.reduce((acc, item) => acc + item.gst_amount, 0);
 
@@ -1003,6 +1015,13 @@ const WorkOrderSales = () => {
 
     const handleUpdateSale = async () => {
         if (!editingSale) return;
+
+        const invNum = buildInvoiceStr(editInvoiceNumber, editInvoiceSuffix, "JbenggJW-");
+        if (!editInvoiceNumber || !editInvoiceNumber.trim() || !invNum) {
+            toast.error("Invoice Number is mandatory. Please enter Invoice Number.");
+            return;
+        }
+
         try {
             await updateMutation.mutateAsync({
                 id: Number(editingSale.id),
@@ -1322,7 +1341,7 @@ const WorkOrderSales = () => {
                                         />
                                     </div>
                                     <div className="space-y-1">
-                                        <Label>Invoice Number (Manual)</Label>
+                                        <Label>Invoice Number (Manual) <span className="text-red-600">*</span></Label>
                                         <InvoiceInput value={manualInvoiceNumber} onChange={setManualInvoiceNumber} prefix="JbenggJW-" suffix={invoiceSuffix} setSuffix={setInvoiceSuffix} isAdmin={isAdmin} storageKey="woInvoiceSuffix" />
                                     </div>
                                     <div className="space-y-1">
@@ -1708,7 +1727,7 @@ const WorkOrderSales = () => {
                                     />
                                 </div>
                                 <div className="space-y-1">
-                                    <Label>Invoice Number</Label>
+                                    <Label>Invoice Number <span className="text-red-600">*</span></Label>
                                     <InvoiceInput value={editInvoiceNumber} onChange={setEditInvoiceNumber} prefix="JbenggJW-" suffix={editInvoiceSuffix} setSuffix={setEditInvoiceSuffix} isAdmin={isAdmin} storageKey="woInvoiceSuffix" />
                                 </div>
                                 <div className="space-y-1">
@@ -1853,7 +1872,7 @@ const WorkOrderSales = () => {
                                         />
                                     </div>
                                     <div className="space-y-1">
-                                        <Label>Invoice No.</Label>
+                                        <Label>Invoice No. <span className="text-red-600">*</span></Label>
                                         <InvoiceInput value={manualInvoiceNumber} onChange={setManualInvoiceNumber} prefix="JbenggJW-" suffix={invoiceSuffix} setSuffix={setInvoiceSuffix} isAdmin={isAdmin} storageKey="woInvoiceSuffix" />
                                     </div>
                                     <div className="space-y-1">
