@@ -25,12 +25,12 @@ export default function DataVerificationSettings() {
     const qc = useQueryClient();
     const [search, setSearch] = useState("");
 
-    const { data: users = [], isLoading: loadingUsers } = useQuery({
+    const { data: users = [], isLoading: loadingUsers, error: usersError } = useQuery({
         queryKey: ["dv-eligible-users"],
         queryFn: fetchDataVerificationEligibleUsers,
     });
 
-    const { data: history = [], isLoading: loadingHistory } = useQuery({
+    const { data: history = [], isLoading: loadingHistory, error: historyError } = useQuery({
         queryKey: ["dv-history"],
         queryFn: fetchDataVerificationHistory,
     });
@@ -55,11 +55,11 @@ export default function DataVerificationSettings() {
 
     const filtered = users.filter(
         (u) =>
-            u.name.toLowerCase().includes(search.toLowerCase()) ||
-            u.email.toLowerCase().includes(search.toLowerCase())
+            (u.name || "").toLowerCase().includes(search.toLowerCase()) ||
+            (u.email || "").toLowerCase().includes(search.toLowerCase())
     );
 
-    const grantedUsers = filtered.filter((u) => u.has_permission);
+    const grantedUsers = filtered.filter((u) => u.has_permission || u.is_super_admin);
     const otherUsers = filtered.filter((u) => !u.has_permission && !u.is_super_admin);
 
     return (
@@ -96,6 +96,12 @@ export default function DataVerificationSettings() {
                 />
             </div>
 
+            {usersError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                    <b>Error loading users:</b> {usersError.message || "Failed to fetch users"}. Check if backend is running and database tables exist.
+                </div>
+            )}
+
             {/* Users with permission */}
             <Card className="p-5 shadow-sm border-border/60">
                 <h2 className="text-base font-bold mb-4 flex items-center gap-2 text-green-700">
@@ -113,22 +119,33 @@ export default function DataVerificationSettings() {
                         {grantedUsers.map((u) => (
                             <div key={u.id} className="flex items-center justify-between py-3">
                                 <div>
-                                    <p className="font-semibold text-sm">{u.name}</p>
+                                    <p className="font-semibold text-sm flex items-center gap-2">
+                                        {u.name}
+                                        {u.is_super_admin && (
+                                            <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
+                                                Super Admin
+                                            </span>
+                                        )}
+                                    </p>
                                     <p className="text-xs text-muted-foreground">{u.email}</p>
                                 </div>
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="text-destructive border-red-200 hover:bg-red-50 hover:text-red-800 gap-1.5"
-                                    disabled={revoke.isPending}
-                                    onClick={() => {
-                                        if (window.confirm(`Revoke verification access from ${u.name}?`))
-                                            revoke.mutate(u.id);
-                                    }}
-                                >
-                                    <UserX className="h-3.5 w-3.5" />
-                                    Revoke
-                                </Button>
+                                {u.is_super_admin && !u.has_permission ? (
+                                    <span className="text-xs text-muted-foreground italic">Full Access (Admin)</span>
+                                ) : (
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="text-destructive border-red-200 hover:bg-red-50 hover:text-red-800 gap-1.5"
+                                        disabled={revoke.isPending}
+                                        onClick={() => {
+                                            if (window.confirm(`Revoke verification access from ${u.name}?`))
+                                                revoke.mutate(u.id);
+                                        }}
+                                    >
+                                        <UserX className="h-3.5 w-3.5" />
+                                        Revoke
+                                    </Button>
+                                )}
                             </div>
                         ))}
                     </div>
@@ -175,6 +192,9 @@ export default function DataVerificationSettings() {
                     <Clock className="h-5 w-5" />
                     Verification History
                 </h2>
+                {historyError && (
+                    <p className="text-sm text-red-600 mb-3">Error loading history: {historyError.message}</p>
+                )}
                 {loadingHistory ? (
                     <p className="text-sm text-muted-foreground">Loading…</p>
                 ) : history.length === 0 ? (
