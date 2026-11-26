@@ -581,6 +581,7 @@ export const deleteStoreItem = (id) => del(`/api/store-purchase/inventory/${id}`
 export const issueStoreItem = (id, body) => post(`/api/store-purchase/inventory/${id}/issue`, body);
 export const transferStoreItem = (id, body) => post(`/api/store-purchase/inventory/${id}/transfer`, body);
 export const fetchStoreItemHistory = (id) => get(`/api/store-purchase/inventory/${id}/history`);
+export const fetchStoreItemPONumbers = (id) => get(`/api/store-purchase/inventory/${id}/po-numbers`);
 export const fetchAllStoreTransactions = () => get(`/api/store-purchase/inventory/all-transactions`);
 export const createStoreOrder = (body) => post("/api/store-purchase/purchase-orders", body);
 export const updateStoreOrder = (id, body) => put(`/api/store-purchase/purchase-orders/${id}`, body);

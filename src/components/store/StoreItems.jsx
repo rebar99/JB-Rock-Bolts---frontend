@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Boxes, CircleDollarSign, Eye, Filter, History, Package, Pencil, Plus, Search, Send, ShieldCheck, ShoppingCart, Trash2, Warehouse, Building2, Settings, ChevronDown, ChevronRight, ChevronUp, ExternalLink, ReceiptText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { createStoreItem, deleteStoreItem, fetchStoreItemHistory, issueStoreItem, updateStoreItem, fetchStoreVendors, fetchItemMasterList, fetchUomOptions, fetchAllStoreTransactions } from "@/lib/api";
+import { createStoreItem, deleteStoreItem, fetchStoreItemHistory, fetchStoreItemPONumbers, issueStoreItem, updateStoreItem, fetchStoreVendors, fetchItemMasterList, fetchUomOptions, fetchAllStoreTransactions } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import ItemMasterManageDialog from "@/components/ItemMasterManageDialog";
 import { UomManageDialog } from "@/components/UomManageDialog";
@@ -75,18 +75,21 @@ function StockItemsDialog({ item, onClose }) {
 function VendorPODialog({ data, onClose, onNavigate }) {
     if (!data) return null;
     const { item, groupName } = data;
-    const { data: history = [], isLoading } = useQuery({
-        queryKey: ["store-item-history", item?.id],
-        queryFn: () => fetchStoreItemHistory(item.id),
+
+    // Dedicated endpoint: fetches POs from transactions + receipt chain + direct PO line search
+    const { data: poNumbers = [], isLoading } = useQuery({
+        queryKey: ["store-item-po-numbers", item?.id],
+        queryFn: () => fetchStoreItemPONumbers(item.id),
         enabled: !!item?.id,
     });
 
+    // Also merge any po_references already on the item (from inventory response cache)
     const poList = useMemo(() => {
-        const list = [];
         const seen = new Set();
+        const list = [];
 
-        // 1. From item.po_references returned by backend
-        (item?.po_references || []).forEach(p => {
+        // 1. From dedicated po-numbers endpoint (most complete source)
+        (poNumbers || []).forEach(p => {
             const num = p.po_number || p.reference_no;
             if (num && !seen.has(num)) {
                 seen.add(num);
@@ -100,17 +103,17 @@ function VendorPODialog({ data, onClose, onNavigate }) {
             }
         });
 
-        // 2. From real-time item history transactions
-        (history || []).forEach(h => {
-            const num = h.po_number || h.reference_no;
+        // 2. From item.po_references in inventory response (cached backup)
+        (item?.po_references || []).forEach(p => {
+            const num = p.po_number || p.reference_no;
             if (num && !seen.has(num)) {
                 seen.add(num);
                 list.push({
                     po_number: num,
-                    vendor_name: h.vendor_name || h.issued_to || item?.vendor_name,
-                    date: h.date,
-                    quantity: h.quantity,
-                    rate: h.rate,
+                    vendor_name: p.vendor_name || item?.vendor_name,
+                    date: p.date,
+                    quantity: p.quantity,
+                    rate: p.rate,
                 });
             }
         });
@@ -128,7 +131,7 @@ function VendorPODialog({ data, onClose, onNavigate }) {
         }
 
         return list;
-    }, [history, item]);
+    }, [poNumbers, item]);
 
     return (
         <Dialog open={!!data} onOpenChange={open => !open && onClose()}>
