@@ -13,7 +13,7 @@ import { toast } from "sonner";
 
 const emptyItem = () => ({ name: "", stock_item: "", vendor_name: "", reference_no: "", receipt_date: new Date().toISOString().slice(0, 10), uom: "Nos", location: "", required_for: "", quantity: "", previous_quantity: "0", current_month_quantity: "0", reorder_level: "0", rate: "" });
 const money = value => `₹${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
-const qty = value => Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+const qty = value => Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 3 });
 const groupSummaryColumnWidths = {
     "S.No.": "70px",
     "Group Name": "280px",
@@ -81,6 +81,8 @@ function VendorPODialog({ data, onClose, onNavigate }) {
         queryKey: ["store-item-po-numbers", item?.id],
         queryFn: () => fetchStoreItemPONumbers(item.id),
         enabled: !!item?.id,
+        staleTime: 0,
+        refetchOnMount: "always",
     });
 
     // Also merge any po_references already on the item (from inventory response cache)
@@ -99,6 +101,7 @@ function VendorPODialog({ data, onClose, onNavigate }) {
                     date: p.date,
                     quantity: p.quantity,
                     rate: p.rate,
+                    uom: p.uom,
                 });
             }
         });
@@ -114,6 +117,7 @@ function VendorPODialog({ data, onClose, onNavigate }) {
                     date: p.date,
                     quantity: p.quantity,
                     rate: p.rate,
+                    uom: p.uom,
                 });
             }
         });
@@ -127,6 +131,7 @@ function VendorPODialog({ data, onClose, onNavigate }) {
                 date: item.receipt_date,
                 quantity: item.quantity,
                 rate: item.rate,
+                uom: item.uom,
             });
         }
 
@@ -177,7 +182,7 @@ function VendorPODialog({ data, onClose, onNavigate }) {
                                                 {po.date ? new Date(po.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
                                             </td>
                                             <td className="px-3 py-2.5 text-right font-medium text-xs">
-                                                {qty(po.quantity)} {item?.uom || ""}
+                                                {qty(po.quantity)} {po.uom || item?.uom || ""}
                                             </td>
                                             <td className="px-3 py-2.5 text-right text-xs">
                                                 {po.rate ? money(po.rate) : "—"}
@@ -555,7 +560,9 @@ export default function StoreItems({ inventory = [], admin = false, initialStock
     };
 
     const filtered = useMemo(() => (normalizedInventory || []).filter(item => {
-        const matchSearch = `${item.name || ""} ${item.stock_item || ""} ${item.vendor_name || ""} ${item.location || ""} ${item.reference_no || ""}`.toLowerCase().includes(search.toLowerCase());
+        const poRefs = (item.po_references || []).map(p => `${p.po_number || ""} ${p.reference_no || ""}`).join(" ");
+        const txRefs = (item.transactions || []).map(t => t.reference_no || "").join(" ");
+        const matchSearch = `${item.name || ""} ${item.stock_item || ""} ${item.vendor_name || ""} ${item.location || ""} ${item.reference_no || ""} ${poRefs} ${txRefs}`.toLowerCase().includes(search.toLowerCase().trim());
         const matchStatus =
             statusFilter === "all" ||
             (statusFilter === "in_stock" && item.status === "In Stock") ||

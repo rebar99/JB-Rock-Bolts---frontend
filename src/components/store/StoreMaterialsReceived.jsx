@@ -55,6 +55,63 @@ function calculateDueDate(invDate, terms) {
     return d.toISOString().slice(0, 10);
 }
 
+function formatGroupedQuantity(lines = []) {
+    if (!lines || lines.length === 0) return "0";
+
+    const totalsByUom = {};
+    const uomOrder = [];
+
+    lines.forEach(line => {
+        const qty = Number(line.received_quantity || 0);
+        if (qty <= 0) return;
+
+        let rawUom = (line.uom || "").trim();
+        let uomLower = rawUom.toLowerCase();
+
+        let normUom = rawUom;
+        if (["mt", "meter", "mtr", "meters"].includes(uomLower)) {
+            normUom = "meter";
+        } else if (["nos", "no", "no.", "pcs", "piece", "pieces"].includes(uomLower)) {
+            normUom = "Nos";
+        } else if (["kg", "kgs", "kilogram", "kilograms"].includes(uomLower)) {
+            normUom = "Kg";
+        } else if (["pair", "pairs"].includes(uomLower)) {
+            normUom = "Pair";
+        } else if (["box", "boxes"].includes(uomLower)) {
+            normUom = "Box";
+        } else if (["ton", "tons"].includes(uomLower)) {
+            normUom = "Ton";
+        } else if (["ltr", "liter", "liters", "litre", "litres"].includes(uomLower)) {
+            normUom = "Ltr";
+        } else if (["dzn", "dozen"].includes(uomLower)) {
+            normUom = "DZN";
+        } else if (rawUom) {
+            normUom = rawUom.charAt(0).toUpperCase() + rawUom.slice(1);
+        } else {
+            normUom = "";
+        }
+
+        if (!totalsByUom[normUom]) {
+            totalsByUom[normUom] = 0;
+            uomOrder.push(normUom);
+        }
+        totalsByUom[normUom] += qty;
+    });
+
+    if (uomOrder.length === 0) {
+        const total = lines.reduce((s, l) => s + Number(l.received_quantity || 0), 0);
+        return total.toLocaleString("en-IN", { maximumFractionDigits: 3 });
+    }
+
+    return uomOrder
+        .map(u => {
+            const sum = totalsByUom[u];
+            const formattedNum = Number(sum.toFixed(3)).toLocaleString("en-IN", { maximumFractionDigits: 3 });
+            return u ? `${formattedNum} ${u}` : formattedNum;
+        })
+        .join(", ");
+}
+
 /** Payment status badge colours */
 const PAYMENT_COLORS = {
     "Upcoming":       "border-sky-300 bg-sky-50 text-sky-700",
@@ -501,14 +558,7 @@ function MaterialsReceivedList({ admin, isSuperAdmin, onOpenConfig, isLoading, o
                     {isLoading ? (
                         <div className="rounded-xl border bg-white p-12 text-center text-muted-foreground">Loading records…</div>
                     ) : filteredReceipts.length ? filteredReceipts.map((receipt, index) => {
-                        const totalQty = (receipt.lines || []).reduce((sum, line) => sum + Number(line.received_quantity || 0), 0);
-                        // Build qty+UOM display: if all lines same UOM → "4 Nos", else per-line "2 Nos, 3 Kg"
-                        const uoms = [...new Set((receipt.lines || []).map(l => l.uom || "").filter(Boolean))];
-                        const qtyDisplay = uoms.length === 1
-                            ? `${totalQty.toLocaleString("en-IN")} ${uoms[0]}`
-                            : uoms.length === 0
-                                ? totalQty.toLocaleString("en-IN")
-                                : (receipt.lines || []).map(l => `${Number(l.received_quantity || 0).toLocaleString("en-IN")}${l.uom ? " " + l.uom : ""}`).join(", ");
+                        const qtyDisplay = formatGroupedQuantity(receipt.lines);
                         const totalAmount = (receipt.lines || []).reduce((sum, line) => sum + Number(line.amount || 0), 0);
                         const freightCharge = Number(receipt.freight_charge || 0);
                         const gstAmount = Number(receipt.gst_amount || 0);
