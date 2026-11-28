@@ -39,6 +39,9 @@ import {
     ArrowUpAZ,
     ArrowDownAZ,
     FilterX,
+    GripVertical,
+    Save,
+    RotateCcw,
 } from "lucide-react";
 import {
     fetchHREmployees,
@@ -47,6 +50,7 @@ import {
     updateHREmployee,
     toggleHREmployeeStatus,
     deleteHREmployee,
+    reorderHREmployees,
     uploadHREmployeeDoc,
     fetchHRDesignations,
     fetchHRLocations,
@@ -178,7 +182,8 @@ export default function HREmployees() {
 
     // Resizable columns
     const HR_EMP_COL_DEFAULTS = {
-        sno: 60,
+        drag: 42,
+        sno: 58,
         code: 110,
         name: 240,
         designation: 150,
@@ -190,7 +195,14 @@ export default function HREmployees() {
         status: 120,
         actions: 165,
     };
-    const { widths: colWidths, startResize } = useResizableColumns("colw:hr-employees-v3", HR_EMP_COL_DEFAULTS);
+    const { widths: colWidths, startResize } = useResizableColumns("colw:hr-employees-v4", HR_EMP_COL_DEFAULTS);
+
+    // Custom arrangement (Manual Drag & Drop) state
+    const [draggedEmployeeId, setDraggedEmployeeId] = useState(null);
+    const [dragOverEmployeeId, setDragOverEmployeeId] = useState(null);
+    const [orderedList, setOrderedList] = useState([]);
+    const [isOrderDirty, setIsOrderDirty] = useState(false);
+    const [savingOrder, setSavingOrder] = useState(false);
 
     // Filters and Search state
     const [searchTerm, setSearchTerm] = useState("");
@@ -355,9 +367,95 @@ export default function HREmployees() {
         return map;
     }, [employees]);
 
+    useEffect(() => {
+        if (!isOrderDirty) {
+            setOrderedList(employees);
+        }
+    }, [employees, isOrderDirty]);
+
+    const isFilterOrSortActive = useMemo(() => {
+        return Boolean(
+            (searchTerm && searchTerm.trim() !== "") ||
+            selectedDesignation !== "all" ||
+            selectedLocation !== "all" ||
+            statusFilter !== "all" ||
+            sortKey !== null ||
+            Object.values(colFilters).some(v => Array.isArray(v) && v.length > 0)
+        );
+    }, [searchTerm, selectedDesignation, selectedLocation, statusFilter, sortKey, colFilters]);
+
+    // Drag and drop handlers
+    const handleDragStart = (e, emp) => {
+        if (isFilterOrSortActive) return;
+        setDraggedEmployeeId(emp.id);
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", String(emp.id));
+    };
+
+    const handleDragOver = (e, emp) => {
+        if (isFilterOrSortActive || !draggedEmployeeId) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        if (dragOverEmployeeId !== emp.id) {
+            setDragOverEmployeeId(emp.id);
+        }
+    };
+
+    const handleDrop = (e, targetEmp) => {
+        if (isFilterOrSortActive || !draggedEmployeeId) return;
+        e.preventDefault();
+        if (draggedEmployeeId === targetEmp.id) {
+            setDraggedEmployeeId(null);
+            setDragOverEmployeeId(null);
+            return;
+        }
+
+        const current = [...(isOrderDirty ? orderedList : employees)];
+        const sourceIdx = current.findIndex(item => item.id === draggedEmployeeId);
+        const targetIdx = current.findIndex(item => item.id === targetEmp.id);
+
+        if (sourceIdx !== -1 && targetIdx !== -1) {
+            const [moved] = current.splice(sourceIdx, 1);
+            current.splice(targetIdx, 0, moved);
+            setOrderedList(current);
+            setIsOrderDirty(true);
+        }
+
+        setDraggedEmployeeId(null);
+        setDragOverEmployeeId(null);
+    };
+
+    const handleDragEnd = () => {
+        setDraggedEmployeeId(null);
+        setDragOverEmployeeId(null);
+    };
+
+    const handleSaveArrangement = async () => {
+        if (!isOrderDirty || orderedList.length === 0) return;
+        setSavingOrder(true);
+        try {
+            const ids = orderedList.map(e => e.id);
+            await reorderHREmployees(ids);
+            toast.success("Employee arrangement successfully saved!");
+            setIsOrderDirty(false);
+            queryClient.invalidateQueries({ queryKey: ["hr-employees"] });
+            queryClient.invalidateQueries({ queryKey: ["hr-attendance"] });
+        } catch (err) {
+            toast.error(err.message || "Failed to save arrangement");
+        } finally {
+            setSavingOrder(false);
+        }
+    };
+
+    const handleResetArrangement = () => {
+        setOrderedList(employees);
+        setIsOrderDirty(false);
+        toast.info("Arrangement reset to saved sequence.");
+    };
+
     // Process employees with column filters and sorting
     const processedEmployees = useMemo(() => {
-        let list = [...employees];
+        let list = isOrderDirty ? [...orderedList] : [...employees];
 
         // Apply column filters
         Object.entries(colFilters).forEach(([colKey, allowedValues]) => {
@@ -388,7 +486,7 @@ export default function HREmployees() {
         }
 
         return list;
-    }, [employees, colFilters, sortKey, sortDir]);
+    }, [employees, orderedList, isOrderDirty, colFilters, sortKey, sortDir]);
 
     // Query designations & locations for filter dropdowns - Safe Array Guards
     const { data: rawDesignations = [] } = useQuery({
@@ -649,13 +747,49 @@ export default function HREmployees() {
                         Manage registered staff profiles, personal info, qualifications, and banking documents.
                     </p>
                 </div>
-                <Button
-                    onClick={handleOpenAdd}
-                    className="bg-[#183260] hover:bg-[#122548] text-white shadow-sm font-semibold"
-                >
-                    <UserPlus className="mr-2 h-4 w-4" />
-                    Add Employee
-                </Button>
+                <div className="flex items-center gap-2">
+                    {isOrderDirty && (
+                        <Button
+                            onClick={handleResetArrangement}
+                            variant="outline"
+                            size="sm"
+                            disabled={savingOrder}
+                            className="text-xs font-semibold border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200"
+                        >
+                            <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                            Reset
+                        </Button>
+                    )}
+                    <Button
+                        onClick={handleSaveArrangement}
+                        disabled={!isOrderDirty || savingOrder}
+                        className={cn(
+                            "font-semibold text-xs shadow-sm transition",
+                            isOrderDirty
+                                ? "bg-emerald-600 hover:bg-emerald-700 text-white animate-pulse"
+                                : "bg-muted text-muted-foreground hover:bg-muted"
+                        )}
+                    >
+                        {savingOrder ? (
+                            <>
+                                <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent animate-spin rounded-full mr-1.5" />
+                                Saving...
+                            </>
+                        ) : (
+                            <>
+                                <Save className="mr-1.5 h-4 w-4" />
+                                Save Arrangement
+                            </>
+                        )}
+                    </Button>
+                    <Button
+                        onClick={handleOpenAdd}
+                        className="bg-[#183260] hover:bg-[#122548] text-white shadow-sm font-semibold"
+                    >
+                        <UserPlus className="mr-2 h-4 w-4" />
+                        Add Employee
+                    </Button>
+                </div>
             </div>
 
             {/* Filter and Search Bar */}
@@ -738,11 +872,71 @@ export default function HREmployees() {
                 </div>
             </div>
 
+            {/* Unsaved Arrangement Alert Banner */}
+            {isOrderDirty && (
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-amber-50 dark:bg-amber-950/70 border border-amber-300 dark:border-amber-700 rounded-xl p-3 px-4 shadow-xs animate-in fade-in slide-in-from-top-2">
+                    <div className="flex items-center gap-2.5">
+                        <span className="grid h-8 w-8 place-items-center rounded-lg bg-amber-500 text-white shrink-0 shadow-xs">
+                            <ArrowUpDown className="h-4 w-4" />
+                        </span>
+                        <div>
+                            <p className="text-xs font-bold text-amber-950 dark:text-amber-100">
+                                Employee arrangement change ho chuka hai (Unsaved Changes)
+                            </p>
+                            <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                                New sequence permanently database mein save karne ke liye <b>Save Arrangement</b> button par click karein.
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleResetArrangement}
+                            disabled={savingOrder}
+                            className="h-8 text-xs border-amber-300 hover:bg-amber-100 dark:border-amber-700 dark:hover:bg-amber-900/50"
+                        >
+                            <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                            Reset
+                        </Button>
+                        <Button
+                            size="sm"
+                            onClick={handleSaveArrangement}
+                            disabled={savingOrder}
+                            className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-xs"
+                        >
+                            {savingOrder ? (
+                                <>
+                                    <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent animate-spin rounded-full mr-1.5" />
+                                    Saving...
+                                </>
+                            ) : (
+                                <>
+                                    <Save className="h-3.5 w-3.5 mr-1.5" />
+                                    Save Arrangement
+                                </>
+                            )}
+                        </Button>
+                    </div>
+                </div>
+            )}
+
+            {/* Filter / Sort active notice for manual arrangement */}
+            {isFilterOrSortActive && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-lg text-[11px] text-blue-800 dark:text-blue-300">
+                    <Filter className="h-3.5 w-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
+                    <span>
+                        Filter ya sorting active hai. Employees ko drag & drop se manually reorder karne ke liye search aur filters clear karein.
+                    </span>
+                </div>
+            )}
+
             {/* Employee List Table - Full width */}
             <div className="overflow-hidden rounded-xl border border-border bg-card shadow-xs">
                 <div className="overflow-x-auto min-h-[440px]">
-                    <table className="w-full table-fixed border-collapse text-xs" style={{ minWidth: "1100px" }}>
+                    <table className="w-full table-fixed border-collapse text-xs" style={{ minWidth: "1150px" }}>
                         <colgroup>
+                            <col style={{ width: colWidths.drag }} />
                             <col style={{ width: colWidths.sno }} />
                             <col style={{ width: colWidths.code }} />
                             <col style={{ width: colWidths.name }} />
@@ -758,6 +952,7 @@ export default function HREmployees() {
                         <thead>
                             <tr className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-[11px] font-bold uppercase tracking-wider select-none border-b border-slate-300 dark:border-slate-700">
                                 {[
+                                    { key: "drag", label: "", alignClass: "text-center px-1" },
                                     { key: "sno", label: "S.No", alignClass: "text-center pl-3" },
                                     { key: "code", label: "Emp Code", alignClass: "text-left px-3" },
                                     { key: "name", label: "Employee Name", alignClass: "text-left px-3" },
@@ -775,7 +970,11 @@ export default function HREmployees() {
                                         style={{ width: colWidths[key], minWidth: colWidths[key], maxWidth: colWidths[key] }}
                                         className={cn("relative py-3 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 border-r border-slate-200 dark:border-slate-700 group/col", alignClass)}
                                     >
-                                        {["sno", "actions"].includes(key) ? (
+                                        {key === "drag" ? (
+                                            <div className="flex items-center justify-center" title="Drag & Drop Handle">
+                                                <GripVertical className="h-4 w-4 text-slate-400" />
+                                            </div>
+                                        ) : ["sno", "actions"].includes(key) ? (
                                             <span className="truncate block">{label}</span>
                                         ) : (
                                             <ColumnFilterDropdown
@@ -805,14 +1004,14 @@ export default function HREmployees() {
                         <tbody className="divide-y divide-border/60">
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan={11} className="p-8 text-center text-muted-foreground">
+                                    <td colSpan={12} className="p-8 text-center text-muted-foreground">
                                         <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                                         <p className="mt-2 text-xs">Loading employees...</p>
                                     </td>
                                 </tr>
                             ) : processedEmployees.length === 0 ? (
                                 <tr>
-                                    <td colSpan={11} className="p-8 text-center text-muted-foreground">
+                                    <td colSpan={12} className="p-8 text-center text-muted-foreground">
                                         <Users className="mx-auto h-8 w-8 text-muted-foreground/40" />
                                         <p className="mt-2 text-sm font-semibold text-foreground">No employees found</p>
                                         <p className="text-xs text-muted-foreground">
@@ -822,7 +1021,41 @@ export default function HREmployees() {
                                 </tr>
                             ) : (
                                 processedEmployees.map((emp, idx) => (
-                                    <tr key={emp.id} className="transition hover:bg-muted/30">
+                                    <tr
+                                        key={emp.id}
+                                        draggable={!isFilterOrSortActive}
+                                        onDragStart={(e) => handleDragStart(e, emp)}
+                                        onDragOver={(e) => handleDragOver(e, emp)}
+                                        onDragLeave={(e) => handleDragLeave(e, emp)}
+                                        onDrop={(e) => handleDrop(e, emp)}
+                                        onDragEnd={handleDragEnd}
+                                        className={cn(
+                                            "transition",
+                                            draggedEmployeeId === emp.id && "opacity-40 bg-muted/80 ring-2 ring-primary ring-dashed",
+                                            dragOverEmployeeId === emp.id && "border-t-2 border-t-primary bg-primary/10",
+                                            !draggedEmployeeId && "hover:bg-muted/30"
+                                        )}
+                                    >
+                                        <td
+                                            style={{ width: colWidths.drag, minWidth: colWidths.drag, maxWidth: colWidths.drag }}
+                                            className="py-3 px-1 text-center select-none"
+                                        >
+                                            <div
+                                                className={cn(
+                                                    "grid h-7 w-7 mx-auto place-items-center rounded transition",
+                                                    isFilterOrSortActive
+                                                        ? "text-muted-foreground/30 cursor-not-allowed"
+                                                        : "text-muted-foreground/70 hover:text-foreground hover:bg-muted/80 cursor-grab active:cursor-grabbing"
+                                                )}
+                                                title={
+                                                    isFilterOrSortActive
+                                                        ? "Filter/sorting active hai. Reorder karne ke liye filter clear karein."
+                                                        : "Drag & drop to reorder"
+                                                }
+                                            >
+                                                <GripVertical className="h-4 w-4" />
+                                            </div>
+                                        </td>
                                         <td
                                             style={{ width: colWidths.sno, minWidth: colWidths.sno, maxWidth: colWidths.sno }}
                                             className="py-3 pl-3 text-center text-muted-foreground font-medium truncate"

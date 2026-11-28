@@ -17,12 +17,15 @@ import {
     X,
     Filter,
     RotateCcw,
+    Clock,
 } from "lucide-react";
 import { useResizableColumns } from "@/hooks/useResizableColumns";
 import SalaryCalculationModal from "@/components/hr/SalaryCalculationModal";
 import {
     fetchHRAttendance,
     markHRAttendance,
+    markHROT,
+    clearHROT,
     bulkMarkHRAttendance,
     fetchHRAttendanceCloseStatus,
     closeHRAttendance,
@@ -49,15 +52,17 @@ const STATUS_CONFIG = {
     TR: { label: "Travel", code: "TR", bg: "bg-teal-100 text-teal-800 border-teal-300 dark:bg-teal-950 dark:text-teal-300", badgeBg: "bg-teal-600 text-white", sub: "100% Paid" },
     A: { label: "Absent", code: "A", bg: "bg-red-100 text-red-800 border-red-300 dark:bg-red-950 dark:text-red-300", badgeBg: "bg-red-600 text-white", sub: "Salary Deducted" },
     H: { label: "Half Day", code: "H", bg: "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-300", badgeBg: "bg-amber-600 text-white", sub: "0.5 Day Deducted" },
+    HD: { label: "Half Day", code: "HD", bg: "bg-lime-100 text-lime-900 border-lime-400 dark:bg-lime-950 dark:text-lime-200", badgeBg: "bg-lime-600 text-white", sub: "No Deduction" },
     PL: { label: "Paid Leave", code: "PL", bg: "bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950 dark:text-blue-300", badgeBg: "bg-blue-600 text-white", sub: "No Deduction" },
     UL: { label: "Unpaid Leave", code: "UL", bg: "bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950 dark:text-rose-300", badgeBg: "bg-rose-600 text-white", sub: "Salary Deducted (LWP)" },
     WO: { label: "Weekly Off", code: "WO", bg: "bg-slate-200 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300", badgeBg: "bg-slate-600 text-white", sub: "100% Paid" },
-    HD: { label: "Holiday", code: "HD", bg: "bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950 dark:text-purple-300", badgeBg: "bg-purple-600 text-white", sub: "100% Paid" },
+    HOL: { label: "Holiday", code: "HOL", bg: "bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950 dark:text-purple-300", badgeBg: "bg-purple-600 text-white", sub: "100% Paid" },
 };
 
 const getStatusConfig = (code) => {
     if (!code) return null;
     if (code === "L") return STATUS_CONFIG.PL;
+    if (code === "HP") return STATUS_CONFIG.HD;
     return STATUS_CONFIG[code] || null;
 };
 
@@ -84,10 +89,12 @@ const DEFAULT_ATTENDANCE_WIDTHS = {
     tr: 38,
     a: 38,
     h: 38,
+    hd: 38,
     pl: 38,
     ul: 38,
     wo: 40,
-    hd: 40,
+    hol: 40,
+    ot: 55,
     present_days: 105,
     salary_calc: 130,
 };
@@ -151,6 +158,16 @@ export default function HRAttendance() {
     const [salaryModalOpen, setSalaryModalOpen] = useState(false);
     const [selectedSalaryEmployee, setSelectedSalaryEmployee] = useState(null);
 
+    // Overtime (OT) Modal state
+    const [otModalOpen, setOtModalOpen] = useState(false);
+    const [otData, setOtData] = useState({
+        employee: null,
+        day: null,
+        hours: "",
+        remarks: "",
+    });
+    const [savingOT, setSavingOT] = useState(false);
+
     const { data: attendanceData, isLoading } = useQuery({
         queryKey: ["hr-attendance", selectedMonth, selectedYear, selectedDesignation, selectedLocation, searchTerm],
         queryFn: () =>
@@ -197,7 +214,7 @@ export default function HRAttendance() {
             case "designation": return emp.designation || "";
             case "location": return emp.location || "";
             case "present_days": {
-                const pt = (s.P || 0) + (s.TR || 0) + (s.PL || 0) + (s.L || 0) + (s.H || 0) * 0.5;
+                const pt = (s.P || 0) + (s.TR || 0) + (s.PL || 0) + (s.L || 0) + (s.HD || 0) + (s.HP || 0) + (s.H || 0) * 0.5;
                 return String(pt);
             }
             default: return "";
@@ -235,8 +252,8 @@ export default function HRAttendance() {
         if (sortKey) {
             list.sort((a, b) => {
                 if (sortKey === "present_days") {
-                    const ptA = (a.summary?.P || 0) + (a.summary?.TR || 0) + (a.summary?.PL || 0) + (a.summary?.L || 0) + (a.summary?.H || 0) * 0.5;
-                    const ptB = (b.summary?.P || 0) + (b.summary?.TR || 0) + (b.summary?.PL || 0) + (b.summary?.L || 0) + (b.summary?.H || 0) * 0.5;
+                    const ptA = (a.summary?.P || 0) + (a.summary?.TR || 0) + (a.summary?.PL || 0) + (a.summary?.L || 0) + (a.summary?.HD || 0) + (a.summary?.HP || 0) + (a.summary?.H || 0) * 0.5;
+                    const ptB = (b.summary?.P || 0) + (b.summary?.TR || 0) + (b.summary?.PL || 0) + (b.summary?.L || 0) + (b.summary?.HD || 0) + (b.summary?.HP || 0) + (b.summary?.H || 0) * 0.5;
                     return sortDir === "asc" ? ptA - ptB : ptB - ptA;
                 } else {
                     const valA = String(getAttendanceColDisplayValue(a, sortKey) || "").toLowerCase();
@@ -266,10 +283,12 @@ export default function HRAttendance() {
             (widths.tr || 38) +
             (widths.a || 38) +
             (widths.h || 38) +
+            (widths.hd || 38) +
             (widths.pl || 38) +
             (widths.ul || 38) +
             (widths.wo || 40) +
-            (widths.hd || 40) +
+            (widths.hol || 40) +
+            (widths.ot || 55) +
             (widths.present_days || 105) +
             (widths.salary_calc || 130)
         );
@@ -295,11 +314,83 @@ export default function HRAttendance() {
             return;
         }
         const current = employee.attendance?.[day] || "";
+        const currentOT = employee.ot?.[day] || null;
         setSelectedCell({
             employee,
             day,
             currentStatus: current,
+            currentOT,
         });
+    };
+
+    const handleOpenOTModal = () => {
+        if (!selectedCell) return;
+        const { employee, day, currentOT } = selectedCell;
+        setOtData({
+            employee,
+            day,
+            hours: currentOT?.ot_hours ?? "",
+            remarks: currentOT?.ot_remarks ?? "",
+        });
+        setSelectedCell(null);
+        setOtModalOpen(true);
+    };
+
+    const handleSaveOT = async () => {
+        if (!otData.employee || !otData.day) return;
+        const numHours = parseFloat(otData.hours);
+        if (isNaN(numHours) || numHours <= 0) {
+            toast.error("Please enter valid overtime hours (> 0).");
+            return;
+        }
+        const monthStr = String(selectedMonth).padStart(2, "0");
+        const dayStr = String(otData.day).padStart(2, "0");
+        const dateStr = `${selectedYear}-${monthStr}-${dayStr}`;
+
+        setSavingOT(true);
+        try {
+            await markHROT({
+                employee_id: otData.employee.employee_id,
+                attendance_date: dateStr,
+                ot_hours: numHours,
+                ot_remarks: otData.remarks || undefined,
+            });
+            toast.success(`Saved ${numHours} hrs overtime for ${otData.employee.name} on Day ${otData.day}`);
+            setOtModalOpen(false);
+            queryClient.invalidateQueries({ queryKey: ["hr-attendance"] });
+            queryClient.invalidateQueries({ queryKey: ["hr-salary-preview"] });
+            queryClient.invalidateQueries({ queryKey: ["hr-salaries"] });
+            queryClient.invalidateQueries({ queryKey: ["hr-dashboard"] });
+        } catch (err) {
+            toast.error(err.message || "Failed to save overtime");
+        } finally {
+            setSavingOT(false);
+        }
+    };
+
+    const handleClearOT = async () => {
+        if (!otData.employee || !otData.day) return;
+        const monthStr = String(selectedMonth).padStart(2, "0");
+        const dayStr = String(otData.day).padStart(2, "0");
+        const dateStr = `${selectedYear}-${monthStr}-${dayStr}`;
+
+        setSavingOT(true);
+        try {
+            await clearHROT({
+                employee_id: otData.employee.employee_id,
+                attendance_date: dateStr,
+            });
+            toast.success(`Cleared overtime for ${otData.employee.name} on Day ${otData.day}`);
+            setOtModalOpen(false);
+            queryClient.invalidateQueries({ queryKey: ["hr-attendance"] });
+            queryClient.invalidateQueries({ queryKey: ["hr-salary-preview"] });
+            queryClient.invalidateQueries({ queryKey: ["hr-salaries"] });
+            queryClient.invalidateQueries({ queryKey: ["hr-dashboard"] });
+        } catch (err) {
+            toast.error(err.message || "Failed to clear overtime");
+        } finally {
+            setSavingOT(false);
+        }
     };
 
     const handleSetStatus = async (status) => {
@@ -435,17 +526,19 @@ export default function HRAttendance() {
             "Travel (TR)",
             "Absent (A)",
             "Half Day (H)",
+            "Half Day - No Ded (HD)",
             "Paid Leave (PL)",
             "Unpaid Leave (UL)",
             "Weekly Off (WO)",
-            "Holiday (HD)",
+            "Holiday (HOL)",
+            "Approved OT (Hrs)",
             "Total Present Days",
         ];
 
         const rows = employees.map((emp, idx) => {
             const daysValues = Array.from({ length: daysInMonth }, (_, i) => emp.attendance?.[i + 1] || "-");
             const s = emp.summary || {};
-            const presentTotal = (s.P || 0) + (s.TR || 0) + (s.PL || 0) + (s.L || 0) + (s.H || 0) * 0.5;
+            const presentTotal = (s.P || 0) + (s.TR || 0) + (s.PL || 0) + (s.L || 0) + (s.HD || 0) + (s.HP || 0) + (s.H || 0) * 0.5;
             return [
                 idx + 1,
                 `"${emp.employee_code}"`,
@@ -457,10 +550,12 @@ export default function HRAttendance() {
                 s.TR || 0,
                 s.A || 0,
                 s.H || 0,
+                (s.HD || 0) + (s.HP || 0),
                 (s.PL || 0) + (s.L || 0),
                 s.UL || 0,
                 s.WO || 0,
-                s.HD || 0,
+                s.HOL || 0,
+                emp.total_ot_hours || 0,
                 presentTotal,
             ];
         });
@@ -491,6 +586,10 @@ export default function HRAttendance() {
         return { missingCount: missing, totalSlots: total };
     }, [employees, daysInMonth]);
 
+    const monthTotalOTHours = useMemo(() => {
+        return employees.reduce((acc, emp) => acc + (Number(emp.total_ot_hours) || 0), 0);
+    }, [employees]);
+
     return (
         <div className="space-y-4">
             {/* Header: Title, Month/Year Picker, Close Attendance Button */}
@@ -505,6 +604,11 @@ export default function HRAttendance() {
                         ) : (
                             <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 px-2.5 py-0.5 text-xs font-bold">
                                 <AlertCircle className="h-3 w-3" /> Open for Marking
+                            </span>
+                        )}
+                        {monthTotalOTHours > 0 && (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 dark:bg-amber-950 dark:text-amber-200 px-2.5 py-0.5 text-xs font-bold" title="Month-wise Total Approved Overtime Hours across employees">
+                                <Clock className="h-3 w-3 text-amber-600" /> Total OT: {monthTotalOTHours} hrs
                             </span>
                         )}
                     </div>
@@ -660,6 +764,12 @@ export default function HRAttendance() {
                         <span className="text-muted-foreground text-[11px]">{config.label}</span>
                     </div>
                 ))}
+                <div className="flex items-center gap-1.5">
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold border bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950 dark:text-amber-200">
+                        OT
+                    </span>
+                    <span className="text-muted-foreground text-[11px]">Overtime</span>
+                </div>
                 <span className="ml-auto text-[11px] text-muted-foreground">
                     💡 Click any date box to mark / update status
                 </span>
@@ -810,7 +920,16 @@ export default function HRAttendance() {
                                     width={widths.h}
                                     onResizeStart={startResize("h", 28, 70)}
                                     align="center"
+                                    title="Half Day (H) — 0.5 Day Deducted"
                                     className="bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 border-r border-slate-200 dark:border-slate-700 font-black"
+                                />
+                                <ResizableHeader
+                                    label="HD"
+                                    width={widths.hd}
+                                    onResizeStart={startResize("hd", 28, 70)}
+                                    align="center"
+                                    title="Half Day (HD) — No Deduction (100% Paid)"
+                                    className="bg-lime-50 text-lime-900 dark:bg-lime-950/50 dark:text-lime-200 border-r border-slate-200 dark:border-slate-700 font-black"
                                 />
                                 <ResizableHeader
                                     label="PL"
@@ -833,14 +952,23 @@ export default function HRAttendance() {
                                     width={widths.wo}
                                     onResizeStart={startResize("wo", 28, 80)}
                                     align="center"
+                                    title="Weekly Off (WO) — 100% Paid"
                                     className="bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-r border-slate-200 dark:border-slate-700 font-black"
                                 />
                                 <ResizableHeader
-                                    label="HD"
-                                    width={widths.hd}
-                                    onResizeStart={startResize("hd", 28, 80)}
+                                    label="HOL"
+                                    width={widths.hol}
+                                    onResizeStart={startResize("hol", 28, 80)}
                                     align="center"
+                                    title="Holiday (HOL) — 100% Paid"
                                     className="bg-purple-50 text-purple-800 dark:bg-purple-950/50 dark:text-purple-300 border-r border-slate-200 dark:border-slate-700 font-black"
+                                />
+                                <ResizableHeader
+                                    label="OT (Hrs)"
+                                    width={widths.ot}
+                                    onResizeStart={startResize("ot", 35, 90)}
+                                    align="center"
+                                    className="bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-300 border-r border-slate-200 dark:border-slate-700 font-black"
                                 />
                                 <ResizableHeader
                                     label="Present Days"
@@ -881,7 +1009,7 @@ export default function HRAttendance() {
                                 </tr>
                             ) : processedEmployees.length === 0 ? (
                                 <tr>
-                                    <td colSpan={daysInMonth + 13} className="p-8 text-center text-muted-foreground">
+                                    <td colSpan={daysInMonth + 14} className="p-8 text-center text-muted-foreground">
                                         <CalendarCheck className="mx-auto h-8 w-8 text-muted-foreground/40" />
                                         <p className="mt-2 text-sm font-semibold text-foreground">No active employees found</p>
                                         <p className="text-xs text-muted-foreground">
@@ -892,7 +1020,7 @@ export default function HRAttendance() {
                             ) : (
                                 processedEmployees.map((emp) => {
                                     const s = emp.summary || {};
-                                    const presentTotal = (s.P || 0) + (s.TR || 0) + (s.PL || 0) + (s.L || 0) + (s.H || 0) * 0.5;
+                                    const presentTotal = (s.P || 0) + (s.TR || 0) + (s.PL || 0) + (s.L || 0) + (s.HD || 0) + (s.HP || 0) + (s.H || 0) * 0.5;
                                     const isInactive = !emp.is_active;
 
                                     return (
@@ -1023,34 +1151,44 @@ export default function HRAttendance() {
                                                                 ? `${emp.name} is Inactive${emp.inactive_date ? ` since ${new Date(emp.inactive_date).toLocaleDateString("en-IN")}` : ""} — Attendance Blocked`
                                                                 : isFuture
                                                                 ? `Day ${dayNum} (Future Date) - Blocked`
-                                                                : `Click to mark Day ${dayNum} for ${emp.name}`
+                                                                : `${emp.name} - Day ${dayNum}: ${status ? (STATUS_CONFIG[status]?.label || status) : "Unmarked"}${emp.ot?.[dayNum] ? ` | OT: ${emp.ot[dayNum].ot_hours} Hours${emp.ot[dayNum].ot_remarks ? ` (${emp.ot[dayNum].ot_remarks})` : ""}` : ""}`
                                                         }
                                                     >
-                                                        {config ? (
-                                                            <div
-                                                                className={cn(
-                                                                    "h-6 w-6 mx-auto rounded flex items-center justify-center text-[10px] font-bold border",
-                                                                    config.bg,
-                                                                    isInactive && "opacity-40 grayscale contrast-125",
-                                                                    isFuture && "opacity-75"
-                                                                )}
-                                                            >
-                                                                {status === "L" ? "PL" : status}
-                                                            </div>
-                                                        ) : (
-                                                            <div
-                                                                className={cn(
-                                                                    "h-6 w-6 mx-auto rounded border",
-                                                                    isInactive
-                                                                        ? "border-red-300/60 bg-red-100/60 dark:bg-red-900/40 cursor-not-allowed"
-                                                                        : isFuture
-                                                                        ? "border-slate-300 dark:border-slate-700 bg-slate-100/90 dark:bg-slate-800/70"
-                                                                        : isToday
-                                                                        ? "border-dashed border-blue-400 bg-blue-50/30"
-                                                                        : "border-dashed border-border hover:border-foreground/50"
-                                                                )}
-                                                            />
-                                                        )}
+                                                        <div className="relative inline-flex items-center justify-center">
+                                                            {config ? (
+                                                                <div
+                                                                    className={cn(
+                                                                        "h-6 w-6 mx-auto rounded flex items-center justify-center text-[10px] font-bold border",
+                                                                        config.bg,
+                                                                        isInactive && "opacity-40 grayscale contrast-125",
+                                                                        isFuture && "opacity-75"
+                                                                    )}
+                                                                >
+                                                                    {config?.code || (status === "L" ? "PL" : status)}
+                                                                </div>
+                                                            ) : (
+                                                                <div
+                                                                    className={cn(
+                                                                        "h-6 w-6 mx-auto rounded border",
+                                                                        isInactive
+                                                                            ? "border-red-300/60 bg-red-100/60 dark:bg-red-900/40 cursor-not-allowed"
+                                                                            : isFuture
+                                                                            ? "border-slate-300 dark:border-slate-700 bg-slate-100/90 dark:bg-slate-800/70"
+                                                                            : isToday
+                                                                            ? "border-dashed border-blue-400 bg-blue-50/30"
+                                                                            : "border-dashed border-border hover:border-foreground/50"
+                                                                    )}
+                                                                />
+                                                            )}
+                                                            {emp.ot?.[dayNum]?.ot_hours > 0 && (
+                                                                <span
+                                                                    className="absolute -top-1.5 -right-2 bg-amber-600 text-white text-[8px] font-black rounded-xs px-0.5 leading-tight shadow-xs pointer-events-none"
+                                                                    title={`OT: ${emp.ot[dayNum].ot_hours} Hours${emp.ot[dayNum].ot_remarks ? ` (${emp.ot[dayNum].ot_remarks})` : ""}`}
+                                                                >
+                                                                    {emp.ot[dayNum].ot_hours}h
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                 );
                                             })}
@@ -1105,8 +1243,23 @@ export default function HRAttendance() {
                                                     "p-2 text-center font-bold truncate",
                                                     isInactive ? "bg-red-100/70 text-red-950" : "text-amber-700 bg-amber-50/40"
                                                 )}
+                                                title={`${emp.name}: ${s.H || 0} Half Days (0.5 Cut)`}
                                             >
                                                 {s.H || 0}
+                                            </td>
+                                            <td
+                                                style={{
+                                                    width: widths.hd,
+                                                    minWidth: widths.hd,
+                                                    maxWidth: widths.hd,
+                                                }}
+                                                className={cn(
+                                                    "p-2 text-center font-bold truncate",
+                                                    isInactive ? "bg-red-100/70 text-red-950" : "text-lime-800 bg-lime-50/40"
+                                                )}
+                                                title={`${emp.name}: ${(s.HD || 0) + (s.HP || 0)} Half Days (No Deduction)`}
+                                            >
+                                                {(s.HD || 0) + (s.HP || 0)}
                                             </td>
                                             <td
                                                 style={{
@@ -1149,16 +1302,35 @@ export default function HRAttendance() {
                                             </td>
                                             <td
                                                 style={{
-                                                    width: widths.hd,
-                                                    minWidth: widths.hd,
-                                                    maxWidth: widths.hd,
+                                                    width: widths.hol,
+                                                    minWidth: widths.hol,
+                                                    maxWidth: widths.hol,
                                                 }}
                                                 className={cn(
                                                     "p-2 text-center font-medium truncate",
                                                     isInactive ? "bg-red-100/70 text-red-950" : "text-purple-700 bg-purple-50/40"
                                                 )}
+                                                title={`${emp.name}: ${s.HOL || 0} Holidays (100% Paid)`}
                                             >
-                                                {s.HD || 0}
+                                                {s.HOL || 0}
+                                            </td>
+                                            <td
+                                                style={{
+                                                    width: widths.ot,
+                                                    minWidth: widths.ot,
+                                                    maxWidth: widths.ot,
+                                                }}
+                                                className={cn(
+                                                    "p-2 text-center font-bold truncate",
+                                                    isInactive
+                                                        ? "bg-red-100/70 text-red-950"
+                                                        : (emp.total_ot_hours || 0) > 0
+                                                        ? "text-amber-800 bg-amber-50/60 font-black"
+                                                        : "text-muted-foreground bg-muted/20"
+                                                )}
+                                                title={`${emp.name}: ${emp.total_ot_hours || 0} Total Approved OT Hours`}
+                                            >
+                                                {(emp.total_ot_hours || 0) > 0 ? `${emp.total_ot_hours}h` : "—"}
                                             </td>
                                             <td
                                                 style={{
@@ -1220,7 +1392,7 @@ export default function HRAttendance() {
                         )}
                     </div>
                     <div className="text-[11px] text-muted-foreground/70">
-                        Formula: Present Days = Present + Travel (TR) + Paid Leave (PL) + (Half Day × 0.5)  |  Unpaid Leave (UL) is deducted from salary
+                        Formula: Present Days = Present + Travel (TR) + Paid Leave (PL) + Half Day (HD) + (Half Day (H) × 0.5)  |  Unpaid Leave (UL) is deducted from salary
                     </div>
                 </div>
             </div>
@@ -1246,8 +1418,9 @@ export default function HRAttendance() {
                                     onClick={() => handleSetStatus(code)}
                                     className={cn(
                                         "flex items-center gap-3 p-3 rounded-xl border text-left transition hover:scale-[1.02] shadow-xs",
-                                        (selectedCell.currentStatus === code || (code === "PL" && selectedCell.currentStatus === "L")) ? "ring-2 ring-primary font-bold" : "",
-                                        config.bg
+                                        (selectedCell.currentStatus === code || (code === "PL" && selectedCell.currentStatus === "L") || (code === "HD" && selectedCell.currentStatus === "HP")) ? "ring-2 ring-primary font-bold" : "",
+                                        config.bg,
+                                        code === "HOL" && "col-span-2"
                                     )}
                                 >
                                     <span className={cn("grid h-7 w-7 place-items-center rounded-lg font-black text-xs shrink-0", config.badgeBg)}>
@@ -1259,6 +1432,32 @@ export default function HRAttendance() {
                                     </div>
                                 </button>
                             ))}
+
+                            {/* 9th Option: OT - Overtime */}
+                            <button
+                                type="button"
+                                onClick={handleOpenOTModal}
+                                className={cn(
+                                    "col-span-2 flex items-center justify-between p-3 rounded-xl border text-left transition hover:scale-[1.01] shadow-xs bg-amber-50 text-amber-950 border-amber-300 dark:bg-amber-950/50 dark:text-amber-200 dark:border-amber-800",
+                                    selectedCell.currentOT ? "ring-2 ring-amber-500 font-bold" : ""
+                                )}
+                            >
+                                <div className="flex items-center gap-3">
+                                    <span className="grid h-7 w-7 place-items-center rounded-lg font-black text-xs shrink-0 bg-amber-600 text-white">
+                                        OT
+                                    </span>
+                                    <div className="min-w-0">
+                                        <p className="text-xs font-bold truncate">OT – Overtime</p>
+                                        <p className="text-[10px] opacity-80 leading-tight">
+                                            {selectedCell.currentOT ? `${selectedCell.currentOT.ot_hours} Hours Logged (Click to Edit)` : "Record extra working hours"}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-300">
+                                    <Clock className="h-4 w-4" />
+                                    {selectedCell.currentOT ? `${selectedCell.currentOT.ot_hours} hrs` : "Add OT"}
+                                </div>
+                            </button>
                         </div>
 
                         {selectedCell.currentStatus && (
@@ -1277,6 +1476,120 @@ export default function HRAttendance() {
                         <DialogFooter>
                             <Button variant="outline" onClick={() => setSelectedCell(null)}>
                                 Cancel
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            )}
+
+            {/* POPUP: OVERTIME (OT) ENTRY MODAL */}
+            {otModalOpen && (
+                <Dialog open={otModalOpen} onOpenChange={setOtModalOpen}>
+                    <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                            <DialogTitle className="text-base font-bold text-amber-900 dark:text-amber-200 flex items-center gap-2">
+                                <Clock className="h-5 w-5 text-amber-600" />
+                                Record Overtime (OT)
+                            </DialogTitle>
+                            <DialogDescription className="text-xs">
+                                Enter extra working hours for this date. Existing attendance status remains unchanged.
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="space-y-3 py-2 text-xs">
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-[10px] uppercase font-bold text-muted-foreground block mb-1">
+                                        Employee Name
+                                    </label>
+                                    <Input
+                                        value={otData.employee?.name || ""}
+                                        disabled
+                                        className="h-8 text-xs bg-muted font-semibold text-foreground cursor-not-allowed"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] uppercase font-bold text-muted-foreground block mb-1">
+                                        Employee Code
+                                    </label>
+                                    <Input
+                                        value={otData.employee?.employee_code || ""}
+                                        disabled
+                                        className="h-8 text-xs bg-muted font-mono font-semibold text-foreground cursor-not-allowed"
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] uppercase font-bold text-muted-foreground block mb-1">
+                                    Attendance Date
+                                </label>
+                                <Input
+                                    value={
+                                        otData.day
+                                            ? `${String(otData.day).padStart(2, "0")} ${MONTH_NAMES[selectedMonth - 1]} ${selectedYear}`
+                                            : ""
+                                    }
+                                    disabled
+                                    className="h-8 text-xs bg-muted font-semibold text-foreground cursor-not-allowed"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] uppercase font-bold text-foreground block mb-1">
+                                    Overtime Hours (Manual Entry) <span className="text-red-500">*</span>
+                                </label>
+                                <Input
+                                    type="number"
+                                    step="0.5"
+                                    min="0.5"
+                                    max="24"
+                                    placeholder="e.g. 2, 3.5, 4"
+                                    value={otData.hours}
+                                    onChange={(e) => setOtData({ ...otData, hours: e.target.value })}
+                                    className="h-8 text-xs bg-background font-bold text-amber-900 dark:text-amber-200"
+                                    autoFocus
+                                />
+                                <p className="text-[10px] text-muted-foreground mt-1">
+                                    Salary Formula: (Salary / {daysInMonth} / 12) × OT Hours
+                                </p>
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] uppercase font-bold text-muted-foreground block mb-1">
+                                    Remarks (Optional)
+                                </label>
+                                <Input
+                                    placeholder="e.g. Night shift emergency production"
+                                    value={otData.remarks}
+                                    onChange={(e) => setOtData({ ...otData, remarks: e.target.value })}
+                                    className="h-8 text-xs bg-background"
+                                />
+                            </div>
+                        </div>
+
+                        <DialogFooter className="gap-2 sm:gap-0">
+                            {Boolean(otData.employee?.ot?.[otData.day]) && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={handleClearOT}
+                                    disabled={savingOT}
+                                    className="text-xs text-red-600 hover:bg-red-50 hover:text-red-700 mr-auto"
+                                >
+                                    Clear OT
+                                </Button>
+                            )}
+                            <Button variant="outline" size="sm" onClick={() => setOtModalOpen(false)} disabled={savingOT}>
+                                Cancel
+                            </Button>
+                            <Button
+                                size="sm"
+                                onClick={handleSaveOT}
+                                disabled={savingOT}
+                                className="bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs"
+                            >
+                                {savingOT ? "Saving..." : "Save Overtime"}
                             </Button>
                         </DialogFooter>
                     </DialogContent>

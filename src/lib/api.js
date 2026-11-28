@@ -790,6 +790,7 @@ export const toggleHREmployeeStatus = (id, body = null) =>
         body: body ? JSON.stringify(body) : undefined,
     });
 export const deleteHREmployee = (id) => del(`/api/hr/employees/${id}`);
+export const reorderHREmployees = (employee_ids) => put("/api/hr/employees/reorder", { employee_ids });
 export const fetchHRDesignations = () => get("/api/hr/employees/meta/designations");
 export const fetchHRLocations = () => get("/api/hr/employees/meta/locations");
 export const fetchNextHREmployeeCode = () => get("/api/hr/employees/meta/next-code");
@@ -812,6 +813,8 @@ export const uploadHREmployeeDoc = async (empId, docType, file) => {
 
 export const fetchHRAttendance = (params = {}) => get("/api/hr/attendance", params);
 export const markHRAttendance = (body) => post("/api/hr/attendance/mark", body);
+export const markHROT = (body) => post("/api/hr/attendance/ot", body);
+export const clearHROT = (params) => del("/api/hr/attendance/ot", params);
 export const bulkMarkHRAttendance = (body) => post("/api/hr/attendance/bulk-mark", body);
 export const fetchHRAttendanceCloseStatus = (month, year) => get("/api/hr/attendance/close-status", { month, year });
 export const closeHRAttendance = (body) => post("/api/hr/attendance/close", body);

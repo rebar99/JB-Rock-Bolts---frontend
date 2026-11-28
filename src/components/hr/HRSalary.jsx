@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback } from "react";
+﻿import { useState, useMemo, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import ColumnFilterDropdown from "@/components/ui/ColumnFilterDropdown";
 import {
@@ -61,9 +61,47 @@ const MONTH_NAMES = [
     "July", "August", "September", "October", "November", "December"
 ];
 
+const fmt = (v) => Number(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+
 export default function HRSalary() {
     const queryClient = useQueryClient();
     const printRef = useRef(null);
+    const resizingRef = useRef(null);
+
+    // Column widths for resizing (px)
+    const [colWidths, setColWidths] = useState({
+        sno: 52, code: 110, acc_no: 130, ifsc: 120, name: 130,
+        salary: 90, total_days: 85, basic: 90, hra: 75, conv: 75,
+        med: 90, gross: 100, ot_ta: 80, pf: 70, esi: 70,
+        adv: 70, tds: 70, total_ded: 90, net: 105, status: 85, actions: 100,
+    });
+
+        const totalTableWidth = useMemo(() => Object.values(colWidths).reduce((a, b) => a + Number(b || 0), 0), [colWidths]);
+
+const handleResizeStart = useCallback((colKey, e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const startWidth = colWidths[colKey] || 80;
+        resizingRef.current = { colKey, startX: e.clientX, startWidth };
+
+        const onMouseMove = (ev) => {
+            if (!resizingRef.current) return;
+            const diff = ev.clientX - resizingRef.current.startX;
+            const newWidth = Math.max(40, resizingRef.current.startWidth + diff);
+            setColWidths((prev) => ({ ...prev, [resizingRef.current.colKey]: newWidth }));
+        };
+        const onMouseUp = () => {
+            resizingRef.current = null;
+            document.removeEventListener("mousemove", onMouseMove);
+            document.removeEventListener("mouseup", onMouseUp);
+            document.body.style.cursor = "";
+            document.body.style.userSelect = "";
+        };
+        document.addEventListener("mousemove", onMouseMove);
+        document.addEventListener("mouseup", onMouseUp);
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
+    }, [colWidths]);
 
     // Active sub-tab
     const [activeTab, setActiveTab] = useState("generate"); // "generate", "history", "config"
@@ -164,12 +202,24 @@ export default function HRSalary() {
     const getSalaryColDisplayValue = useCallback((sal, key) => {
         switch (key) {
             case "code": return sal.employee_code || "";
+            case "acc_no": return sal.bank_account_number || "";
+            case "ifsc": return sal.bank_ifsc || "";
             case "name": return sal.employee_name || "";
             case "designation": return sal.designation || "";
-            case "present_salary": return `₹${Number(sal.present_salary || 0).toLocaleString("en-IN")}`;
-            case "basic_salary": return `₹${Number(sal.basic_salary || 0).toLocaleString("en-IN")}`;
-            case "total_deductions": return `₹${Number(sal.total_deductions || 0).toLocaleString("en-IN")}`;
-            case "net_salary": return `₹${Number(sal.net_salary || 0).toLocaleString("en-IN")}`;
+            case "present_salary": return `₹${fmt(sal.present_salary)}`;
+            case "total_days": return String(sal.present_days ?? sal.total_working_days ?? 0);
+            case "basic_salary": return `₹${fmt(sal.basic_salary)}`;
+            case "hra": return `₹${fmt(sal.hra)}`;
+            case "conveyance": return `₹${fmt(sal.conveyance)}`;
+            case "medical_allowance": return `₹${fmt(sal.medical_allowance)}`;
+            case "gross_salary": return `₹${fmt(sal.gross_salary)}`;
+            case "ot_ta": return `₹${fmt((Number(sal.overtime_amount) || 0) + (Number(sal.travel_allowance) || 0))}`;
+            case "pf_deduction": return `₹${fmt(sal.pf_deduction)}`;
+            case "esi_deduction": return `₹${fmt(sal.esi_deduction)}`;
+            case "advance_deduction": return `₹${fmt(sal.advance_deduction)}`;
+            case "tds_deduction": return `₹${fmt(sal.tds_deduction)}`;
+            case "total_deductions": return `₹${fmt(sal.total_deductions)}`;
+            case "net_salary": return `₹${fmt(sal.net_salary)}`;
             case "status": return sal.payment_status || "";
             case "payment_mode": return sal.payment_mode || "";
             case "payment_date": return sal.payment_date ? new Date(sal.payment_date).toLocaleDateString("en-IN") : "";
@@ -181,10 +231,22 @@ export default function HRSalary() {
     const columnUniqueValues = useMemo(() => {
         const keys = [
             "code",
+            "acc_no",
+            "ifsc",
             "name",
             "designation",
             "present_salary",
+            "total_days",
             "basic_salary",
+            "hra",
+            "conveyance",
+            "medical_allowance",
+            "gross_salary",
+            "ot_ta",
+            "pf_deduction",
+            "esi_deduction",
+            "advance_deduction",
+            "tds_deduction",
             "total_deductions",
             "net_salary",
             "status",
@@ -220,9 +282,22 @@ export default function HRSalary() {
         // Apply column sorting
         if (sortKey) {
             list.sort((a, b) => {
-                if (["present_salary", "basic_salary", "total_deductions", "net_salary"].includes(sortKey)) {
+                const numericKeys = [
+                    "present_salary", "basic_salary", "hra", "conveyance", "medical_allowance",
+                    "gross_salary", "pf_deduction", "esi_deduction", "advance_deduction",
+                    "tds_deduction", "total_deductions", "net_salary"
+                ];
+                if (numericKeys.includes(sortKey)) {
                     const valA = Number(a[sortKey] || 0);
                     const valB = Number(b[sortKey] || 0);
+                    return sortDir === "asc" ? valA - valB : valB - valA;
+                } else if (sortKey === "ot_ta") {
+                    const valA = (Number(a.overtime_amount) || 0) + (Number(a.travel_allowance) || 0);
+                    const valB = (Number(b.overtime_amount) || 0) + (Number(b.travel_allowance) || 0);
+                    return sortDir === "asc" ? valA - valB : valB - valA;
+                } else if (sortKey === "total_days") {
+                    const valA = Number(a.present_days ?? a.total_working_days ?? 0);
+                    const valB = Number(b.present_days ?? b.total_working_days ?? 0);
                     return sortDir === "asc" ? valA - valB : valB - valA;
                 } else if (sortKey === "payment_date") {
                     const valA = a.payment_date ? new Date(a.payment_date).getTime() : 0;
@@ -240,13 +315,119 @@ export default function HRSalary() {
         return list;
     }, [filteredSalaries, colFilters, sortKey, sortDir, getSalaryColDisplayValue]);
 
-    const handleOpenGenerate = () => {
-        if (!isAttendanceClosed) {
-            toast.error(
-                `Attendance for ${MONTH_NAMES[selectedMonth - 1]} ${selectedYear} is NOT closed yet! Please verify & close attendance first in the Attendance module.`
-            );
+    const salaryTotals = useMemo(() => {
+        return {
+            present_salary: processedSalaries.reduce((a, s) => a + Number(s.present_salary || 0), 0),
+            basic_salary: processedSalaries.reduce((a, s) => a + Number(s.basic_salary || 0), 0),
+            hra: processedSalaries.reduce((a, s) => a + Number(s.hra || 0), 0),
+            conveyance: processedSalaries.reduce((a, s) => a + Number(s.conveyance || 0), 0),
+            medical_allowance: processedSalaries.reduce((a, s) => a + Number(s.medical_allowance || 0), 0),
+            gross_salary: processedSalaries.reduce((a, s) => a + Number(s.gross_salary || 0), 0),
+            ot_ta: processedSalaries.reduce((a, s) => a + ((Number(s.overtime_amount) || 0) + (Number(s.travel_allowance) || 0)), 0),
+            pf_deduction: processedSalaries.reduce((a, s) => a + Number(s.pf_deduction || 0), 0),
+            esi_deduction: processedSalaries.reduce((a, s) => a + Number(s.esi_deduction || 0), 0),
+            advance_deduction: processedSalaries.reduce((a, s) => a + Number(s.advance_deduction || 0), 0),
+            tds_deduction: processedSalaries.reduce((a, s) => a + Number(s.tds_deduction || 0), 0),
+            total_deductions: processedSalaries.reduce((a, s) => a + Number(s.total_deductions || 0), 0),
+            net_salary: processedSalaries.reduce((a, s) => a + Number(s.net_salary || 0), 0),
+        };
+    }, [processedSalaries]);
+
+    const handleExportExcel = () => {
+        if (!processedSalaries.length) {
+            toast.error("Export karne ke liye koi salary record nahi hai.");
             return;
         }
+
+        const headers = [
+            "SR No",
+            "Employee Code",
+            "Account No.",
+            "IFSC Code",
+            "Name",
+            "Designation",
+            "Salary",
+            "Total Days",
+            "Basic salary",
+            "HRA",
+            "CONV",
+            "Med. Allow.",
+            "Gross Earned",
+            "OT / TA",
+            "PF",
+            "ESI",
+            "Adv.",
+            "TDS",
+            "Total Deductions",
+            "Net Payable",
+            "Status",
+        ];
+
+        const rows = processedSalaries.map((sal, idx) => {
+            const ot_ta = (Number(sal.overtime_amount) || 0) + (Number(sal.travel_allowance) || 0);
+            return [
+                idx + 1,
+                `"${sal.employee_code || ""}"`,
+                `"${sal.bank_account_number || ""}"\t`,
+                `"${sal.bank_ifsc || ""}"`,
+                `"${sal.employee_name || ""}"`,
+                `"${sal.designation || ""}"`,
+                Number(sal.present_salary || 0),
+                Number(sal.present_days ?? sal.total_working_days ?? 0),
+                Number(sal.basic_salary || 0),
+                Number(sal.hra || 0),
+                Number(sal.conveyance || 0),
+                Number(sal.medical_allowance || 0),
+                Number(sal.gross_salary || 0),
+                ot_ta,
+                Number(sal.pf_deduction || 0),
+                Number(sal.esi_deduction || 0),
+                Number(sal.advance_deduction || 0),
+                Number(sal.tds_deduction || 0),
+                Number(sal.total_deductions || 0),
+                Number(sal.net_salary || 0),
+                `"${sal.payment_status || ""}"`,
+            ];
+        });
+
+        const totalRow = [
+            "TOTAL",
+            '""',
+            '""',
+            '""',
+            '""',
+            '""',
+            salaryTotals.present_salary,
+            '""',
+            salaryTotals.basic_salary,
+            salaryTotals.hra,
+            salaryTotals.conveyance,
+            salaryTotals.medical_allowance,
+            salaryTotals.gross_salary,
+            salaryTotals.ot_ta,
+            salaryTotals.pf_deduction,
+            salaryTotals.esi_deduction,
+            salaryTotals.advance_deduction,
+            salaryTotals.tds_deduction,
+            salaryTotals.total_deductions,
+            salaryTotals.net_salary,
+            '""',
+        ];
+
+        const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(",")), totalRow.join(",")].join("\r\n");
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `Salary_Sheet_${MONTH_NAMES[selectedMonth - 1]}_${selectedYear}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        toast.success("Excel salary sheet successfully downloaded!");
+    };
+
+    const handleOpenGenerate = () => {
         setSelectedEmployeeId(activeEmployees[0]?.id ? String(activeEmployees[0].id) : "");
         setOvertimeAmount(0);
         setAllowancesAmount(0);
@@ -578,16 +759,36 @@ export default function HRSalary() {
                         </div>
                     </div>
 
+                    {/* Export Button */}
+                    <div className="flex justify-end mb-2">
+                        <Button
+                            onClick={handleExportExcel}
+                            variant="outline"
+                            size="sm"
+                            className="gap-2 text-emerald-700 border-emerald-300 hover:bg-emerald-50 dark:text-emerald-400 dark:border-emerald-700 dark:hover:bg-emerald-950"
+                        >
+                            <FileSpreadsheet className="h-4 w-4" />
+                            Export Excel
+                        </Button>
+                    </div>
+
                     {/* Payroll Table - Full width */}
                     <div className="overflow-hidden rounded-xl border border-border bg-card shadow-xs">
                         <div className="overflow-x-auto min-h-[440px]">
-                            <table className="w-full border-collapse text-left text-xs">
+                            <table className="w-full border-collapse text-left text-xs table-fixed" style={{ tableLayout: "fixed", width: `${totalTableWidth}px`, minWidth: "100%" }}>
                                 <thead>
                                     <tr className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-[11px] font-bold uppercase tracking-wider select-none border-b border-slate-300 dark:border-slate-700">
-                                        <th className="p-3 pl-4">S.No</th>
-                                        <th className="p-3">
+                                        <th className="p-3 pl-4 whitespace-nowrap relative" style={{ minWidth: colWidths.sno, width: colWidths.sno }}>
+                                            S.No
+                                            <div
+                                                onMouseDown={(e) => handleResizeStart("sno", e)}
+                                                className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-blue-500 active:bg-blue-600 transition-colors z-10 border-r border-slate-300 dark:border-slate-700"
+                                                title="Drag to resize column"
+                                            />
+                                        </th>
+                                        <th className="p-3 whitespace-nowrap relative" style={{ minWidth: colWidths.code, width: colWidths.code }}>
                                             <ColumnFilterDropdown
-                                                label="Code"
+                                                label="Employee Code"
                                                 colKey="code"
                                                 allValues={columnUniqueValues.code || []}
                                                 activeFilters={colFilters}
@@ -597,10 +798,51 @@ export default function HRSalary() {
                                                 onSort={handleColSort}
                                                 align="left"
                                             />
+                                            <div
+                                                onMouseDown={(e) => handleResizeStart("code", e)}
+                                                className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-blue-500 active:bg-blue-600 transition-colors z-10 border-r border-slate-300 dark:border-slate-700"
+                                                title="Drag to resize column"
+                                            />
                                         </th>
-                                        <th className="p-3">
+                                        <th className="p-3 whitespace-nowrap relative" style={{ minWidth: colWidths.acc_no, width: colWidths.acc_no }}>
                                             <ColumnFilterDropdown
-                                                label="Employee Name"
+                                                label="Account No."
+                                                colKey="acc_no"
+                                                allValues={columnUniqueValues.acc_no || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align="left"
+                                            />
+                                            <div
+                                                onMouseDown={(e) => handleResizeStart("acc_no", e)}
+                                                className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-blue-500 active:bg-blue-600 transition-colors z-10 border-r border-slate-300 dark:border-slate-700"
+                                                title="Drag to resize column"
+                                            />
+                                        </th>
+                                        <th className="p-3 whitespace-nowrap relative" style={{ minWidth: colWidths.ifsc, width: colWidths.ifsc }}>
+                                            <ColumnFilterDropdown
+                                                label="IFSC Code"
+                                                colKey="ifsc"
+                                                allValues={columnUniqueValues.ifsc || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align="left"
+                                            />
+                                            <div
+                                                onMouseDown={(e) => handleResizeStart("ifsc", e)}
+                                                className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-blue-500 active:bg-blue-600 transition-colors z-10 border-r border-slate-300 dark:border-slate-700"
+                                                title="Drag to resize column"
+                                            />
+                                        </th>
+                                        <th className="p-3 whitespace-nowrap relative" style={{ minWidth: colWidths.name, width: colWidths.name }}>
+                                            <ColumnFilterDropdown
+                                                label="Name"
                                                 colKey="name"
                                                 allValues={columnUniqueValues.name || []}
                                                 activeFilters={colFilters}
@@ -610,23 +852,15 @@ export default function HRSalary() {
                                                 onSort={handleColSort}
                                                 align="left"
                                             />
-                                        </th>
-                                        <th className="p-3">
-                                            <ColumnFilterDropdown
-                                                label="Designation"
-                                                colKey="designation"
-                                                allValues={columnUniqueValues.designation || []}
-                                                activeFilters={colFilters}
-                                                setActiveFilters={setColFilters}
-                                                sortKey={sortKey}
-                                                sortDir={sortDir}
-                                                onSort={handleColSort}
-                                                align="left"
+                                            <div
+                                                onMouseDown={(e) => handleResizeStart("name", e)}
+                                                className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-blue-500 active:bg-blue-600 transition-colors z-10 border-r border-slate-300 dark:border-slate-700"
+                                                title="Drag to resize column"
                                             />
                                         </th>
-                                        <th className="p-3 text-right">
+                                        <th className="p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.salary, width: colWidths.salary }}>
                                             <ColumnFilterDropdown
-                                                label="Present Salary"
+                                                label="Salary"
                                                 colKey="present_salary"
                                                 allValues={columnUniqueValues.present_salary || []}
                                                 activeFilters={colFilters}
@@ -634,13 +868,35 @@ export default function HRSalary() {
                                                 sortKey={sortKey}
                                                 sortDir={sortDir}
                                                 onSort={handleColSort}
-                                                align="right"
+                                                align="center"
+                                            />
+                                            <div
+                                                onMouseDown={(e) => handleResizeStart("salary", e)}
+                                                className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-blue-500 active:bg-blue-600 transition-colors z-10 border-r border-slate-300 dark:border-slate-700"
+                                                title="Drag to resize column"
                                             />
                                         </th>
-                                        <th className="p-3 text-center">Days (P / L / A)</th>
-                                        <th className="p-3 text-right">
+                                        <th className="p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.total_days, width: colWidths.total_days }}>
                                             <ColumnFilterDropdown
-                                                label="Basic Earned"
+                                                label="Total Days"
+                                                colKey="total_days"
+                                                allValues={columnUniqueValues.total_days || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align="center"
+                                            />
+                                            <div
+                                                onMouseDown={(e) => handleResizeStart("total_days", e)}
+                                                className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-blue-500 active:bg-blue-600 transition-colors z-10 border-r border-slate-300 dark:border-slate-700"
+                                                title="Drag to resize column"
+                                            />
+                                        </th>
+                                        <th className="p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.basic, width: colWidths.basic }}>
+                                            <ColumnFilterDropdown
+                                                label="Basic Salary"
                                                 colKey="basic_salary"
                                                 allValues={columnUniqueValues.basic_salary || []}
                                                 activeFilters={colFilters}
@@ -648,12 +904,179 @@ export default function HRSalary() {
                                                 sortKey={sortKey}
                                                 sortDir={sortDir}
                                                 onSort={handleColSort}
-                                                align="right"
+                                                align="center"
+                                            />
+                                            <div
+                                                onMouseDown={(e) => handleResizeStart("basic", e)}
+                                                className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-blue-500 active:bg-blue-600 transition-colors z-10 border-r border-slate-300 dark:border-slate-700"
+                                                title="Drag to resize column"
                                             />
                                         </th>
-                                        <th className="p-3 text-right">
+                                        <th className="p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.hra, width: colWidths.hra }}>
                                             <ColumnFilterDropdown
-                                                label="Deductions"
+                                                label="HRA"
+                                                colKey="hra"
+                                                allValues={columnUniqueValues.hra || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align="center"
+                                            />
+                                            <div
+                                                onMouseDown={(e) => handleResizeStart("hra", e)}
+                                                className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-blue-500 active:bg-blue-600 transition-colors z-10 border-r border-slate-300 dark:border-slate-700"
+                                                title="Drag to resize column"
+                                            />
+                                        </th>
+                                        <th className="p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.conv, width: colWidths.conv }}>
+                                            <ColumnFilterDropdown
+                                                label="CONV"
+                                                colKey="conveyance"
+                                                allValues={columnUniqueValues.conveyance || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align="center"
+                                            />
+                                            <div
+                                                onMouseDown={(e) => handleResizeStart("conv", e)}
+                                                className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-blue-500 active:bg-blue-600 transition-colors z-10 border-r border-slate-300 dark:border-slate-700"
+                                                title="Drag to resize column"
+                                            />
+                                        </th>
+                                        <th className="p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.med, width: colWidths.med }}>
+                                            <ColumnFilterDropdown
+                                                label="Med. Allow."
+                                                colKey="medical_allowance"
+                                                allValues={columnUniqueValues.medical_allowance || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align="center"
+                                            />
+                                            <div
+                                                onMouseDown={(e) => handleResizeStart("med", e)}
+                                                className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-blue-500 active:bg-blue-600 transition-colors z-10 border-r border-slate-300 dark:border-slate-700"
+                                                title="Drag to resize column"
+                                            />
+                                        </th>
+                                        <th className="p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.gross, width: colWidths.gross }}>
+                                            <ColumnFilterDropdown
+                                                label="Gross Earned"
+                                                colKey="gross_salary"
+                                                allValues={columnUniqueValues.gross_salary || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align="center"
+                                            />
+                                            <div
+                                                onMouseDown={(e) => handleResizeStart("gross", e)}
+                                                className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-blue-500 active:bg-blue-600 transition-colors z-10 border-r border-slate-300 dark:border-slate-700"
+                                                title="Drag to resize column"
+                                            />
+                                        </th>
+                                        <th className="p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.ot_ta, width: colWidths.ot_ta }}>
+                                            <ColumnFilterDropdown
+                                                label="OT / TA"
+                                                colKey="ot_ta"
+                                                allValues={columnUniqueValues.ot_ta || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align="center"
+                                            />
+                                            <div
+                                                onMouseDown={(e) => handleResizeStart("ot_ta", e)}
+                                                className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-blue-500 active:bg-blue-600 transition-colors z-10 border-r border-slate-300 dark:border-slate-700"
+                                                title="Drag to resize column"
+                                            />
+                                        </th>
+                                        <th className="p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.pf, width: colWidths.pf }}>
+                                            <ColumnFilterDropdown
+                                                label="PF"
+                                                colKey="pf_deduction"
+                                                allValues={columnUniqueValues.pf_deduction || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align="center"
+                                            />
+                                            <div
+                                                onMouseDown={(e) => handleResizeStart("pf", e)}
+                                                className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-blue-500 active:bg-blue-600 transition-colors z-10 border-r border-slate-300 dark:border-slate-700"
+                                                title="Drag to resize column"
+                                            />
+                                        </th>
+                                        <th className="p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.esi, width: colWidths.esi }}>
+                                            <ColumnFilterDropdown
+                                                label="ESI"
+                                                colKey="esi_deduction"
+                                                allValues={columnUniqueValues.esi_deduction || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align="center"
+                                            />
+                                            <div
+                                                onMouseDown={(e) => handleResizeStart("esi", e)}
+                                                className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-blue-500 active:bg-blue-600 transition-colors z-10 border-r border-slate-300 dark:border-slate-700"
+                                                title="Drag to resize column"
+                                            />
+                                        </th>
+                                        <th className="p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.adv, width: colWidths.adv }}>
+                                            <ColumnFilterDropdown
+                                                label="Adv."
+                                                colKey="advance_deduction"
+                                                allValues={columnUniqueValues.advance_deduction || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align="center"
+                                            />
+                                            <div
+                                                onMouseDown={(e) => handleResizeStart("adv", e)}
+                                                className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-blue-500 active:bg-blue-600 transition-colors z-10 border-r border-slate-300 dark:border-slate-700"
+                                                title="Drag to resize column"
+                                            />
+                                        </th>
+                                        <th className="p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.tds, width: colWidths.tds }}>
+                                            <ColumnFilterDropdown
+                                                label="TDS"
+                                                colKey="tds_deduction"
+                                                allValues={columnUniqueValues.tds_deduction || []}
+                                                activeFilters={colFilters}
+                                                setActiveFilters={setColFilters}
+                                                sortKey={sortKey}
+                                                sortDir={sortDir}
+                                                onSort={handleColSort}
+                                                align="center"
+                                            />
+                                            <div
+                                                onMouseDown={(e) => handleResizeStart("tds", e)}
+                                                className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-blue-500 active:bg-blue-600 transition-colors z-10 border-r border-slate-300 dark:border-slate-700"
+                                                title="Drag to resize column"
+                                            />
+                                        </th>
+                                        <th className="p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.total_ded, width: colWidths.total_ded }}>
+                                            <ColumnFilterDropdown
+                                                label="Total"
                                                 colKey="total_deductions"
                                                 allValues={columnUniqueValues.total_deductions || []}
                                                 activeFilters={colFilters}
@@ -661,10 +1084,15 @@ export default function HRSalary() {
                                                 sortKey={sortKey}
                                                 sortDir={sortDir}
                                                 onSort={handleColSort}
-                                                align="right"
+                                                align="center"
+                                            />
+                                            <div
+                                                onMouseDown={(e) => handleResizeStart("total_ded", e)}
+                                                className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-blue-500 active:bg-blue-600 transition-colors z-10 border-r border-slate-300 dark:border-slate-700"
+                                                title="Drag to resize column"
                                             />
                                         </th>
-                                        <th className="p-3 text-right font-black">
+                                        <th className="p-3 text-center font-black whitespace-nowrap relative" style={{ minWidth: colWidths.net, width: colWidths.net }}>
                                             <ColumnFilterDropdown
                                                 label="Net Payable"
                                                 colKey="net_salary"
@@ -674,10 +1102,15 @@ export default function HRSalary() {
                                                 sortKey={sortKey}
                                                 sortDir={sortDir}
                                                 onSort={handleColSort}
-                                                align="right"
+                                                align="center"
+                                            />
+                                            <div
+                                                onMouseDown={(e) => handleResizeStart("net", e)}
+                                                className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-blue-500 active:bg-blue-600 transition-colors z-10 border-r border-slate-300 dark:border-slate-700"
+                                                title="Drag to resize column"
                                             />
                                         </th>
-                                        <th className="p-3 text-center">
+                                        <th className="p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.status, width: colWidths.status }}>
                                             <ColumnFilterDropdown
                                                 label="Status"
                                                 colKey="status"
@@ -689,21 +1122,33 @@ export default function HRSalary() {
                                                 onSort={handleColSort}
                                                 align="center"
                                             />
+                                            <div
+                                                onMouseDown={(e) => handleResizeStart("status", e)}
+                                                className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-blue-500 active:bg-blue-600 transition-colors z-10 border-r border-slate-300 dark:border-slate-700"
+                                                title="Drag to resize column"
+                                            />
                                         </th>
-                                        <th className="p-3 pr-4 text-center">Actions</th>
+                                        <th className="p-3 pr-4 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.actions, width: colWidths.actions }}>
+                                            Actions
+                                            <div
+                                                onMouseDown={(e) => handleResizeStart("actions", e)}
+                                                className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-blue-500 active:bg-blue-600 transition-colors z-10 border-r border-slate-300 dark:border-slate-700"
+                                                title="Drag to resize column"
+                                            />
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border/60">
                                     {isLoading ? (
                                         <tr>
-                                            <td colSpan={11} className="p-8 text-center text-muted-foreground">
+                                            <td colSpan={21} className="p-8 text-center text-muted-foreground">
                                                 <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                                                 <p className="mt-2 text-xs">Loading payroll...</p>
                                             </td>
                                         </tr>
                                     ) : processedSalaries.length === 0 ? (
                                         <tr>
-                                            <td colSpan={11} className="p-8 text-center text-muted-foreground">
+                                            <td colSpan={21} className="p-8 text-center text-muted-foreground">
                                                 <IndianRupee className="mx-auto h-8 w-8 text-muted-foreground/40" />
                                                 <p className="mt-2 text-sm font-semibold text-foreground">No salary records found</p>
                                                 <p className="text-xs text-muted-foreground">
@@ -726,35 +1171,63 @@ export default function HRSalary() {
                                                     ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
                                                     : "bg-muted text-foreground";
 
+                                            const otTa = (Number(sal.overtime_amount) || 0) + (Number(sal.travel_allowance) || 0);
+
                                             return (
                                                 <tr key={sal.id} className="transition hover:bg-muted/30">
-                                                    <td className="p-3 pl-4 text-muted-foreground">{idx + 1}</td>
-                                                    <td className="p-3 font-mono font-bold text-[#183260] dark:text-cyan-400">{sal.employee_code}</td>
-                                                    <td className="p-3 font-semibold text-foreground">{sal.employee_name}</td>
-                                                    <td className="p-3 text-muted-foreground">{sal.designation || "—"}</td>
-                                                    <td className="p-3 text-right font-medium text-foreground">
-                                                        ₹{Number(sal.present_salary || 0).toLocaleString("en-IN")}
+                                                    <td className="p-3 pl-4 text-muted-foreground whitespace-nowrap">{idx + 1}</td>
+                                                    <td className="p-3 font-mono font-bold text-[#183260] dark:text-cyan-400 whitespace-nowrap">{sal.employee_code || "—"}</td>
+                                                    <td className="p-3 font-mono text-xs text-muted-foreground whitespace-nowrap">{sal.bank_account_number || "—"}</td>
+                                                    <td className="p-3 font-mono text-xs text-muted-foreground whitespace-nowrap">{sal.bank_ifsc || "—"}</td>
+                                                    <td className="p-3 font-semibold text-foreground whitespace-nowrap">{sal.employee_name}</td>
+                                                    <td className="p-3 text-center font-medium text-foreground whitespace-nowrap">
+                                                        ₹{fmt(sal.present_salary)}
                                                     </td>
-                                                    <td className="p-3 text-center text-muted-foreground">
-                                                        <span className="text-emerald-700 font-bold">{sal.present_days}</span> /{" "}
-                                                        <span className="text-blue-700">{sal.paid_leave_days}</span> /{" "}
-                                                        <span className="text-red-700">{sal.absent_days}</span>
+                                                    <td className="p-3 text-center text-foreground font-semibold whitespace-nowrap">
+                                                        {sal.present_days ?? sal.total_working_days ?? 0}
                                                     </td>
-                                                    <td className="p-3 text-right text-foreground font-medium">
-                                                        ₹{Number(sal.basic_salary || 0).toLocaleString("en-IN")}
+                                                    <td className="p-3 text-center text-foreground whitespace-nowrap">
+                                                        ₹{fmt(sal.basic_salary)}
                                                     </td>
-                                                    <td className="p-3 text-right text-destructive">
-                                                        -₹{Number(sal.total_deductions || 0).toLocaleString("en-IN")}
+                                                    <td className="p-3 text-center text-foreground whitespace-nowrap">
+                                                        ₹{fmt(sal.hra)}
                                                     </td>
-                                                    <td className="p-3 text-right font-extrabold text-foreground text-sm">
-                                                        ₹{Number(sal.net_salary || 0).toLocaleString("en-IN")}
+                                                    <td className="p-3 text-center text-foreground whitespace-nowrap">
+                                                        ₹{fmt(sal.conveyance)}
                                                     </td>
-                                                    <td className="p-3 text-center">
+                                                    <td className="p-3 text-center text-foreground whitespace-nowrap">
+                                                        ₹{fmt(sal.medical_allowance)}
+                                                    </td>
+                                                    <td className="p-3 text-center font-medium text-foreground whitespace-nowrap">
+                                                        ₹{fmt(sal.gross_salary)}
+                                                    </td>
+                                                    <td className="p-3 text-center text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
+                                                        {otTa > 0 ? `₹${fmt(otTa)}` : "—"}
+                                                    </td>
+                                                    <td className="p-3 text-center text-destructive whitespace-nowrap">
+                                                        {Number(sal.pf_deduction || 0) > 0 ? `₹${fmt(sal.pf_deduction)}` : "—"}
+                                                    </td>
+                                                    <td className="p-3 text-center text-destructive whitespace-nowrap">
+                                                        {Number(sal.esi_deduction || 0) > 0 ? `₹${fmt(sal.esi_deduction)}` : "—"}
+                                                    </td>
+                                                    <td className="p-3 text-center text-destructive whitespace-nowrap">
+                                                        {Number(sal.advance_deduction || 0) > 0 ? `₹${fmt(sal.advance_deduction)}` : "—"}
+                                                    </td>
+                                                    <td className="p-3 text-center text-destructive whitespace-nowrap">
+                                                        {Number(sal.tds_deduction || 0) > 0 ? `₹${fmt(sal.tds_deduction)}` : "—"}
+                                                    </td>
+                                                    <td className="p-3 text-center font-semibold text-destructive whitespace-nowrap">
+                                                        {Number(sal.total_deductions || 0) > 0 ? `-₹${fmt(sal.total_deductions)}` : "—"}
+                                                    </td>
+                                                    <td className="p-3 text-center font-extrabold text-foreground text-sm whitespace-nowrap">
+                                                        ₹{fmt(sal.net_salary)}
+                                                    </td>
+                                                    <td className="p-3 text-center whitespace-nowrap">
                                                         <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold uppercase", statusStyle)}>
                                                             {sal.payment_status}
                                                         </span>
                                                     </td>
-                                                    <td className="p-3 pr-4 text-center">
+                                                    <td className="p-3 pr-4 text-center whitespace-nowrap">
                                                         <div className="flex items-center justify-center gap-1">
                                                             <Button
                                                                 size="icon"
@@ -808,6 +1281,30 @@ export default function HRSalary() {
                                         })
                                     )}
                                 </tbody>
+                                {processedSalaries.length > 0 && (
+                                    <tfoot>
+                                        <tr className="bg-slate-100 dark:bg-slate-800 font-bold text-xs border-t-2 border-slate-400 dark:border-slate-600">
+                                            <td colSpan={5} className="p-3 pl-4 text-slate-700 dark:text-slate-200">
+                                                TOTAL ({processedSalaries.length} employees)
+                                            </td>
+                                            <td className="p-3 text-center text-slate-800 dark:text-slate-100 whitespace-nowrap">₹{fmt(salaryTotals.present_salary)}</td>
+                                            <td className="p-3 text-center text-muted-foreground">—</td>
+                                            <td className="p-3 text-center text-slate-800 dark:text-slate-100 whitespace-nowrap">₹{fmt(salaryTotals.basic_salary)}</td>
+                                            <td className="p-3 text-center text-slate-800 dark:text-slate-100 whitespace-nowrap">₹{fmt(salaryTotals.hra)}</td>
+                                            <td className="p-3 text-center text-slate-800 dark:text-slate-100 whitespace-nowrap">₹{fmt(salaryTotals.conveyance)}</td>
+                                            <td className="p-3 text-center text-slate-800 dark:text-slate-100 whitespace-nowrap">₹{fmt(salaryTotals.medical_allowance)}</td>
+                                            <td className="p-3 text-center text-slate-800 dark:text-slate-100 whitespace-nowrap">₹{fmt(salaryTotals.gross_salary)}</td>
+                                            <td className="p-3 text-center text-emerald-700 dark:text-emerald-400 whitespace-nowrap">₹{fmt(salaryTotals.ot_ta)}</td>
+                                            <td className="p-3 text-center text-destructive whitespace-nowrap">₹{fmt(salaryTotals.pf_deduction)}</td>
+                                            <td className="p-3 text-center text-destructive whitespace-nowrap">₹{fmt(salaryTotals.esi_deduction)}</td>
+                                            <td className="p-3 text-center text-destructive whitespace-nowrap">₹{fmt(salaryTotals.advance_deduction)}</td>
+                                            <td className="p-3 text-center text-destructive whitespace-nowrap">₹{fmt(salaryTotals.tds_deduction)}</td>
+                                            <td className="p-3 text-center font-semibold text-destructive whitespace-nowrap">-₹{fmt(salaryTotals.total_deductions)}</td>
+                                            <td className="p-3 text-center font-extrabold text-foreground text-sm whitespace-nowrap">₹{fmt(salaryTotals.net_salary)}</td>
+                                            <td colSpan={2}></td>
+                                        </tr>
+                                    </tfoot>
+                                )}
                             </table>
                         </div>
                     </div>
@@ -917,7 +1414,7 @@ export default function HRSalary() {
                                                 sortKey={sortKey}
                                                 sortDir={sortDir}
                                                 onSort={handleColSort}
-                                                align="right"
+                                                align="center"
                                             />
                                         </th>
                                         <th className="p-3">
@@ -978,7 +1475,7 @@ export default function HRSalary() {
                                 <tbody className="divide-y divide-border/60">
                                     {processedSalaries.length === 0 ? (
                                         <tr>
-                                            <td colSpan={11} className="p-8 text-center text-muted-foreground">
+                                            <td colSpan={21} className="p-8 text-center text-muted-foreground">
                                                 {Object.values(colFilters).some(Boolean)
                                                     ? "No records matching column filters. Try clearing filters."
                                                     : "No records in payment history for this filter."}
@@ -1054,7 +1551,7 @@ export default function HRSalary() {
                                 onChange={(e) => setConfigValues({ ...configValues, working_days_per_month: e.target.value })}
                                 className="h-8 text-xs bg-background mt-1"
                             />
-                            <p className="text-[10px] text-muted-foreground mt-0.5">Used as denominator (Present Salary ÷ Working Days) for per-day rate.</p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">Used as denominator (Present Salary Ã· Working Days) for per-day rate.</p>
                         </div>
 
                         <div>
@@ -1092,7 +1589,7 @@ export default function HRSalary() {
                                 onChange={(e) => setConfigValues({ ...configValues, pf_percentage: e.target.value })}
                                 className="h-8 text-xs bg-background mt-1"
                             />
-                            <p className="text-[10px] text-muted-foreground mt-0.5">Set to 0 if PF is not deducted.</p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">Applied on Basic Salary. Set to 0 if PF is not deducted.</p>
                         </div>
 
                         <div>
@@ -1105,7 +1602,57 @@ export default function HRSalary() {
                                 onChange={(e) => setConfigValues({ ...configValues, esi_percentage: e.target.value })}
                                 className="h-8 text-xs bg-background mt-1"
                             />
-                            <p className="text-[10px] text-muted-foreground mt-0.5">Set to 0 if ESI is not deducted.</p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">Applied on Gross Salary. Auto-skipped if Gross &gt; ₹21,000.</p>
+                        </div>
+
+                        <div>
+                            <Label className="text-xs">HRA % (of Basic Salary)</Label>
+                            <Input
+                                type="number"
+                                min="0"
+                                max="100"
+                                value={configValues.hra_percentage ?? "40"}
+                                onChange={(e) => setConfigValues({ ...configValues, hra_percentage: e.target.value })}
+                                className="h-8 text-xs bg-background mt-1"
+                            />
+                            <p className="text-[10px] text-muted-foreground mt-0.5">House Rent Allowance as % of Basic Salary.</p>
+                        </div>
+
+                        <div>
+                            <Label className="text-xs">Conveyance Allowance (₹/month)</Label>
+                            <Input
+                                type="number"
+                                min="0"
+                                value={configValues.conveyance_allowance ?? "1600"}
+                                onChange={(e) => setConfigValues({ ...configValues, conveyance_allowance: e.target.value })}
+                                className="h-8 text-xs bg-background mt-1"
+                            />
+                            <p className="text-[10px] text-muted-foreground mt-0.5">Fixed monthly conveyance allowance.</p>
+                        </div>
+
+                        <div>
+                            <Label className="text-xs">Medical Allowance (₹/month)</Label>
+                            <Input
+                                type="number"
+                                min="0"
+                                value={configValues.medical_allowance ?? "1250"}
+                                onChange={(e) => setConfigValues({ ...configValues, medical_allowance: e.target.value })}
+                                className="h-8 text-xs bg-background mt-1"
+                            />
+                            <p className="text-[10px] text-muted-foreground mt-0.5">Fixed monthly medical allowance.</p>
+                        </div>
+
+                        <div>
+                            <Label className="text-xs">TDS % (of Gross Salary)</Label>
+                            <Input
+                                type="number"
+                                min="0"
+                                max="100"
+                                value={configValues.tds_percentage ?? "0"}
+                                onChange={(e) => setConfigValues({ ...configValues, tds_percentage: e.target.value })}
+                                className="h-8 text-xs bg-background mt-1"
+                            />
+                            <p className="text-[10px] text-muted-foreground mt-0.5">Tax Deducted at Source. Set to 0 if TDS not applicable.</p>
                         </div>
 
                         <Button type="submit" className="bg-[#183260] hover:bg-[#122548] text-white font-semibold">
@@ -1139,7 +1686,7 @@ export default function HRSalary() {
                                 <option value="">-- Choose Employee --</option>
                                 {activeEmployees.map((emp) => (
                                     <option key={emp.id} value={emp.id}>
-                                        {emp.name} ({emp.employee_code}) · ₹{Number(emp.present_salary || 0).toLocaleString("en-IN")}/mo
+                                        {emp.name} ({emp.employee_code}) Â· ₹{Number(emp.present_salary || 0).toLocaleString("en-IN")}/mo
                                     </option>
                                 ))}
                             </select>
@@ -1232,7 +1779,7 @@ export default function HRSalary() {
                             <CreditCard className="h-5 w-5" /> Mark Salary as Paid
                         </DialogTitle>
                         <DialogDescription className="text-xs">
-                            Employee: <b>{payingSalary?.employee_name}</b> · Amount: <b>₹{Number(payingSalary?.net_salary || 0).toLocaleString("en-IN")}</b>
+                            Employee: <b>{payingSalary?.employee_name}</b> Â· Amount: <b>₹{Number(payingSalary?.net_salary || 0).toLocaleString("en-IN")}</b>
                         </DialogDescription>
                     </DialogHeader>
 
@@ -1387,25 +1934,50 @@ export default function HRSalary() {
                                     </div>
                                     <table className="w-full text-[11px]">
                                         <tbody>
+                                            <tr className="border-b bg-blue-50/30 dark:bg-blue-950/10">
+                                                <td className="p-2 text-[10px] font-bold text-blue-700 uppercase" colSpan={2}>Basic Salary Structure</td>
+                                            </tr>
                                             <tr className="border-b">
-                                                <td className="p-2 text-muted-foreground">Basic Earned</td>
+                                                <td className="p-2 text-muted-foreground">Basic Salary</td>
                                                 <td className="p-2 text-right font-medium">₹{Number(slipData.earnings?.basic_salary || 0).toLocaleString("en-IN")}</td>
                                             </tr>
-                                            <tr className="border-b">
-                                                <td className="p-2 text-muted-foreground">Overtime</td>
-                                                <td className="p-2 text-right font-medium">₹{Number(slipData.earnings?.overtime || 0).toLocaleString("en-IN")}</td>
-                                            </tr>
-                                            <tr className="border-b">
-                                                <td className="p-2 text-muted-foreground">Allowances</td>
-                                                <td className="p-2 text-right font-medium">₹{Number(slipData.earnings?.allowances || 0).toLocaleString("en-IN")}</td>
-                                            </tr>
-                                            <tr className="border-b">
-                                                <td className="p-2 text-muted-foreground">Bonus</td>
-                                                <td className="p-2 text-right font-medium">₹{Number(slipData.earnings?.bonus || 0).toLocaleString("en-IN")}</td>
-                                            </tr>
-                                            <tr className="bg-emerald-50/50 dark:bg-emerald-950/20 font-bold">
-                                                <td className="p-2 text-emerald-900 dark:text-emerald-200">Gross Earnings</td>
+                                            {Number(slipData.earnings?.hra || 0) > 0 && (
+                                                <tr className="border-b">
+                                                    <td className="p-2 text-muted-foreground">HRA</td>
+                                                    <td className="p-2 text-right font-medium">₹{Number(slipData.earnings?.hra || 0).toLocaleString("en-IN")}</td>
+                                                </tr>
+                                            )}
+                                            {Number(slipData.earnings?.conveyance || 0) > 0 && (
+                                                <tr className="border-b">
+                                                    <td className="p-2 text-muted-foreground">CONV (Conveyance)</td>
+                                                    <td className="p-2 text-right font-medium">₹{Number(slipData.earnings?.conveyance || 0).toLocaleString("en-IN")}</td>
+                                                </tr>
+                                            )}
+                                            {Number(slipData.earnings?.medical_allowance || 0) > 0 && (
+                                                <tr className="border-b">
+                                                    <td className="p-2 text-muted-foreground">Med Allow. (Medical)</td>
+                                                    <td className="p-2 text-right font-medium">₹{Number(slipData.earnings?.medical_allowance || 0).toLocaleString("en-IN")}</td>
+                                                </tr>
+                                            )}
+                                            <tr className="bg-emerald-50/50 dark:bg-emerald-950/20 font-bold border-b">
+                                                <td className="p-2 text-emerald-900 dark:text-emerald-200">Gross Salary</td>
                                                 <td className="p-2 text-right text-emerald-900 dark:text-emerald-200">₹{Number(slipData.earnings?.gross_salary || 0).toLocaleString("en-IN")}</td>
+                                            </tr>
+                                            {Number(slipData.earnings?.overtime || 0) > 0 && (
+                                                <tr className="border-b">
+                                                    <td className="p-2 text-muted-foreground">OT (Overtime)</td>
+                                                    <td className="p-2 text-right font-medium">₹{Number(slipData.earnings?.overtime || 0).toLocaleString("en-IN")}</td>
+                                                </tr>
+                                            )}
+                                            {Number(slipData.earnings?.travel_allowance || 0) > 0 && (
+                                                <tr className="border-b">
+                                                    <td className="p-2 text-muted-foreground">TA (Travel Allowance)</td>
+                                                    <td className="p-2 text-right font-medium">₹{Number(slipData.earnings?.travel_allowance || 0).toLocaleString("en-IN")}</td>
+                                                </tr>
+                                            )}
+                                            <tr className="bg-emerald-100/60 dark:bg-emerald-900/30 font-bold">
+                                                <td className="p-2 text-emerald-900 dark:text-emerald-200">Total Earnings</td>
+                                                <td className="p-2 text-right text-emerald-900 dark:text-emerald-200">₹{Number(slipData.earnings?.total_earnings || slipData.earnings?.gross_salary || 0).toLocaleString("en-IN")}</td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -1417,18 +1989,40 @@ export default function HRSalary() {
                                     </div>
                                     <table className="w-full text-[11px]">
                                         <tbody>
-                                            <tr className="border-b">
-                                                <td className="p-2 text-muted-foreground">Absent & Half-Day</td>
-                                                <td className="p-2 text-right font-medium text-destructive">₹{Number(slipData.deductions?.salary_deduction || 0).toLocaleString("en-IN")}</td>
-                                            </tr>
+                                            {Number(slipData.deductions?.salary_deduction || 0) > 0 && (
+                                                <tr className="border-b">
+                                                    <td className="p-2 text-muted-foreground">Absent & Half-Day</td>
+                                                    <td className="p-2 text-right font-medium text-destructive">₹{Number(slipData.deductions?.salary_deduction || 0).toLocaleString("en-IN")}</td>
+                                                </tr>
+                                            )}
+                                            {Number(slipData.deductions?.pf_deduction || 0) > 0 && (
+                                                <tr className="border-b">
+                                                    <td className="p-2 text-muted-foreground">PF</td>
+                                                    <td className="p-2 text-right font-medium text-destructive">₹{Number(slipData.deductions?.pf_deduction || 0).toLocaleString("en-IN")}</td>
+                                                </tr>
+                                            )}
+                                            {Number(slipData.deductions?.esi_deduction || 0) > 0 && (
+                                                <tr className="border-b">
+                                                    <td className="p-2 text-muted-foreground">ESI</td>
+                                                    <td className="p-2 text-right font-medium text-destructive">₹{Number(slipData.deductions?.esi_deduction || 0).toLocaleString("en-IN")}</td>
+                                                </tr>
+                                            )}
+                                            {Number(slipData.deductions?.tds_deduction || 0) > 0 && (
+                                                <tr className="border-b">
+                                                    <td className="p-2 text-muted-foreground">TDS</td>
+                                                    <td className="p-2 text-right font-medium text-destructive">₹{Number(slipData.deductions?.tds_deduction || 0).toLocaleString("en-IN")}</td>
+                                                </tr>
+                                            )}
                                             <tr className="border-b">
                                                 <td className="p-2 text-muted-foreground">Advance Salary</td>
                                                 <td className="p-2 text-right font-medium text-destructive">₹{Number(slipData.deductions?.advance_deduction || 0).toLocaleString("en-IN")}</td>
                                             </tr>
-                                            <tr className="border-b">
-                                                <td className="p-2 text-muted-foreground">Other Deductions</td>
-                                                <td className="p-2 text-right font-medium text-destructive">₹{Number(slipData.deductions?.other_deductions || 0).toLocaleString("en-IN")}</td>
-                                            </tr>
+                                            {Number(slipData.deductions?.other_deductions || 0) > 0 && (
+                                                <tr className="border-b">
+                                                    <td className="p-2 text-muted-foreground">Other Deductions</td>
+                                                    <td className="p-2 text-right font-medium text-destructive">₹{Number(slipData.deductions?.other_deductions || 0).toLocaleString("en-IN")}</td>
+                                                </tr>
+                                            )}
                                             <tr className="bg-red-50/50 dark:bg-red-950/20 font-bold">
                                                 <td className="p-2 text-red-900 dark:text-red-200">Total Deductions</td>
                                                 <td className="p-2 text-right text-red-900 dark:text-red-200">₹{Number(slipData.deductions?.total_deductions || 0).toLocaleString("en-IN")}</td>

@@ -55,8 +55,10 @@ const MONTH_NAMES = [
     "July", "August", "September", "October", "November", "December",
 ];
 
-const fmt = (n) => Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const fmtInt = (n) => Number(n || 0).toLocaleString("en-IN");
+const fmt = (n) => Math.round(Number(n || 0)).toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+const fmtInt = (n) => Math.round(Number(n || 0)).toLocaleString("en-IN");
+
+const getVal = (v) => (v !== null && v !== undefined && v !== "") ? Number(v) : undefined;
 
 export default function SalaryCalculationModal({ open, onClose, employee, month, year }) {
     const queryClient = useQueryClient();
@@ -67,48 +69,79 @@ export default function SalaryCalculationModal({ open, onClose, employee, month,
     // Editable overrides
     const [editing, setEditing] = useState(false);
     const [overtime, setOvertime] = useState(0);
-    const [allowances, setAllowances] = useState(0);
-    const [bonus, setBonus] = useState(0);
+    const [travelAllowance, setTravelAllowance] = useState(0);
     const [advanceDeduction, setAdvanceDeduction] = useState(0);
-    const [pfDeduction, setPfDeduction] = useState(0);
     const [otherDeductions, setOtherDeductions] = useState(0);
     const [remarks, setRemarks] = useState("");
     const [saving, setSaving] = useState(false);
 
-    // Debounced values — only update after 600ms of no typing to prevent scroll-to-top on each keystroke
-    const [debouncedOvertime, setDebouncedOvertime] = useState(0);
-    const [debouncedAllowances, setDebouncedAllowances] = useState(0);
-    const [debouncedBonus, setDebouncedBonus] = useState(0);
-    const [debouncedAdvance, setDebouncedAdvance] = useState(0);
-    const [debouncedPf, setDebouncedPf] = useState(0);
-    const [debouncedOther, setDebouncedOther] = useState(0);
+    // Allowance & deduction overrides (null = auto-calc from config, number = user override)
+    const [hraOverride, setHraOverride] = useState(null);
+    const [convOverride, setConvOverride] = useState(null);
+    const [medOverride, setMedOverride] = useState(null);
+    const [pfOverride, setPfOverride] = useState(null);
+    const [esiOverride, setEsiOverride] = useState(null);
+    const [tdsOverride, setTdsOverride] = useState(null);
 
-    useEffect(() => { const t = setTimeout(() => setDebouncedOvertime(overtime), 600); return () => clearTimeout(t); }, [overtime]);
-    useEffect(() => { const t = setTimeout(() => setDebouncedAllowances(allowances), 600); return () => clearTimeout(t); }, [allowances]);
-    useEffect(() => { const t = setTimeout(() => setDebouncedBonus(bonus), 600); return () => clearTimeout(t); }, [bonus]);
-    useEffect(() => { const t = setTimeout(() => setDebouncedAdvance(advanceDeduction), 600); return () => clearTimeout(t); }, [advanceDeduction]);
-    useEffect(() => { const t = setTimeout(() => setDebouncedPf(pfDeduction), 600); return () => clearTimeout(t); }, [pfDeduction]);
-    useEffect(() => { const t = setTimeout(() => setDebouncedOther(otherDeductions), 600); return () => clearTimeout(t); }, [otherDeductions]);
+    const [forceRecalc, setForceRecalc] = useState(false);
 
-    // Live preview data fetched from API — uses DEBOUNCED values so scroll doesn't jump on every keystroke
+    // Live preview data fetched from API on open or manual recalculate
     const { data: preview, isLoading: loadingPreview, refetch: refetchPreview } = useQuery({
-        queryKey: ["hr-salary-preview", employee?.employee_id, month, year, debouncedOvertime, debouncedAllowances, debouncedBonus, debouncedAdvance, debouncedPf, debouncedOther],
+        queryKey: ["hr-salary-preview", employee?.employee_id, month, year, forceRecalc],
         queryFn: () =>
             previewHRSalary({
                 employee_id: employee?.employee_id,
                 month,
                 year,
-                overtime_amount: Number(debouncedOvertime || 0),
-                allowances: Number(debouncedAllowances || 0),
-                bonus: Number(debouncedBonus || 0),
-                advance_deduction: Number(debouncedAdvance || 0),
-                pf_deduction: Number(debouncedPf || 0),
-                other_deductions: Number(debouncedOther || 0),
+                force_recalc: forceRecalc,
             }),
         enabled: open && !!employee?.employee_id && !!month && !!year,
-        staleTime: 10_000,
-        keepPreviousData: true,
+        staleTime: 0,
+        placeholderData: (prev) => prev,
     });
+
+    // When editing: pre-fill overrides from existing saved record or calculated values
+    useEffect(() => {
+        if (editing) {
+            const saved = preview?.existing_salary_data;
+            if (saved) {
+                setOvertime(saved.overtime_amount ?? 0);
+                setTravelAllowance(saved.travel_allowance ?? 0);
+                setAdvanceDeduction(saved.advance_deduction ?? 0);
+                setOtherDeductions(saved.other_deductions ?? 0);
+                setHraOverride(saved.hra !== null && saved.hra !== undefined ? Number(saved.hra) : (calc?.hra ?? 0));
+                setConvOverride(saved.conveyance !== null && saved.conveyance !== undefined ? Number(saved.conveyance) : (calc?.conveyance ?? 0));
+                setMedOverride(saved.medical_allowance !== null && saved.medical_allowance !== undefined ? Number(saved.medical_allowance) : (calc?.medical_allowance ?? 0));
+                setPfOverride(saved.pf_deduction !== null && saved.pf_deduction !== undefined ? Number(saved.pf_deduction) : (calc?.pf_deduction ?? 0));
+                setEsiOverride(saved.esi_deduction !== null && saved.esi_deduction !== undefined ? Number(saved.esi_deduction) : (calc?.esi_deduction ?? 0));
+                setTdsOverride(saved.tds_deduction !== null && saved.tds_deduction !== undefined ? Number(saved.tds_deduction) : (calc?.tds_deduction ?? 0));
+                setRemarks(saved.remarks ?? "");
+            } else if (calc) {
+                setOvertime(calc.overtime_amount ?? 0);
+                setTravelAllowance(calc.travel_allowance ?? 0);
+                setAdvanceDeduction(calc.advance_deduction ?? 0);
+                setOtherDeductions(calc.other_deductions ?? 0);
+                setHraOverride(calc.hra ?? 0);
+                setConvOverride(calc.conveyance ?? 0);
+                setMedOverride(calc.medical_allowance ?? 0);
+                setPfOverride(calc.pf_deduction ?? 0);
+                setEsiOverride(calc.esi_deduction ?? 0);
+                setTdsOverride(calc.tds_deduction ?? 0);
+            }
+        } else {
+            setHraOverride(null);
+            setConvOverride(null);
+            setMedOverride(null);
+            setPfOverride(null);
+            setEsiOverride(null);
+            setTdsOverride(null);
+            setOvertime(0);
+            setTravelAllowance(0);
+            setAdvanceDeduction(0);
+            setOtherDeductions(0);
+            setRemarks("");
+        }
+    }, [editing]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Fetch saved salary history for this employee (all months)
     const { data: rawHistory = [] } = useQuery({
@@ -131,71 +164,86 @@ export default function SalaryCalculationModal({ open, onClose, employee, month,
 
     const isAlreadySaved = !!existingSalaryId;
     const isFinalized = existingStatus === "Paid";
+    const isEditable = !isFinalized && editing;
 
-    const handleCalculate = () => {
-        refetchPreview();
-        toast.success("Salary calculated from latest attendance data.");
-    };
+    // Database record if already generated
+    const saved = preview?.existing_salary_data;
+
+    // Base fallback values: prefer saved DB values, then calculated preview values
+    const baseHra = saved?.hra !== null && saved?.hra !== undefined ? Number(saved.hra) : Number(calc?.hra ?? 0);
+    const baseConv = saved?.conveyance !== null && saved?.conveyance !== undefined ? Number(saved.conveyance) : Number(calc?.conveyance ?? calc?.conveyance_amount ?? 0);
+    const baseMed = saved?.medical_allowance !== null && saved?.medical_allowance !== undefined ? Number(saved.medical_allowance) : Number(calc?.medical_allowance ?? calc?.medical_amount ?? 0);
+    const basePf = saved?.pf_deduction !== null && saved?.pf_deduction !== undefined ? Number(saved.pf_deduction) : Number(calc?.pf_deduction ?? 0);
+    const baseEsi = saved?.esi_deduction !== null && saved?.esi_deduction !== undefined ? Number(saved.esi_deduction) : Number(calc?.esi_deduction ?? 0);
+    const baseTds = saved?.tds_deduction !== null && saved?.tds_deduction !== undefined ? Number(saved.tds_deduction) : Number(calc?.tds_deduction ?? 0);
+    const baseAdv = saved?.advance_deduction !== null && saved?.advance_deduction !== undefined ? Number(saved.advance_deduction) : Number(calc?.advance_deduction ?? 0);
+    const baseOther = saved?.other_deductions !== null && saved?.other_deductions !== undefined ? Number(saved.other_deductions) : Number(calc?.other_deductions ?? 0);
+    const baseOt = saved?.overtime_amount !== null && saved?.overtime_amount !== undefined ? Number(saved.overtime_amount) : Number(calc?.overtime_amount ?? 0);
+    const baseTa = saved?.travel_allowance !== null && saved?.travel_allowance !== undefined ? Number(saved.travel_allowance) : Number(calc?.travel_allowance ?? 0);
+
+    // Current values in use
+    const currentBasic = Number(calc?.base_salary ?? (calc?.present_salary > 25000 ? (calc?.present_salary || 0) * 0.5 : 12750));
+    const currentHra = (editing && hraOverride !== null) ? (hraOverride === "" ? 0 : Number(hraOverride)) : baseHra;
+    const currentConv = (editing && convOverride !== null) ? (convOverride === "" ? 0 : Number(convOverride)) : baseConv;
+    const currentMed = (editing && medOverride !== null) ? (medOverride === "" ? 0 : Number(medOverride)) : baseMed;
+
+    const currentPf = (editing && pfOverride !== null) ? (pfOverride === "" ? 0 : Number(pfOverride)) : basePf;
+    const currentEsi = (editing && esiOverride !== null) ? (esiOverride === "" ? 0 : Number(esiOverride)) : baseEsi;
+    const currentTds = (editing && tdsOverride !== null) ? (tdsOverride === "" ? 0 : Number(tdsOverride)) : baseTds;
+    const currentAdv = editing ? (advanceDeduction === "" ? 0 : Number(advanceDeduction || 0)) : baseAdv;
+    const currentOther = editing ? (otherDeductions === "" ? 0 : Number(otherDeductions || 0)) : baseOther;
+    const currentOt = editing ? (overtime === "" ? 0 : Number(overtime || 0)) : baseOt;
+    const currentTa = editing ? (travelAllowance === "" ? 0 : Number(travelAllowance || 0)) : baseTa;
+
+    const currentGross = Math.round(currentBasic + currentHra + currentConv + currentMed);
+    const currentTotalEarnings = Math.round(currentGross + currentOt + currentTa);
+    const currentTotalDeductions = Math.round(currentPf + currentEsi + currentTds + currentAdv + currentOther);
+    const currentNet = Math.round(Math.max(0, currentTotalEarnings - currentTotalDeductions));
 
     const handleSave = async () => {
-        if (!isAttClosed) {
-            toast.error("Attendance must be verified & closed before saving salary.");
-            return;
-        }
-        if (isAlreadySaved) {
-            if (!editing) {
-                toast.warning("Salary already saved. Click Edit to modify before re-saving.");
-                return;
-            }
-            // Update existing
-            setSaving(true);
-            try {
-                await updateHRSalary(existingSalaryId, {
-                    overtime_amount: Number(overtime || 0),
-                    allowances: Number(allowances || 0),
-                    bonus: Number(bonus || 0),
-                    advance_deduction: Number(advanceDeduction || 0),
-                    pf_deduction: Number(pfDeduction || 0),
-                    other_deductions: Number(otherDeductions || 0),
-                    remarks: remarks || undefined,
-                });
+        setSaving(true);
+        try {
+            const payload = {
+                hra_amount: Number(currentHra ?? 0),
+                conveyance_amount: Number(currentConv ?? 0),
+                medical_amount: Number(currentMed ?? 0),
+                overtime_amount: Number(currentOt ?? 0),
+                travel_allowance_amount: Number(currentTa ?? 0),
+                pf_deduction: Number(currentPf ?? 0),
+                esi_deduction: Number(currentEsi ?? 0),
+                tds_deduction: Number(currentTds ?? 0),
+                advance_deduction: Number(currentAdv ?? 0),
+                other_deductions: Number(currentOther ?? 0),
+                remarks: remarks || undefined,
+            };
+
+            if (isAlreadySaved) {
+                if (!editing) {
+                    toast.warning("Salary already saved. Click Edit to modify before re-saving.");
+                    return;
+                }
+                await updateHRSalary(existingSalaryId, payload);
                 toast.success("Salary updated successfully!");
-                setEditing(false);
-                queryClient.invalidateQueries({ queryKey: ["hr-salaries"] });
-                queryClient.invalidateQueries({ queryKey: ["hr-salaries-employee", employee?.employee_id] });
-                refetchPreview();
-            } catch (err) {
-                toast.error(err.message || "Failed to update salary");
-            } finally {
-                setSaving(false);
-            }
-        } else {
-            // Generate new
-            setSaving(true);
-            try {
+            } else {
                 await generateHRSalary({
                     employee_id: employee?.employee_id,
                     month,
                     year,
-                    overtime_amount: Number(overtime || 0),
-                    allowances: Number(allowances || 0),
-                    bonus: Number(bonus || 0),
-                    advance_deduction: Number(advanceDeduction || 0),
-                    pf_deduction: Number(pfDeduction || 0),
-                    other_deductions: Number(otherDeductions || 0),
-                    remarks: remarks || undefined,
+                    ...payload,
                 });
                 toast.success("Salary saved successfully!");
-                setEditing(false);
-                queryClient.invalidateQueries({ queryKey: ["hr-salaries"] });
-                queryClient.invalidateQueries({ queryKey: ["hr-salaries-employee", employee?.employee_id] });
-                queryClient.invalidateQueries({ queryKey: ["hr-dashboard"] });
-                refetchPreview();
-            } catch (err) {
-                toast.error(err.message || "Failed to save salary");
-            } finally {
-                setSaving(false);
             }
+
+            setEditing(false);
+            queryClient.invalidateQueries({ queryKey: ["hr-salaries"] });
+            queryClient.invalidateQueries({ queryKey: ["hr-salaries-employee", employee?.employee_id] });
+            queryClient.invalidateQueries({ queryKey: ["hr-salary-preview", employee?.employee_id, month, year] });
+            queryClient.invalidateQueries({ queryKey: ["hr-dashboard"] });
+            await refetchPreview();
+        } catch (err) {
+            toast.error(err.message || "Failed to save salary");
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -249,12 +297,17 @@ export default function SalaryCalculationModal({ open, onClose, employee, month,
 
     const handleClose = () => {
         setEditing(false);
-        setOvertime(0); setDebouncedOvertime(0);
-        setAllowances(0); setDebouncedAllowances(0);
-        setBonus(0); setDebouncedBonus(0);
-        setAdvanceDeduction(0); setDebouncedAdvance(0);
-        setPfDeduction(0); setDebouncedPf(0);
-        setOtherDeductions(0); setDebouncedOther(0);
+        setForceRecalc(false);
+        setOvertime(0);
+        setTravelAllowance(0);
+        setAdvanceDeduction(0);
+        setOtherDeductions(0);
+        setHraOverride(null);
+        setConvOverride(null);
+        setMedOverride(null);
+        setPfOverride(null);
+        setEsiOverride(null);
+        setTdsOverride(null);
         setRemarks("");
         onClose();
     };
@@ -262,8 +315,14 @@ export default function SalaryCalculationModal({ open, onClose, employee, month,
     const perDay = calc ? (calc.present_salary / (calc.total_working_days || 26)) : 0;
 
     return (
-        <Dialog open={open} onOpenChange={handleClose}>
-            <DialogContent className="max-w-5xl max-h-[95vh] overflow-y-auto p-0" onOpenAutoFocus={(e) => e.preventDefault()}>
+        <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleClose(); }}>
+            <DialogContent
+                className="max-w-5xl max-h-[95vh] overflow-y-auto p-0"
+                onOpenAutoFocus={(e) => e.preventDefault()}
+                onPointerDownOutside={(e) => e.preventDefault()}
+                onInteractOutside={(e) => e.preventDefault()}
+                onEscapeKeyDown={(e) => e.preventDefault()}
+            >
                 {/* Modal Header */}
                 <div className="sticky top-0 z-30 bg-[#183260] text-white px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -297,7 +356,7 @@ export default function SalaryCalculationModal({ open, onClose, employee, month,
                     </div>
                 </div>
 
-                {loadingPreview ? (
+                {loadingPreview && !preview ? (
                     <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
                         <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#183260] border-t-transparent" />
                         <p className="mt-3 text-sm">Fetching salary data...</p>
@@ -396,11 +455,12 @@ export default function SalaryCalculationModal({ open, onClose, employee, month,
                                     { label: "Present (P)", value: att?.present, color: "text-emerald-700", bg: "bg-emerald-50 dark:bg-emerald-950/40" },
                                     { label: "Travel (TR)", value: att?.travel ?? 0, color: "text-teal-700", bg: "bg-teal-50 dark:bg-teal-950/40", subtext: "100% Paid" },
                                     { label: "Absent (A)", value: att?.absent, color: "text-red-700", bg: "bg-red-50 dark:bg-red-950/40" },
-                                    { label: "Half Day (H)", value: att?.half_day, color: "text-amber-700", bg: "bg-amber-50 dark:bg-amber-950/40" },
+                                    { label: "Half Day (H)", value: att?.half_day, color: "text-amber-700", bg: "bg-amber-50 dark:bg-amber-950/40", subtext: "0.5 Cut" },
+                                    { label: "Half Day (HD)", value: att?.half_day_paid ?? 0, color: "text-lime-800 dark:text-lime-300", bg: "bg-lime-50 dark:bg-lime-950/40", subtext: "100% Paid" },
                                     { label: "Paid Leave (PL)", value: att?.paid_leave, color: "text-blue-700", bg: "bg-blue-50 dark:bg-blue-950/40", subtext: "100% Paid" },
                                     { label: "Unpaid Leave (UL)", value: att?.unpaid_leave ?? 0, color: "text-rose-700", bg: "bg-rose-50 dark:bg-rose-950/40", subtext: "Salary Deducted" },
                                     { label: "Weekly Off (WO)", value: att?.weekly_off, color: "text-emerald-700", bg: "bg-emerald-50/70 dark:bg-emerald-950/30", subtext: "100% Paid" },
-                                    { label: "Holiday (HD)", value: att?.holiday, color: "text-purple-700", bg: "bg-purple-50 dark:bg-purple-950/40", subtext: "100% Paid" },
+                                    { label: "Holiday (HOL)", value: att?.holiday, color: "text-purple-700", bg: "bg-purple-50 dark:bg-purple-950/40", subtext: "100% Paid" },
                                     { label: "Total Paid Days", value: att?.total_paid_days ?? att?.total_present_days, color: "text-[#183260] dark:text-blue-300", bg: "bg-blue-50 dark:bg-blue-950/40", bold: true, subtext: "For Salary" },
                                 ].map(({ label, value, color, bg, bold, subtext }) => (
                                     <div key={label} className={cn("rounded-lg p-2 text-center flex flex-col justify-between", bg)}>
@@ -415,15 +475,6 @@ export default function SalaryCalculationModal({ open, onClose, employee, month,
                                         )}
                                     </div>
                                 ))}
-                            </div>
-                            <div className="border-t border-border px-4 py-2 bg-muted/30 text-[10px] text-muted-foreground flex flex-wrap justify-between items-center gap-2">
-                                <div>
-                                    Formula: <span className="font-semibold text-foreground">Total Present Days = Present + Travel (TR) + Paid Leave (PL) + (Half Day × 0.5)</span>
-                                </div>
-                                <div className="text-emerald-700 dark:text-emerald-400 font-semibold flex items-center gap-1">
-                                    <CheckCircle2 className="h-3.5 w-3.5 inline text-emerald-600" />
-                                    <span>Travel (TR), Paid Leave (PL), Weekly Off (WO) & Holidays (HD) are 100% PAID — No salary deduction</span>
-                                </div>
                             </div>
                         </div>
 
@@ -450,8 +501,8 @@ export default function SalaryCalculationModal({ open, onClose, employee, month,
                                                 <td className="py-2 px-3 text-right font-semibold">₹{fmt(calc?.present_salary)}</td>
                                             </tr>
                                             <tr>
-                                                <td className="py-2 px-3 text-muted-foreground">Working Days (Config)</td>
-                                                <td className="py-2 px-3 text-right font-semibold">{calc?.total_working_days} days</td>
+                                                <td className="py-2 px-3 text-muted-foreground">Total Days in Month</td>
+                                                <td className="py-2 px-3 text-right font-semibold">{calc?.days_in_month || 30} days</td>
                                             </tr>
                                             <tr className="bg-muted/20">
                                                 <td className="py-2 px-3 text-muted-foreground">Per Day Salary</td>
@@ -466,58 +517,143 @@ export default function SalaryCalculationModal({ open, onClose, employee, month,
                                                     {att?.total_paid_days ?? att?.total_present_days ?? 0} days
                                                 </td>
                                             </tr>
-                                            <tr className="bg-emerald-50/60 dark:bg-emerald-950/20">
-                                                <td className="py-2 px-3 font-bold text-foreground">Basic Earned</td>
-                                                <td className="py-2 px-3 text-right font-extrabold text-emerald-700">₹{fmt(calc?.basic_salary)}</td>
+
+                                            {/* Basic Salary Structure */}
+                                            <tr className="bg-blue-50/50 dark:bg-blue-950/20">
+                                                <td className="py-1.5 px-3 text-[10px] font-bold text-blue-700 uppercase tracking-wider" colSpan={2}>
+                                                    Basic Salary Breakdown (Proportionate)
+                                                </td>
                                             </tr>
                                             <tr>
                                                 <td className="py-2 px-3 text-muted-foreground">
-                                                    Overtime
-                                                    {editing && (
+                                                    Basic Salary
+                                                    <span className="ml-1 text-[9px] text-blue-600">
+                                                        ({(calc?.present_salary || 0) > 25000 ? "50% of Present" : "Fixed ₹12,750"})
+                                                    </span>
+                                                    {calc?.monthly_basic > 0 && (
+                                                        <span className="block text-[9px] text-muted-foreground">Monthly: ₹{fmt(calc?.monthly_basic)}</span>
+                                                    )}
+                                                </td>
+                                                <td className="py-2 px-3 text-right font-semibold">₹{fmt(calc?.base_salary ?? (calc?.present_salary > 25000 ? (calc?.present_salary || 0) * 0.5 : 12750))}</td>
+                                            </tr>
+                                            <tr className="bg-muted/20">
+                                                <td className="py-2 px-3 text-muted-foreground">
+                                                    HRA
+                                                    <span className="ml-1 text-[9px] text-blue-600">
+                                                        ({(calc?.present_salary || 0) > 25000 ? "25% of Present" : "Present - Basic - CONV - Med"})
+                                                    </span>
+                                                    {calc?.monthly_hra > 0 && (
+                                                        <span className="block text-[9px] text-muted-foreground">Monthly: ₹{fmt(calc?.monthly_hra)}</span>
+                                                    )}
+                                                    {isEditable && (
                                                         <Input
                                                             type="number"
                                                             min={0}
-                                                            value={overtime}
+                                                            value={hraOverride !== null ? hraOverride : baseHra}
+                                                            onChange={(e) => setHraOverride(e.target.value === "" ? "" : Number(e.target.value))}
+                                                            className="mt-1 h-6 text-xs w-28 inline-block ml-2"
+                                                        />
+                                                    )}
+                                                </td>
+                                                <td className="py-2 px-3 text-right font-semibold">₹{fmt(currentHra)}</td>
+                                            </tr>
+                                            <tr>
+                                                <td className="py-2 px-3 text-muted-foreground">
+                                                    CONV (Conveyance Allow.)
+                                                    <span className="ml-1 text-[9px] text-blue-600">
+                                                        ({(calc?.present_salary || 0) > 25000 ? "20% of Present" : "10% of Present"})
+                                                    </span>
+                                                    {calc?.monthly_conveyance > 0 && (
+                                                        <span className="block text-[9px] text-muted-foreground">Monthly: ₹{fmt(calc?.monthly_conveyance)}</span>
+                                                    )}
+                                                    {isEditable && (
+                                                        <Input
+                                                            type="number"
+                                                            min={0}
+                                                            value={convOverride !== null ? convOverride : baseConv}
+                                                            onChange={(e) => setConvOverride(e.target.value === "" ? "" : Number(e.target.value))}
+                                                            className="mt-1 h-6 text-xs w-28 inline-block ml-2"
+                                                        />
+                                                    )}
+                                                </td>
+                                                <td className="py-2 px-3 text-right font-semibold">₹{fmt(currentConv)}</td>
+                                            </tr>
+                                            <tr className="bg-muted/20">
+                                                <td className="py-2 px-3 text-muted-foreground">
+                                                    Med Allow. (Medical)
+                                                    <span className="ml-1 text-[9px] text-blue-600">
+                                                        (5% of Present)
+                                                    </span>
+                                                    {calc?.monthly_medical > 0 && (
+                                                        <span className="block text-[9px] text-muted-foreground">Monthly: ₹{fmt(calc?.monthly_medical)}</span>
+                                                    )}
+                                                    {isEditable && (
+                                                        <Input
+                                                            type="number"
+                                                            min={0}
+                                                            value={medOverride !== null ? medOverride : baseMed}
+                                                            onChange={(e) => setMedOverride(e.target.value === "" ? "" : Number(e.target.value))}
+                                                            className="mt-1 h-6 text-xs w-28 inline-block ml-2"
+                                                        />
+                                                    )}
+                                                </td>
+                                                <td className="py-2 px-3 text-right font-semibold">₹{fmt(currentMed)}</td>
+                                            </tr>
+
+                                            {/* Gross Salary highlighted */}
+                                            <tr className="bg-emerald-50 dark:bg-emerald-950/30 font-bold border-t-2 border-emerald-200">
+                                                <td className="py-2.5 px-3 font-extrabold text-foreground">Gross Salary</td>
+                                                <td className="py-2.5 px-3 text-right font-extrabold text-emerald-700 text-sm">₹{fmt(currentGross)}</td>
+                                            </tr>
+
+                                            {/* Additional Earnings */}
+                                            <tr className="bg-blue-50/50 dark:bg-blue-950/20">
+                                                <td className="py-1.5 px-3 text-[10px] font-bold text-blue-700 uppercase tracking-wider" colSpan={2}>
+                                                    Additional Earnings
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td className="py-2 px-3 text-muted-foreground">
+                                                    OT (Overtime)
+                                                    {Number(calc?.total_ot_hours || 0) > 0 && (
+                                                        <span className="ml-1 text-[9px] text-amber-700 dark:text-amber-300 font-semibold">
+                                                            ({calc.total_ot_hours} hrs @ ₹{fmtInt(calc.present_salary)}/{calc.days_in_month}/12)
+                                                        </span>
+                                                    )}
+                                                    {isEditable && (
+                                                        <Input
+                                                            type="number"
+                                                            min={0}
+                                                            value={editing ? overtime : baseOt}
                                                             onChange={(e) => setOvertime(e.target.value)}
                                                             className="mt-1 h-6 text-xs w-28 inline-block ml-2"
                                                         />
                                                     )}
                                                 </td>
-                                                <td className="py-2 px-3 text-right font-semibold">₹{fmt(overtime)}</td>
+                                                <td className="py-2 px-3 text-right font-semibold">₹{fmt(currentOt)}</td>
                                             </tr>
                                             <tr className="bg-muted/20">
                                                 <td className="py-2 px-3 text-muted-foreground">
-                                                    Allowances
-                                                    {editing && (
+                                                    TA (Travel Allowance)
+                                                    {isEditable && (
                                                         <Input
                                                             type="number"
                                                             min={0}
-                                                            value={allowances}
-                                                            onChange={(e) => setAllowances(e.target.value)}
+                                                            value={editing ? travelAllowance : baseTa}
+                                                            onChange={(e) => setTravelAllowance(e.target.value)}
                                                             className="mt-1 h-6 text-xs w-28 inline-block ml-2"
                                                         />
                                                     )}
                                                 </td>
-                                                <td className="py-2 px-3 text-right font-semibold">₹{fmt(allowances)}</td>
+                                                <td className="py-2 px-3 text-right font-semibold">₹{fmt(currentTa)}</td>
                                             </tr>
-                                            <tr>
-                                                <td className="py-2 px-3 text-muted-foreground">
-                                                    Bonus
-                                                    {editing && (
-                                                        <Input
-                                                            type="number"
-                                                            min={0}
-                                                            value={bonus}
-                                                            onChange={(e) => setBonus(e.target.value)}
-                                                            className="mt-1 h-6 text-xs w-28 inline-block ml-2"
-                                                        />
-                                                    )}
+
+                                            {/* Total Earnings highlighted */}
+                                            <tr className="bg-emerald-100 dark:bg-emerald-900/40 border-t-2 border-emerald-300">
+                                                <td className="py-2.5 px-3 font-extrabold text-foreground">Total Earnings</td>
+                                                <td className="py-2.5 px-3 text-right font-extrabold text-emerald-800 dark:text-emerald-300 text-sm">
+                                                    ₹{fmt(currentTotalEarnings)}
                                                 </td>
-                                                <td className="py-2 px-3 text-right font-semibold">₹{fmt(bonus)}</td>
-                                            </tr>
-                                            <tr className="bg-emerald-50 dark:bg-emerald-950/30 font-bold border-t-2 border-emerald-200">
-                                                <td className="py-2.5 px-3 font-extrabold text-foreground">Gross Salary</td>
-                                                <td className="py-2.5 px-3 text-right font-extrabold text-emerald-700 text-sm">₹{fmt(calc?.gross_salary)}</td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -525,131 +661,177 @@ export default function SalaryCalculationModal({ open, onClose, employee, month,
 
                                 {/* Deductions Side */}
                                 <div>
-                                    <p className="text-[10px] font-bold uppercase text-muted-foreground mb-2">Deductions</p>
-                                    <table className="w-full text-xs border-collapse">
+                                    <p className="text-[10px] font-bold uppercase text-muted-foreground mb-2">Attendance Summary</p>
+                                    <table className="w-full text-xs border-collapse mb-4">
                                         <tbody className="divide-y divide-border/60">
                                             <tr className="bg-muted/20">
-                                                <td className="py-2 px-3 text-muted-foreground">Absent Days</td>
-                                                <td className="py-2 px-3 text-right font-semibold text-red-600">{att?.absent ?? 0} days</td>
+                                                <td className="py-1.5 px-3 text-muted-foreground">Absent Days (A)</td>
+                                                <td className="py-1.5 px-3 text-right font-semibold text-rose-600">{att?.absent ?? 0} days <span className="text-[9px] text-muted-foreground font-normal">(Unpaid)</span></td>
                                             </tr>
                                             <tr>
-                                                <td className="py-2 px-3 text-muted-foreground">Absent Deduction</td>
-                                                <td className="py-2 px-3 text-right font-semibold text-red-600">
-                                                    -₹{fmt(calc?.absent_deduction ?? (perDay * (att?.absent || 0)))}
-                                                </td>
+                                                <td className="py-1.5 px-3 text-muted-foreground">Half Days (H)</td>
+                                                <td className="py-1.5 px-3 text-right font-semibold text-amber-600">{att?.half_day ?? 0} days <span className="text-[9px] text-muted-foreground font-normal">(0.5 Unpaid)</span></td>
                                             </tr>
-                                            <tr className="bg-muted/20">
-                                                <td className="py-2 px-3 text-muted-foreground">Half Day Deduction</td>
-                                                <td className="py-2 px-3 text-right font-semibold text-red-600">
-                                                    -{att?.half_day ?? 0} × 0.5 day = -₹{fmt(calc?.half_deduction ?? (perDay * (att?.half_day || 0) * 0.5))}
-                                                </td>
-                                            </tr>
-                                            {/* Unpaid Leave & Paid Leave rows */}
                                             <tr className="bg-rose-50/40 dark:bg-rose-950/20">
-                                                <td className="py-2 px-3 text-muted-foreground flex items-center gap-1.5">
+                                                <td className="py-1.5 px-3 text-muted-foreground flex items-center gap-1.5">
                                                     <span>Unpaid Leave (UL)</span>
-                                                    <span className="text-[9px] font-bold text-rose-700 bg-rose-100 dark:bg-rose-950/60 px-1 py-0.2 rounded">Salary Cut</span>
+                                                    <span className="text-[9px] font-bold text-rose-700 bg-rose-100 dark:bg-rose-950/60 px-1 rounded">Salary Cut</span>
                                                 </td>
-                                                <td className="py-2 px-3 text-right font-semibold text-rose-700">
-                                                    -{att?.unpaid_leave ?? 0} days = -₹{fmt(calc?.unpaid_leave_deduction ?? (perDay * (att?.unpaid_leave || 0)))}
+                                                <td className="py-1.5 px-3 text-right font-semibold text-rose-700">
+                                                    {att?.unpaid_leave ?? 0} days <span className="text-[9px] font-normal">(Unpaid)</span>
                                                 </td>
                                             </tr>
                                             <tr className="bg-teal-50/40 dark:bg-teal-950/20">
-                                                <td className="py-2 px-3 text-muted-foreground flex items-center gap-1.5">
+                                                <td className="py-1.5 px-3 text-muted-foreground flex items-center gap-1.5">
                                                     <span>Travel (TR)</span>
-                                                    <span className="text-[9px] font-bold text-teal-700 bg-teal-100 dark:bg-teal-950/60 px-1 py-0.2 rounded">PAID</span>
+                                                    <span className="text-[9px] font-bold text-teal-700 bg-teal-100 dark:bg-teal-950/60 px-1 rounded">PAID</span>
                                                 </td>
-                                                <td className="py-2 px-3 text-right font-bold text-teal-700">
-                                                    {att?.travel ?? 0} days &mdash; ₹0.00 cut
+                                                <td className="py-1.5 px-3 text-right font-bold text-teal-700">
+                                                    {att?.travel ?? 0} days &mdash; 100% Paid
                                                 </td>
                                             </tr>
                                             <tr className="bg-blue-50/40 dark:bg-blue-950/20">
-                                                <td className="py-2 px-3 text-muted-foreground flex items-center gap-1.5">
+                                                <td className="py-1.5 px-3 text-muted-foreground flex items-center gap-1.5">
                                                     <span>Paid Leave (PL)</span>
-                                                    <span className="text-[9px] font-bold text-blue-700 bg-blue-100 dark:bg-blue-950/60 px-1 py-0.2 rounded">PAID</span>
+                                                    <span className="text-[9px] font-bold text-blue-700 bg-blue-100 dark:bg-blue-950/60 px-1 rounded">PAID</span>
                                                 </td>
-                                                <td className="py-2 px-3 text-right font-bold text-blue-700">
-                                                    {att?.paid_leave ?? 0} days &mdash; ₹0.00 cut
+                                                <td className="py-1.5 px-3 text-right font-bold text-blue-700">
+                                                    {att?.paid_leave ?? 0} days &mdash; 100% Paid
                                                 </td>
                                             </tr>
-                                            {/* Weekly Off and Holiday rows: EXPLICITLY PAID (₹0.00 cut) */}
                                             <tr className="bg-emerald-50/50 dark:bg-emerald-950/20">
-                                                <td className="py-2 px-3 text-muted-foreground flex items-center gap-1.5">
+                                                <td className="py-1.5 px-3 text-muted-foreground flex items-center gap-1.5">
                                                     <span>Weekly Off (WO)</span>
-                                                    <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 dark:bg-emerald-900/50 px-1 py-0.2 rounded">PAID</span>
+                                                    <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 dark:bg-emerald-900/50 px-1 rounded">PAID</span>
                                                 </td>
-                                                <td className="py-2 px-3 text-right font-bold text-emerald-700">
-                                                    {att?.weekly_off ?? 0} days &mdash; ₹0.00 cut
+                                                <td className="py-1.5 px-3 text-right font-bold text-emerald-700">
+                                                    {att?.weekly_off ?? 0} days &mdash; 100% Paid
                                                 </td>
                                             </tr>
                                             <tr className="bg-emerald-50/50 dark:bg-emerald-950/20">
-                                                <td className="py-2 px-3 text-muted-foreground flex items-center gap-1.5">
-                                                    <span>Holiday (HD)</span>
-                                                    <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 dark:bg-emerald-900/50 px-1 py-0.2 rounded">PAID</span>
+                                                <td className="py-1.5 px-3 text-muted-foreground flex items-center gap-1.5">
+                                                    <span>Holiday (HOL)</span>
+                                                    <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 dark:bg-emerald-900/50 px-1 rounded">PAID</span>
                                                 </td>
-                                                <td className="py-2 px-3 text-right font-bold text-emerald-700">
-                                                    {att?.holiday ?? 0} days &mdash; ₹0.00 cut
+                                                <td className="py-1.5 px-3 text-right font-bold text-emerald-700">
+                                                    {att?.holiday ?? 0} days &mdash; 100% Paid
                                                 </td>
                                             </tr>
                                             {(calc?.unmarked_days > 0) && (
                                                 <tr className="bg-amber-50/50 dark:bg-amber-950/20">
-                                                    <td className="py-2 px-3 text-muted-foreground">
+                                                    <td className="py-1.5 px-3 text-muted-foreground">
                                                         Unmarked Days ({calc.unmarked_days} days)
                                                     </td>
-                                                    <td className="py-2 px-3 text-right font-semibold text-amber-700">
-                                                        -₹{fmt(calc.unmarked_deduction)}
+                                                    <td className="py-1.5 px-3 text-right font-semibold text-amber-700">
+                                                        {calc.unmarked_days} days <span className="text-[9px] font-normal">(Unpaid)</span>
                                                     </td>
                                                 </tr>
                                             )}
+                                        </tbody>
+                                    </table>
+
+                                    {/* Deductions Header */}
+                                    <p className="text-[10px] font-bold uppercase text-muted-foreground mb-2">Deductions</p>
+                                    <table className="w-full text-xs border-collapse">
+                                        <tbody className="divide-y divide-border/60">
                                             <tr>
                                                 <td className="py-2 px-3 text-muted-foreground">
-                                                    Advance Deduction
-                                                    {editing && (
+                                                    PF (Provident Fund)
+                                                    {!isEditable && (
+                                                        <span className="ml-1 text-[9px] text-muted-foreground">
+                                                            {Number(calc?.monthly_basic ?? 0) > 25000
+                                                                ? "(Fixed ₹3,000 — Basic > ₹25k)"
+                                                                : "(12% of Basic)"}
+                                                        </span>
+                                                    )}
+                                                    {isEditable && (
                                                         <Input
                                                             type="number"
                                                             min={0}
-                                                            value={advanceDeduction}
+                                                            value={pfOverride !== null ? pfOverride : basePf}
+                                                            onChange={(e) => setPfOverride(e.target.value === "" ? "" : Number(e.target.value))}
+                                                            className="mt-1 h-6 text-xs w-28 inline-block ml-2"
+                                                        />
+                                                    )}
+                                                </td>
+                                                <td className="py-2 px-3 text-right font-semibold text-red-600">
+                                                    -₹{fmt(currentPf)}
+                                                </td>
+                                            </tr>
+                                            <tr className="bg-muted/20">
+                                                <td className="py-2 px-3 text-muted-foreground">
+                                                    ESI
+                                                    {!isEditable && (
+                                                        <span className="ml-1 text-[9px] text-muted-foreground">(0.75% of Gross)</span>
+                                                    )}
+                                                    {isEditable && (
+                                                        <Input
+                                                            type="number"
+                                                            min={0}
+                                                            value={esiOverride !== null ? esiOverride : baseEsi}
+                                                            onChange={(e) => setEsiOverride(e.target.value === "" ? "" : Number(e.target.value))}
+                                                            className="mt-1 h-6 text-xs w-28 inline-block ml-2"
+                                                        />
+                                                    )}
+                                                </td>
+                                                <td className="py-2 px-3 text-right font-semibold text-red-600">
+                                                    -₹{fmt(currentEsi)}
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td className="py-2 px-3 text-muted-foreground">
+                                                    TDS
+                                                    {!isEditable && (
+                                                        <span className="ml-1 text-[9px] text-muted-foreground">({preview?.salary_config?.tds_percentage || 0}% of Gross)</span>
+                                                    )}
+                                                    {isEditable && (
+                                                        <Input
+                                                            type="number"
+                                                            min={0}
+                                                            value={tdsOverride !== null ? tdsOverride : baseTds}
+                                                            onChange={(e) => setTdsOverride(e.target.value === "" ? "" : Number(e.target.value))}
+                                                            className="mt-1 h-6 text-xs w-28 inline-block ml-2"
+                                                        />
+                                                    )}
+                                                </td>
+                                                <td className="py-2 px-3 text-right font-semibold text-red-600">
+                                                    -₹{fmt(currentTds)}
+                                                </td>
+                                            </tr>
+                                            <tr className="bg-muted/20">
+                                                <td className="py-2 px-3 text-muted-foreground">
+                                                    Adv. Deduction
+                                                    {isEditable && (
+                                                        <Input
+                                                            type="number"
+                                                            min={0}
+                                                            value={editing ? advanceDeduction : baseAdv}
                                                             onChange={(e) => setAdvanceDeduction(e.target.value)}
                                                             className="mt-1 h-6 text-xs w-28 inline-block ml-2"
                                                         />
                                                     )}
                                                 </td>
-                                                <td className="py-2 px-3 text-right font-semibold text-red-600">-₹{fmt(advanceDeduction)}</td>
+                                                <td className="py-2 px-3 text-right font-semibold text-red-600">-₹{fmt(currentAdv)}</td>
                                             </tr>
-                                            <tr className="bg-muted/20">
-                                                <td className="py-2 px-3 text-muted-foreground">
-                                                    PF Deduction
-                                                    {editing && (
+                                            {isEditable && (
+                                                <tr>
+                                                    <td className="py-2 px-3 text-muted-foreground">
+                                                        Other Deductions
                                                         <Input
                                                             type="number"
                                                             min={0}
-                                                            value={pfDeduction}
-                                                            onChange={(e) => setPfDeduction(e.target.value)}
-                                                            className="mt-1 h-6 text-xs w-28 inline-block ml-2"
-                                                        />
-                                                    )}
-                                                </td>
-                                                <td className="py-2 px-3 text-right font-semibold text-red-600">-₹{fmt(pfDeduction)}</td>
-                                            </tr>
-                                            <tr>
-                                                <td className="py-2 px-3 text-muted-foreground">
-                                                    Other Deductions
-                                                    {editing && (
-                                                        <Input
-                                                            type="number"
-                                                            min={0}
-                                                            value={otherDeductions}
+                                                            value={editing ? otherDeductions : baseOther}
                                                             onChange={(e) => setOtherDeductions(e.target.value)}
                                                             className="mt-1 h-6 text-xs w-28 inline-block ml-2"
                                                         />
-                                                    )}
-                                                </td>
-                                                <td className="py-2 px-3 text-right font-semibold text-red-600">-₹{fmt(otherDeductions)}</td>
-                                            </tr>
+                                                    </td>
+                                                    <td className="py-2 px-3 text-right font-semibold text-red-600">-₹{fmt(currentOther)}</td>
+                                                </tr>
+                                            )}
                                             <tr className="bg-red-50 dark:bg-red-950/30 font-bold border-t-2 border-red-200">
                                                 <td className="py-2.5 px-3 font-extrabold text-foreground">Total Deductions</td>
                                                 <td className="py-2.5 px-3 text-right font-extrabold text-red-700 text-sm">
-                                                    -₹{fmt(calc?.total_deductions)}
+                                                    -₹{fmt(currentTotalDeductions)}
                                                 </td>
                                             </tr>
 
@@ -658,7 +840,7 @@ export default function SalaryCalculationModal({ open, onClose, employee, month,
                                             </tr>
 
                                             {/* Remarks */}
-                                            {editing && (
+                                            {isEditable && (
                                                 <tr>
                                                     <td colSpan={2} className="py-2 px-3">
                                                         <Label className="text-[10px] uppercase font-bold text-muted-foreground">Remarks</Label>
@@ -676,7 +858,7 @@ export default function SalaryCalculationModal({ open, onClose, employee, month,
                                             <tr className="bg-[#183260] text-white">
                                                 <td className="py-3 px-3 font-extrabold text-base">Final Payable Salary</td>
                                                 <td className="py-3 px-3 text-right font-extrabold text-xl text-emerald-300">
-                                                    ₹{fmt(calc?.net_salary)}
+                                                    ₹{fmt(currentNet)}
                                                 </td>
                                             </tr>
                                         </tbody>
@@ -732,17 +914,7 @@ export default function SalaryCalculationModal({ open, onClose, employee, month,
 
                         {/* ─── Action Buttons ─── */}
                         <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={handleCalculate}
-                                className="text-xs gap-1.5"
-                            >
-                                <Calculator className="h-3.5 w-3.5" />
-                                Recalculate
-                            </Button>
-
-                            {!isFinalized && (isSuperAdmin || !isAlreadySaved) && (
+                            {!isFinalized && (
                                 <Button
                                     variant="outline"
                                     size="sm"
@@ -758,9 +930,8 @@ export default function SalaryCalculationModal({ open, onClose, employee, month,
                                 <Button
                                     size="sm"
                                     onClick={handleSave}
-                                    disabled={saving || !isAttClosed}
+                                    disabled={saving}
                                     className="text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
-                                    title={!isAttClosed ? "Attendance must be verified & closed first" : ""}
                                 >
                                     <Save className="h-3.5 w-3.5" />
                                     {saving ? "Saving..." : isAlreadySaved ? "Update Salary" : "Save Salary"}
@@ -839,7 +1010,7 @@ export default function SalaryCalculationModal({ open, onClose, employee, month,
                                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                                     <thead>
                                         <tr style={{ background: "#f8fafc" }}>
-                                            {["Calendar Days", "Present (P)", "Travel (TR)", "Absent (A)", "Half Day (H)", "Paid Leave (PL)", "Unpaid Leave (UL)", "Weekly Off (Paid)", "Holiday (Paid)", "Total Paid Days"].map(h => (
+                                            {["Calendar Days", "Present (P)", "Travel (TR)", "Absent (A)", "Half Day (H)", "Half Day (HD)", "Paid Leave (PL)", "Unpaid Leave (UL)", "Weekly Off (Paid)", "Holiday (Paid)", "Total Paid Days"].map(h => (
                                                 <th key={h} style={{ padding: "5px 8px", border: "1px solid #e2e8f0", fontSize: "10px", textAlign: "center", fontWeight: 700, color: "#334155" }}>{h}</th>
                                             ))}
                                         </tr>
@@ -852,6 +1023,7 @@ export default function SalaryCalculationModal({ open, onClose, employee, month,
                                                 (att?.travel ?? 0),
                                                 att?.absent,
                                                 att?.half_day,
+                                                (att?.half_day_paid ?? 0),
                                                 att?.paid_leave,
                                                 (att?.unpaid_leave ?? 0),
                                                 att?.weekly_off,
@@ -864,7 +1036,7 @@ export default function SalaryCalculationModal({ open, onClose, employee, month,
                                     </tbody>
                                 </table>
                                 <div style={{ fontSize: "10px", color: "#64748b", marginTop: "4px" }}>
-                                    Note: Travel (TR), Paid Leave (PL), Weekly Offs (WO), and Holidays (HD) are 100% paid days (no salary deduction). Unpaid Leave (UL) is deducted.
+                                    Note: Travel (TR), Paid Leave (PL), Weekly Offs (WO), and Holidays (HOL) are 100% paid days (no salary deduction). Unpaid Leave (UL) is deducted.
                                 </div>
                             </div>
 
@@ -879,10 +1051,22 @@ export default function SalaryCalculationModal({ open, onClose, employee, month,
                                                 {[
                                                     ["Monthly Salary", `₹${fmt(calc?.present_salary)}`],
                                                     ["Per Day Salary", `₹${fmt(perDay)}`],
-                                                    [`Total Paid Days (${att?.total_paid_days ?? att?.total_present_days ?? 0} days)`, `₹${fmt(calc?.basic_salary)}`],
-                                                    ...(Number(overtime) > 0 ? [["Overtime", `₹${fmt(overtime)}`]] : []),
-                                                    ...(Number(allowances) > 0 ? [["Allowances", `₹${fmt(allowances)}`]] : []),
-                                                    ...(Number(bonus) > 0 ? [["Bonus", `₹${fmt(bonus)}`]] : []),
+                                                    [`Total Paid Days (${att?.total_paid_days ?? att?.total_present_days ?? 0} days)`, ""],
+                                                ].map(([label, val], i) => (
+                                                    <tr key={label} style={{ background: i % 2 === 0 ? "#f8fafc" : "white" }}>
+                                                        <td style={{ padding: "4px 8px", border: "1px solid #e2e8f0", fontSize: "11px", color: "#64748b" }}>{label}</td>
+                                                        <td style={{ padding: "4px 8px", border: "1px solid #e2e8f0", fontSize: "11px", textAlign: "right", fontWeight: 600 }}>{val}</td>
+                                                    </tr>
+                                                ))}
+                                                {/* Basic Salary Structure */}
+                                                <tr style={{ background: "#eff6ff" }}>
+                                                    <td colSpan={2} style={{ padding: "3px 8px", border: "1px solid #e2e8f0", fontSize: "10px", fontWeight: 700, color: "#1d4ed8" }}>Basic Salary Breakdown</td>
+                                                </tr>
+                                                {[
+                                                    ["Basic Salary", `₹${fmt(currentBasic)}`],
+                                                    ["HRA", `₹${fmt(currentHra)}`],
+                                                    ["CONV (Conveyance)", `₹${fmt(currentConv)}`],
+                                                    ["Med Allow. (Medical)", `₹${fmt(currentMed)}`],
                                                 ].map(([label, val], i) => (
                                                     <tr key={label} style={{ background: i % 2 === 0 ? "#f8fafc" : "white" }}>
                                                         <td style={{ padding: "4px 8px", border: "1px solid #e2e8f0", fontSize: "11px", color: "#64748b" }}>{label}</td>
@@ -891,8 +1075,31 @@ export default function SalaryCalculationModal({ open, onClose, employee, month,
                                                 ))}
                                                 <tr style={{ background: "#dcfce7" }}>
                                                     <td style={{ padding: "5px 8px", border: "1px solid #e2e8f0", fontSize: "12px", fontWeight: 800 }}>Gross Salary</td>
-                                                    <td style={{ padding: "5px 8px", border: "1px solid #e2e8f0", fontSize: "12px", fontWeight: 800, textAlign: "right", color: "#166534" }}>₹{fmt(calc?.gross_salary)}</td>
+                                                    <td style={{ padding: "5px 8px", border: "1px solid #e2e8f0", fontSize: "12px", fontWeight: 800, textAlign: "right", color: "#166534" }}>₹{fmt(currentGross)}</td>
                                                 </tr>
+                                                {/* Additional earnings */}
+                                                {Number(currentOt) > 0 && (
+                                                    <tr style={{ background: "#f8fafc" }}>
+                                                        <td style={{ padding: "4px 8px", border: "1px solid #e2e8f0", fontSize: "11px", color: "#64748b" }}>
+                                                            OT (Overtime){Number(calc?.total_ot_hours || 0) > 0 ? ` (${calc.total_ot_hours} hrs)` : ""}
+                                                        </td>
+                                                        <td style={{ padding: "4px 8px", border: "1px solid #e2e8f0", fontSize: "11px", textAlign: "right", fontWeight: 600 }}>₹{fmt(currentOt)}</td>
+                                                    </tr>
+                                                )}
+                                                {Number(currentTa) > 0 && (
+                                                    <tr style={{ background: "white" }}>
+                                                        <td style={{ padding: "4px 8px", border: "1px solid #e2e8f0", fontSize: "11px", color: "#64748b" }}>TA (Travel Allowance)</td>
+                                                        <td style={{ padding: "4px 8px", border: "1px solid #e2e8f0", fontSize: "11px", textAlign: "right", fontWeight: 600 }}>₹{fmt(currentTa)}</td>
+                                                    </tr>
+                                                )}
+                                                {(Number(currentOt) > 0 || Number(currentTa) > 0) && (
+                                                    <tr style={{ background: "#d1fae5" }}>
+                                                        <td style={{ padding: "5px 8px", border: "1px solid #e2e8f0", fontSize: "12px", fontWeight: 800 }}>Total Earnings</td>
+                                                        <td style={{ padding: "5px 8px", border: "1px solid #e2e8f0", fontSize: "12px", fontWeight: 800, textAlign: "right", color: "#065f46" }}>
+                                                            ₹{fmt(currentTotalEarnings)}
+                                                        </td>
+                                                    </tr>
+                                                )}
                                             </tbody>
                                         </table>
                                     </div>
@@ -902,26 +1109,20 @@ export default function SalaryCalculationModal({ open, onClose, employee, month,
                                         <table style={{ width: "100%", borderCollapse: "collapse" }}>
                                             <tbody>
                                                 {[
-                                                    ["Absent Deduction", `-₹${fmt(calc?.absent_deduction ?? (perDay * (att?.absent || 0)))}`],
-                                                    ["Unpaid Leave (UL)", `-₹${fmt(calc?.unpaid_leave_deduction ?? (perDay * (att?.unpaid_leave || 0)))}`],
-                                                    ["Half Day Deduction", `-₹${fmt(calc?.half_deduction ?? (perDay * (att?.half_day || 0) * 0.5))}`],
-                                                    ["Travel (TR)", `${att?.travel ?? 0} days (Paid — ₹0.00)`],
-                                                    ["Paid Leave (PL)", `${att?.paid_leave ?? 0} days (Paid — ₹0.00)`],
-                                                    ["Weekly Off (WO)", `${att?.weekly_off ?? 0} days (Paid — ₹0.00)`],
-                                                    ["Holiday (HD)", `${att?.holiday ?? 0} days (Paid — ₹0.00)`],
-                                                    ...(calc?.unmarked_days > 0 ? [[`Unmarked Days (${calc.unmarked_days})`, `-₹${fmt(calc.unmarked_deduction)}`]] : []),
-                                                    ...(Number(advanceDeduction) > 0 ? [["Advance Deduction", `-₹${fmt(advanceDeduction)}`]] : []),
-                                                    ...(Number(pfDeduction) > 0 ? [["PF Deduction", `-₹${fmt(pfDeduction)}`]] : []),
-                                                    ...(Number(otherDeductions) > 0 ? [["Other Deductions", `-₹${fmt(otherDeductions)}`]] : []),
+                                                    [Number(calc?.monthly_basic ?? 0) > 25000 ? "PF (Provident Fund) — Fixed" : "PF (Provident Fund)", `-₹${fmt(currentPf)}`],
+                                                    ["ESI (0.75% of Gross)", `-₹${fmt(currentEsi)}`],
+                                                    ["TDS", `-₹${fmt(currentTds)}`],
+                                                    ["Adv. Deduction", `-₹${fmt(currentAdv)}`],
+                                                    ...(Number(otherDeductions) > 0 ? [["Other Deductions", `-₹${fmt(currentOther)}`]] : []),
                                                 ].map(([label, val], i) => (
                                                     <tr key={label} style={{ background: i % 2 === 0 ? "#f8fafc" : "white" }}>
                                                         <td style={{ padding: "4px 8px", border: "1px solid #e2e8f0", fontSize: "11px", color: "#64748b" }}>{label}</td>
-                                                        <td style={{ padding: "4px 8px", border: "1px solid #e2e8f0", fontSize: "11px", textAlign: "right", fontWeight: 600, color: label.includes("Paid") ? "#166534" : "#dc2626" }}>{val}</td>
+                                                        <td style={{ padding: "4px 8px", border: "1px solid #e2e8f0", fontSize: "11px", textAlign: "right", fontWeight: 600, color: "#dc2626" }}>{val}</td>
                                                     </tr>
                                                 ))}
                                                 <tr style={{ background: "#fee2e2" }}>
                                                     <td style={{ padding: "5px 8px", border: "1px solid #e2e8f0", fontSize: "12px", fontWeight: 800 }}>Total Deductions</td>
-                                                    <td style={{ padding: "5px 8px", border: "1px solid #e2e8f0", fontSize: "12px", fontWeight: 800, textAlign: "right", color: "#dc2626" }}>-₹{fmt(calc?.total_deductions)}</td>
+                                                    <td style={{ padding: "5px 8px", border: "1px solid #e2e8f0", fontSize: "12px", fontWeight: 800, textAlign: "right", color: "#dc2626" }}>-₹{fmt(currentTotalDeductions)}</td>
                                                 </tr>
                                             </tbody>
                                         </table>
@@ -932,7 +1133,7 @@ export default function SalaryCalculationModal({ open, onClose, employee, month,
                             {/* Net Salary */}
                             <div style={{ background: "#183260", color: "white", padding: "14px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                 <div style={{ fontSize: "15px", fontWeight: 900 }}>Net Payable Salary</div>
-                                <div style={{ fontSize: "22px", fontWeight: 900, color: "#6ee7b7" }}>₹{fmt(calc?.net_salary)}</div>
+                                <div style={{ fontSize: "22px", fontWeight: 900, color: "#6ee7b7" }}>₹{fmt(currentNet)}</div>
                             </div>
 
                             {/* Footer */}
