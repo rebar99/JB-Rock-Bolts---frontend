@@ -113,7 +113,7 @@ function ResizableHeader({
         <th
             style={{ width, minWidth: width, maxWidth: width, ...style }}
             className={cn(
-                "relative select-none p-2 text-[10px] font-bold uppercase tracking-wider",
+                "sticky top-0 z-20 relative select-none p-2 text-[10px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.08)]",
                 align === "center" ? "text-center" : align === "right" ? "text-right" : "text-left",
                 className
             )}
@@ -777,16 +777,16 @@ export default function HRAttendance() {
 
             {/* Attendance Register Grid - Full width */}
             <div className="overflow-hidden rounded-xl border border-border bg-card shadow-xs">
-                <div className="overflow-x-auto min-h-[440px]">
+                <div className="overflow-auto min-h-[440px] max-h-[calc(100vh-270px)]">
                     <table style={{ width: totalTableWidth, minWidth: "100%" }} className="w-full border-collapse text-left text-xs table-fixed">
-                        <thead>
+                        <thead className="sticky top-0 z-30">
                             <tr className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-[10px] font-bold uppercase tracking-wider border-b border-slate-300 dark:border-slate-700 select-none">
                                 <ResizableHeader
                                     label="Employee Name"
                                     width={widths.name}
                                     onResizeStart={startResize("name", 120, 400)}
                                     style={{ left: 0 }}
-                                    className="sticky left-0 z-30 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 border-r border-slate-300 dark:border-slate-700 shadow-[2px_0_4px_-1px_rgba(0,0,0,0.08)] pl-3"
+                                    className="sticky left-0 z-40 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 border-r border-slate-300 dark:border-slate-700 shadow-[2px_0_4px_-1px_rgba(0,0,0,0.08)] pl-3"
                                 >
                                     <ColumnFilterDropdown
                                         label="Employee Name"
@@ -806,7 +806,7 @@ export default function HRAttendance() {
                                     width={widths.code}
                                     onResizeStart={startResize("code", 60, 200)}
                                     style={{ left: widths.name }}
-                                    className="sticky z-30 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 border-r border-slate-300 dark:border-slate-700 shadow-[2px_0_4px_-1px_rgba(0,0,0,0.08)]"
+                                    className="sticky z-40 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 border-r border-slate-300 dark:border-slate-700 shadow-[2px_0_4px_-1px_rgba(0,0,0,0.08)]"
                                 >
                                     <ColumnFilterDropdown
                                         label="Code"

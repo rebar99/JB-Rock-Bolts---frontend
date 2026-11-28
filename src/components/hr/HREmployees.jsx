@@ -931,9 +931,9 @@ export default function HREmployees() {
                 </div>
             )}
 
-            {/* Employee List Table - Full width */}
+            {/* Employee List Table - Full width with Sticky Header & Scrollable Body */}
             <div className="overflow-hidden rounded-xl border border-border bg-card shadow-xs">
-                <div className="overflow-x-auto min-h-[440px]">
+                <div className="overflow-auto min-h-[440px] max-h-[calc(100vh-270px)]">
                     <table className="w-full table-fixed border-collapse text-xs" style={{ minWidth: "1150px" }}>
                         <colgroup>
                             <col style={{ width: colWidths.drag }} />
@@ -949,7 +949,7 @@ export default function HREmployees() {
                             <col style={{ width: colWidths.status }} />
                             <col style={{ width: colWidths.actions }} />
                         </colgroup>
-                        <thead>
+                        <thead className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800">
                             <tr className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-[11px] font-bold uppercase tracking-wider select-none border-b border-slate-300 dark:border-slate-700">
                                 {[
                                     { key: "drag", label: "", alignClass: "text-center px-1" },
@@ -968,7 +968,7 @@ export default function HREmployees() {
                                     <th
                                         key={key}
                                         style={{ width: colWidths[key], minWidth: colWidths[key], maxWidth: colWidths[key] }}
-                                        className={cn("relative py-3 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 border-r border-slate-200 dark:border-slate-700 group/col", alignClass)}
+                                        className={cn("sticky top-0 z-20 relative py-3 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 border-r border-slate-200 dark:border-slate-700 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.08)] group/col", alignClass)}
                                     >
                                         {key === "drag" ? (
                                             <div className="flex items-center justify-center" title="Drag & Drop Handle">

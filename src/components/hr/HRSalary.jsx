@@ -774,11 +774,11 @@ const handleResizeStart = useCallback((colKey, e) => {
 
                     {/* Payroll Table - Full width */}
                     <div className="overflow-hidden rounded-xl border border-border bg-card shadow-xs">
-                        <div className="overflow-x-auto min-h-[440px]">
+                        <div className="overflow-auto min-h-[440px] max-h-[calc(100vh-270px)]">
                             <table className="w-full border-collapse text-left text-xs table-fixed" style={{ tableLayout: "fixed", width: `${totalTableWidth}px`, minWidth: "100%" }}>
-                                <thead>
+                                <thead className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.08)]">
                                     <tr className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-[11px] font-bold uppercase tracking-wider select-none border-b border-slate-300 dark:border-slate-700">
-                                        <th className="p-3 pl-4 whitespace-nowrap relative" style={{ minWidth: colWidths.sno, width: colWidths.sno }}>
+                                        <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.08)] p-3 pl-4 whitespace-nowrap relative" style={{ minWidth: colWidths.sno, width: colWidths.sno }}>
                                             S.No
                                             <div
                                                 onMouseDown={(e) => handleResizeStart("sno", e)}
@@ -786,7 +786,7 @@ const handleResizeStart = useCallback((colKey, e) => {
                                                 title="Drag to resize column"
                                             />
                                         </th>
-                                        <th className="p-3 whitespace-nowrap relative" style={{ minWidth: colWidths.code, width: colWidths.code }}>
+                                        <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.08)] p-3 whitespace-nowrap relative" style={{ minWidth: colWidths.code, width: colWidths.code }}>
                                             <ColumnFilterDropdown
                                                 label="Employee Code"
                                                 colKey="code"
@@ -804,7 +804,7 @@ const handleResizeStart = useCallback((colKey, e) => {
                                                 title="Drag to resize column"
                                             />
                                         </th>
-                                        <th className="p-3 whitespace-nowrap relative" style={{ minWidth: colWidths.acc_no, width: colWidths.acc_no }}>
+                                        <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.08)] p-3 whitespace-nowrap relative" style={{ minWidth: colWidths.acc_no, width: colWidths.acc_no }}>
                                             <ColumnFilterDropdown
                                                 label="Account No."
                                                 colKey="acc_no"
@@ -822,7 +822,7 @@ const handleResizeStart = useCallback((colKey, e) => {
                                                 title="Drag to resize column"
                                             />
                                         </th>
-                                        <th className="p-3 whitespace-nowrap relative" style={{ minWidth: colWidths.ifsc, width: colWidths.ifsc }}>
+                                        <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.08)] p-3 whitespace-nowrap relative" style={{ minWidth: colWidths.ifsc, width: colWidths.ifsc }}>
                                             <ColumnFilterDropdown
                                                 label="IFSC Code"
                                                 colKey="ifsc"
@@ -840,7 +840,7 @@ const handleResizeStart = useCallback((colKey, e) => {
                                                 title="Drag to resize column"
                                             />
                                         </th>
-                                        <th className="p-3 whitespace-nowrap relative" style={{ minWidth: colWidths.name, width: colWidths.name }}>
+                                        <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.08)] p-3 whitespace-nowrap relative" style={{ minWidth: colWidths.name, width: colWidths.name }}>
                                             <ColumnFilterDropdown
                                                 label="Name"
                                                 colKey="name"
@@ -858,7 +858,7 @@ const handleResizeStart = useCallback((colKey, e) => {
                                                 title="Drag to resize column"
                                             />
                                         </th>
-                                        <th className="p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.salary, width: colWidths.salary }}>
+                                        <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.08)] p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.salary, width: colWidths.salary }}>
                                             <ColumnFilterDropdown
                                                 label="Salary"
                                                 colKey="present_salary"
@@ -876,7 +876,7 @@ const handleResizeStart = useCallback((colKey, e) => {
                                                 title="Drag to resize column"
                                             />
                                         </th>
-                                        <th className="p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.total_days, width: colWidths.total_days }}>
+                                        <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.08)] p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.total_days, width: colWidths.total_days }}>
                                             <ColumnFilterDropdown
                                                 label="Total Days"
                                                 colKey="total_days"
@@ -894,7 +894,7 @@ const handleResizeStart = useCallback((colKey, e) => {
                                                 title="Drag to resize column"
                                             />
                                         </th>
-                                        <th className="p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.basic, width: colWidths.basic }}>
+                                        <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.08)] p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.basic, width: colWidths.basic }}>
                                             <ColumnFilterDropdown
                                                 label="Basic Salary"
                                                 colKey="basic_salary"
@@ -912,7 +912,7 @@ const handleResizeStart = useCallback((colKey, e) => {
                                                 title="Drag to resize column"
                                             />
                                         </th>
-                                        <th className="p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.hra, width: colWidths.hra }}>
+                                        <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.08)] p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.hra, width: colWidths.hra }}>
                                             <ColumnFilterDropdown
                                                 label="HRA"
                                                 colKey="hra"
@@ -930,7 +930,7 @@ const handleResizeStart = useCallback((colKey, e) => {
                                                 title="Drag to resize column"
                                             />
                                         </th>
-                                        <th className="p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.conv, width: colWidths.conv }}>
+                                        <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.08)] p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.conv, width: colWidths.conv }}>
                                             <ColumnFilterDropdown
                                                 label="CONV"
                                                 colKey="conveyance"
@@ -948,7 +948,7 @@ const handleResizeStart = useCallback((colKey, e) => {
                                                 title="Drag to resize column"
                                             />
                                         </th>
-                                        <th className="p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.med, width: colWidths.med }}>
+                                        <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.08)] p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.med, width: colWidths.med }}>
                                             <ColumnFilterDropdown
                                                 label="Med. Allow."
                                                 colKey="medical_allowance"
@@ -966,7 +966,7 @@ const handleResizeStart = useCallback((colKey, e) => {
                                                 title="Drag to resize column"
                                             />
                                         </th>
-                                        <th className="p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.gross, width: colWidths.gross }}>
+                                        <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.08)] p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.gross, width: colWidths.gross }}>
                                             <ColumnFilterDropdown
                                                 label="Gross Earned"
                                                 colKey="gross_salary"
@@ -984,7 +984,7 @@ const handleResizeStart = useCallback((colKey, e) => {
                                                 title="Drag to resize column"
                                             />
                                         </th>
-                                        <th className="p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.ot_ta, width: colWidths.ot_ta }}>
+                                        <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.08)] p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.ot_ta, width: colWidths.ot_ta }}>
                                             <ColumnFilterDropdown
                                                 label="OT / TA"
                                                 colKey="ot_ta"
@@ -1002,7 +1002,7 @@ const handleResizeStart = useCallback((colKey, e) => {
                                                 title="Drag to resize column"
                                             />
                                         </th>
-                                        <th className="p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.pf, width: colWidths.pf }}>
+                                        <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.08)] p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.pf, width: colWidths.pf }}>
                                             <ColumnFilterDropdown
                                                 label="PF"
                                                 colKey="pf_deduction"
@@ -1020,7 +1020,7 @@ const handleResizeStart = useCallback((colKey, e) => {
                                                 title="Drag to resize column"
                                             />
                                         </th>
-                                        <th className="p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.esi, width: colWidths.esi }}>
+                                        <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.08)] p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.esi, width: colWidths.esi }}>
                                             <ColumnFilterDropdown
                                                 label="ESI"
                                                 colKey="esi_deduction"
@@ -1038,7 +1038,7 @@ const handleResizeStart = useCallback((colKey, e) => {
                                                 title="Drag to resize column"
                                             />
                                         </th>
-                                        <th className="p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.adv, width: colWidths.adv }}>
+                                        <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.08)] p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.adv, width: colWidths.adv }}>
                                             <ColumnFilterDropdown
                                                 label="Adv."
                                                 colKey="advance_deduction"
@@ -1056,7 +1056,7 @@ const handleResizeStart = useCallback((colKey, e) => {
                                                 title="Drag to resize column"
                                             />
                                         </th>
-                                        <th className="p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.tds, width: colWidths.tds }}>
+                                        <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.08)] p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.tds, width: colWidths.tds }}>
                                             <ColumnFilterDropdown
                                                 label="TDS"
                                                 colKey="tds_deduction"
@@ -1074,7 +1074,7 @@ const handleResizeStart = useCallback((colKey, e) => {
                                                 title="Drag to resize column"
                                             />
                                         </th>
-                                        <th className="p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.total_ded, width: colWidths.total_ded }}>
+                                        <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.08)] p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.total_ded, width: colWidths.total_ded }}>
                                             <ColumnFilterDropdown
                                                 label="Total"
                                                 colKey="total_deductions"
@@ -1092,7 +1092,7 @@ const handleResizeStart = useCallback((colKey, e) => {
                                                 title="Drag to resize column"
                                             />
                                         </th>
-                                        <th className="p-3 text-center font-black whitespace-nowrap relative" style={{ minWidth: colWidths.net, width: colWidths.net }}>
+                                        <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.08)] p-3 text-center font-black whitespace-nowrap relative" style={{ minWidth: colWidths.net, width: colWidths.net }}>
                                             <ColumnFilterDropdown
                                                 label="Net Payable"
                                                 colKey="net_salary"
@@ -1110,7 +1110,7 @@ const handleResizeStart = useCallback((colKey, e) => {
                                                 title="Drag to resize column"
                                             />
                                         </th>
-                                        <th className="p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.status, width: colWidths.status }}>
+                                        <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.08)] p-3 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.status, width: colWidths.status }}>
                                             <ColumnFilterDropdown
                                                 label="Status"
                                                 colKey="status"
@@ -1128,7 +1128,7 @@ const handleResizeStart = useCallback((colKey, e) => {
                                                 title="Drag to resize column"
                                             />
                                         </th>
-                                        <th className="p-3 pr-4 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.actions, width: colWidths.actions }}>
+                                        <th className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.08)] p-3 pr-4 text-center whitespace-nowrap relative" style={{ minWidth: colWidths.actions, width: colWidths.actions }}>
                                             Actions
                                             <div
                                                 onMouseDown={(e) => handleResizeStart("actions", e)}
@@ -1282,7 +1282,7 @@ const handleResizeStart = useCallback((colKey, e) => {
                                     )}
                                 </tbody>
                                 {processedSalaries.length > 0 && (
-                                    <tfoot>
+                                    <tfoot className="sticky bottom-0 z-20 shadow-[0_-2px_4px_-1px_rgba(0,0,0,0.08)]">
                                         <tr className="bg-slate-100 dark:bg-slate-800 font-bold text-xs border-t-2 border-slate-400 dark:border-slate-600">
                                             <td colSpan={5} className="p-3 pl-4 text-slate-700 dark:text-slate-200">
                                                 TOTAL ({processedSalaries.length} employees)
@@ -1359,9 +1359,9 @@ const handleResizeStart = useCallback((colKey, e) => {
 
                     {/* Payment Register Table */}
                     <div className="overflow-hidden rounded-xl border border-border bg-card shadow-xs">
-                        <div className="overflow-x-auto min-h-[440px]">
+                        <div className="overflow-auto min-h-[440px] max-h-[calc(100vh-270px)]">
                             <table className="w-full border-collapse text-left text-xs">
-                                <thead>
+                                <thead className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-800 shadow-[0_2px_4px_-1px_rgba(0,0,0,0.08)]">
                                     <tr className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-[11px] font-bold uppercase tracking-wider select-none border-b border-slate-300 dark:border-slate-700">
                                         <th className="p-3 pl-4">S.No</th>
                                         <th className="p-3">
